@@ -441,6 +441,68 @@ const requireCommentBeforeComponent = {
   },
 };
 
+// -----------------------------------------------------------------------------
+// Rule: table-body-second-row-comment
+// Identify the second TableRow written in each TableBody with a comment.
+// A v-for counts as one template row. No autofix: the row's purpose is unknown.
+// -----------------------------------------------------------------------------
+
+const tableBodySecondRowComment = {
+  meta: {
+    type: 'suggestion',
+    docs: { description: 'require a standalone comment above the second TableRow in a TableBody' },
+    schema: [],
+    messages: { missing: 'Add a standalone HTML comment directly above the second <TableRow> in this <TableBody>.' },
+  },
+
+  create(context) {
+    const sourceCode = context.sourceCode;
+    const parserServices = sourceCode.parserServices;
+    const tokenStore = parserServices.getTemplateBodyTokenStore?.();
+    if (!parserServices.defineTemplateBodyVisitor || !tokenStore) return {};
+
+    return parserServices.defineTemplateBodyVisitor({
+      VElement(node) {
+        if (!['TableBody', 'table-body'].includes(node.rawName)) return;
+
+        const rows = [];
+        const collectRows = (element) => {
+          for (const child of element.children) {
+            if (child.type !== 'VElement') continue;
+            // Nested tables and their bodies own their own rows.
+            if (['Table', 'table', 'TableBody', 'table-body', 'tbody'].includes(child.rawName)) continue;
+
+            if (['TableRow', 'table-row'].includes(child.rawName)) {
+              rows.push(child);
+            } else {
+              collectRows(child);
+            }
+          }
+        };
+
+        collectRows(node);
+        const secondRow = rows[1];
+        if (!secondRow) return;
+
+        let comment = tokenStore.getTokenBefore(secondRow, { includeComments: true });
+        while (comment?.type === 'HTMLWhitespace') {
+          comment = tokenStore.getTokenBefore(comment, { includeComments: true });
+        }
+
+        const hasComment = comment?.type === 'HTMLComment'
+          && Boolean(comment.value.trim())
+          && comment.loc.end.line === secondRow.loc.start.line - 1
+          && !sourceCode.lines[comment.loc.start.line - 1].slice(0, comment.loc.start.column).trim()
+          && !sourceCode.lines[comment.loc.end.line - 1].slice(comment.loc.end.column).trim();
+
+        if (!hasComment) {
+          context.report({ loc: secondRow.startTag.loc, messageId: 'missing' });
+        }
+      },
+    });
+  },
+};
+
 const tableCellCommentConsistency = {
   meta: {
     type: 'suggestion',
@@ -610,6 +672,194 @@ const tableCellCommentConsistency = {
   },
 };
 
+// -----------------------------------------------------------------------------
+// Shared helper: multiline component content
+// Autofix boundary whitespace; expand empty self-closing elements onto two lines.
+// -----------------------------------------------------------------------------
+
+const createMultilineContentRule = (components) => ({
+  meta: {
+    type: 'layout',
+    docs: { description: `require multiline ${components[0]} contents regardless of length` },
+    fixable: 'code',
+    schema: [],
+    messages: { newline: 'Put <{{ component }}> content on separate lines between its opening and closing tags.' },
+  },
+
+  create(context) {
+    const sourceCode = context.sourceCode;
+    const parserServices = sourceCode.parserServices;
+    if (!parserServices.defineTemplateBodyVisitor) return {};
+
+    const newline = sourceCode.text.includes('\r\n') ? '\r\n' : '\n';
+    const indentation = (node) => sourceCode.lines[node.loc.start.line - 1].match(/^[\t ]*/)[0];
+
+    return parserServices.defineTemplateBodyVisitor({
+      VElement(node) {
+        if (!components.includes(node.rawName)) return;
+        if (!node.startTag.selfClosing && !node.endTag) return;
+
+        const content = node.endTag
+          ? sourceCode.text.slice(node.startTag.range[1], node.endTag.range[0])
+          : '';
+        const hasLeadingNewline = /^[\t ]*(?:\r\n|\r|\n)/.test(content);
+        const hasTrailingNewline = /(?:\r\n|\r|\n)[\t ]*$/.test(content);
+        if (hasLeadingNewline && hasTrailingNewline) return;
+
+        context.report({
+          loc: node.loc,
+          messageId: 'newline',
+          data: { component: node.rawName },
+          fix(fixer) {
+            const indent = indentation(node);
+            const parentIndent = node.parent?.type === 'VElement' ? indentation(node.parent) : '';
+            const indentUnit = indent.startsWith(parentIndent) && indent.length > parentIndent.length
+              ? indent.slice(parentIndent.length)
+              : indent.includes('\t') ? '\t' : '  ';
+
+            if (node.startTag.selfClosing) {
+              const ending = sourceCode.getText(node.startTag).match(/[\t ]*\/>$/);
+              if (!ending) return null;
+
+              return fixer.replaceTextRange(
+                [node.startTag.range[1] - ending[0].length, node.startTag.range[1]],
+                `>${newline}${indent}</${node.rawName}>`,
+              );
+            }
+
+            const start = node.startTag.range[1];
+            const end = node.endTag.range[0];
+            if (!content.trim()) {
+              return fixer.replaceTextRange([start, end], `${newline}${indent}`);
+            }
+
+            const fixes = [];
+            if (!hasLeadingNewline) {
+              const spaces = content.match(/^[\t ]*/)[0].length;
+              fixes.push(fixer.replaceTextRange([start, start + spaces], `${newline}${indent}${indentUnit}`));
+            }
+            if (!hasTrailingNewline) {
+              const spaces = content.match(/[\t ]*$/)[0].length;
+              fixes.push(fixer.replaceTextRange([end - spaces, end], `${newline}${indent}`));
+            }
+
+            return fixes;
+          },
+        });
+      },
+    });
+  },
+});
+
+// -----------------------------------------------------------------------------
+// Rule: table-cell-content-newline
+// Always put TableCell content on separate lines, regardless of its length.
+// -----------------------------------------------------------------------------
+
+const tableCellContentNewline = createMultilineContentRule(['TableCell', 'table-cell']);
+
+// -----------------------------------------------------------------------------
+// Rule: table-head-content-newline
+// Always put TableHead content on separate lines, regardless of its length.
+// -----------------------------------------------------------------------------
+
+const tableHeadContentNewline = createMultilineContentRule(['TableHead', 'table-head']);
+
+// -----------------------------------------------------------------------------
+// Rule: vue-no-multiple-empty-lines
+// Keep at most one consecutive blank line in Vue scripts and templates.
+// Preserve literal content, comments, pre/textarea, and raw SFC blocks.
+// -----------------------------------------------------------------------------
+
+const vueNoMultipleEmptyLines = {
+  meta: {
+    type: 'layout',
+    docs: { description: 'collapse consecutive blank lines in Vue files' },
+    fixable: 'whitespace',
+    schema: [],
+    messages: { extra: 'Keep at most one consecutive blank line.' },
+  },
+
+  create(context) {
+    const sourceCode = context.sourceCode;
+    const documentFragment = sourceCode.parserServices.getDocumentFragment?.();
+    if (!documentFragment) return {};
+
+    const protectedLines = new Set();
+    const preserve = (node) => {
+      if (!node?.loc) return;
+      for (let line = node.loc.start.line; line <= node.loc.end.line; line++) {
+        protectedLines.add(line);
+      }
+    };
+
+    const preserveTemplateContent = (node) => {
+      if (node.type === 'VExpressionContainer') {
+        // Template expressions can contain multiline literals and comments.
+        preserve(node);
+        return;
+      }
+      if (node.type !== 'VElement') return;
+
+      if (['pre', 'textarea'].includes(node.rawName)
+        || node.startTag.attributes.some((attribute) => attribute.directive && attribute.key.name.name === 'pre')) {
+        preserve(node);
+        return;
+      }
+
+      // Attribute values can contain whitespace-sensitive strings or expressions.
+      for (const attribute of node.startTag.attributes) preserve(attribute.value);
+      for (const child of node.children) preserveTemplateContent(child);
+    };
+
+    return {
+      TemplateLiteral: preserve,
+      Literal(node) {
+        if (typeof node.value === 'string') preserve(node);
+      },
+      'Program:exit'() {
+        for (const comment of sourceCode.getAllComments()) preserve(comment);
+        for (const comment of documentFragment.comments ?? []) preserve(comment);
+
+        for (const block of documentFragment.children) {
+          if (block.type !== 'VElement') continue;
+          if (block.rawName === 'template') preserveTemplateContent(block);
+          else if (block.rawName !== 'script') preserve(block);
+          else for (const attribute of block.startTag.attributes) preserve(attribute.value);
+        }
+
+        const lines = sourceCode.lines;
+        // A terminal newline creates a virtual empty line, not an extra blank line.
+        const count = lines.length - (lines.at(-1) === '' ? 1 : 0);
+        let firstBlank;
+
+        for (let index = 0; index <= count; index++) {
+          if (index < count && /^[\t ]*$/.test(lines[index]) && !protectedLines.has(index + 1)) {
+            firstBlank ??= index;
+            continue;
+          }
+
+          if (firstBlank !== undefined && index - firstBlank > 1) {
+            const start = { line: firstBlank + 2, column: 0 };
+            const startOffset = sourceCode.getIndexFromLoc(start);
+            const endOffset = index < lines.length
+              ? sourceCode.getIndexFromLoc({ line: index + 1, column: 0 })
+              : sourceCode.text.length;
+
+            context.report({
+              loc: { start, end: sourceCode.getLocFromIndex(endOffset) },
+              messageId: 'extra',
+              fix: (fixer) => fixer.removeRange([startOffset, endOffset]),
+            });
+          }
+
+          firstBlank = undefined;
+        }
+      },
+    };
+  },
+};
+
 const templateCommentPadding = {
   meta: {
     type: 'layout',
@@ -727,6 +977,234 @@ const dialogSectionPadding = {
           const gap = sourceCode.text.slice(0, offset).match(/\s*$/)[0];
 
           requireBlankLine(gap, offset - gap.length, node.startTag.loc, 'beforeFooter');
+        }
+      },
+    });
+  },
+};
+
+// -----------------------------------------------------------------------------
+// Shared helper: description layout
+// Text-only descriptions stay on one line; nested markup uses separate lines.
+// Autofix whitespace without rewriting expressions or nested elements.
+// -----------------------------------------------------------------------------
+
+const createDescriptionLayoutRule = (components) => ({
+  meta: {
+    type: 'layout',
+    docs: { description: `format ${components[0]} according to its content` },
+    fixable: 'whitespace',
+    schema: [],
+    messages: {
+      inline: 'Keep text-only <{{ component }}> on one line.',
+      multiline: 'Put nested <{{ component }}> content on separate lines between its tags.',
+    },
+  },
+
+  create(context) {
+    const sourceCode = context.sourceCode;
+    const parserServices = sourceCode.parserServices;
+    const tokenStore = parserServices.getTemplateBodyTokenStore?.();
+    if (!parserServices.defineTemplateBodyVisitor || !tokenStore) return {};
+
+    const newline = sourceCode.text.includes('\r\n') ? '\r\n' : '\n';
+    const indentation = (node) => sourceCode.lines[node.loc.start.line - 1].match(/^[\t ]*/)[0];
+
+    return parserServices.defineTemplateBodyVisitor({
+      VElement(node) {
+        if (!components.includes(node.rawName) || !node.endTag) return;
+
+        const hasMarkup = node.children.some((child) => child.type === 'VElement')
+          || tokenStore.getTokens(node, { includeComments: true }).some((token) => token.type === 'HTMLComment');
+        const start = node.startTag.range[1];
+        const end = node.endTag.range[0];
+        const content = sourceCode.text.slice(start, end);
+
+        if (!hasMarkup) {
+          if (node.loc.start.line === node.loc.end.line) return;
+
+          context.report({
+            loc: node.loc,
+            messageId: 'inline',
+            data: { component: node.rawName },
+            fix(fixer) {
+              // Leave multiline attributes and expressions for manual formatting.
+              if (node.startTag.loc.start.line !== node.startTag.loc.end.line
+                || node.endTag.loc.start.line !== node.endTag.loc.end.line
+                || node.children.some((child) => child.type !== 'VText'
+                  && (child.type !== 'VExpressionContainer' || child.loc.start.line !== child.loc.end.line))) {
+                return null;
+              }
+
+              const text = node.children.map((child) => child.type === 'VText'
+                ? sourceCode.getText(child).replace(/[\t \r\n]+/g, ' ')
+                : sourceCode.getText(child)).join('').trim();
+
+              return fixer.replaceTextRange([start, end], text);
+            },
+          });
+          return;
+        }
+
+        const hasLeadingNewline = /^[\t ]*(?:\r\n|\r|\n)/.test(content);
+        const hasTrailingNewline = /(?:\r\n|\r|\n)[\t ]*$/.test(content);
+        if (hasLeadingNewline && hasTrailingNewline) return;
+
+        context.report({
+          loc: node.loc,
+          messageId: 'multiline',
+          data: { component: node.rawName },
+          fix(fixer) {
+            const indent = indentation(node);
+            const parentIndent = node.parent?.type === 'VElement' ? indentation(node.parent) : '';
+            const indentUnit = indent.startsWith(parentIndent) && indent.length > parentIndent.length
+              ? indent.slice(parentIndent.length)
+              : indent.includes('\t') ? '\t' : '  ';
+            const fixes = [];
+
+            if (!hasLeadingNewline) {
+              const spaces = content.match(/^[\t ]*/)[0].length;
+              fixes.push(fixer.replaceTextRange([start, start + spaces], `${newline}${indent}${indentUnit}`));
+            }
+            if (!hasTrailingNewline) {
+              const spaces = content.match(/[\t ]*$/)[0].length;
+              fixes.push(fixer.replaceTextRange([end - spaces, end], `${newline}${indent}`));
+            }
+
+            return fixes;
+          },
+        });
+      },
+    });
+  },
+});
+
+// -----------------------------------------------------------------------------
+// Rule: dialog-description-layout
+// Keep plain text inline; use separate lines when nested markup is present.
+// -----------------------------------------------------------------------------
+
+const dialogDescriptionLayout = createDescriptionLayoutRule(['DialogDescription', 'dialog-description']);
+
+// -----------------------------------------------------------------------------
+// Rule: empty-description-layout
+// Keep plain text inline; use separate lines when nested markup is present.
+// -----------------------------------------------------------------------------
+
+const emptyDescriptionLayout = createDescriptionLayoutRule(['EmptyDescription', 'empty-description']);
+
+const createDialogOpenRequirement = (directiveName, argumentName) => {
+  const attributeName = `${directiveName === 'bind' ? ':' : '@'}${argumentName}`;
+
+  return {
+    meta: {
+      type: 'problem',
+      docs: { description: `require ${attributeName} when Dialog binds :open` },
+      schema: [],
+      messages: { missing: `<Dialog> with :open also requires ${attributeName}.` },
+    },
+
+    create(context) {
+      const parserServices = context.sourceCode.parserServices;
+      if (!parserServices.defineTemplateBodyVisitor) return {};
+
+      const hasDirective = (node, directive, argument) => node.startTag.attributes.some((attribute) =>
+        attribute.directive
+        && attribute.key.name.name === directive
+        && attribute.key.argument?.type === 'VIdentifier'
+        && attribute.key.argument.name === argument);
+
+      return parserServices.defineTemplateBodyVisitor({
+        VElement(node) {
+          if (node.rawName !== 'Dialog' || !hasDirective(node, 'bind', 'open')) return;
+
+          if (!hasDirective(node, directiveName, argumentName)) {
+            context.report({ loc: node.startTag.loc, messageId: 'missing' });
+          }
+        },
+      });
+    },
+  };
+};
+
+// -----------------------------------------------------------------------------
+// Rule: dialog-open-requires-processing
+// A Dialog with :open must also bind :processing. No behavioral autofix.
+// -----------------------------------------------------------------------------
+
+const dialogOpenRequiresProcessing = createDialogOpenRequirement('bind', 'processing');
+
+// -----------------------------------------------------------------------------
+// Rule: dialog-open-requires-dismissible
+// A Dialog with :open must also bind :dismissible. No behavioral autofix.
+// -----------------------------------------------------------------------------
+
+const dialogOpenRequiresDismissible = createDialogOpenRequirement('bind', 'dismissible');
+
+// -----------------------------------------------------------------------------
+// Rule: dialog-open-requires-update-open
+// A Dialog with :open must also handle @update:open. No behavioral autofix.
+// -----------------------------------------------------------------------------
+
+const dialogOpenRequiresUpdateOpen = createDialogOpenRequirement('on', 'update:open');
+
+// -----------------------------------------------------------------------------
+// Rule: dialog-footer-close-as-child
+// DialogClose containing a Button inside DialogFooter requires as-child.
+// Autofix adds the missing attribute without replacing existing bindings.
+// -----------------------------------------------------------------------------
+
+const dialogFooterCloseAsChild = {
+  meta: {
+    type: 'problem',
+    docs: { description: 'require as-child on DialogFooter close controls containing Button' },
+    fixable: 'code',
+    schema: [],
+    messages: { missing: '<DialogClose> containing <Button> inside <DialogFooter> requires as-child.' },
+  },
+
+  create(context) {
+    const parserServices = context.sourceCode.parserServices;
+    if (!parserServices.defineTemplateBodyVisitor) return {};
+
+    const insideFooter = (node) => {
+      let parent = node.parent;
+      while (parent?.type === 'VElement') {
+        if (['DialogFooter', 'dialog-footer'].includes(parent.rawName)) return true;
+        if (['Dialog', 'AlertDialog', 'alert-dialog'].includes(parent.rawName)) return false;
+        parent = parent.parent;
+      }
+      return false;
+    };
+
+    const containsButton = (node) => node.children.some((child) => {
+      if (child.type !== 'VElement') return false;
+      if (child.rawName === 'Button') return true;
+      if (['DialogClose', 'dialog-close', 'Dialog', 'AlertDialog', 'alert-dialog'].includes(child.rawName)) return false;
+      return containsButton(child);
+    });
+
+    return parserServices.defineTemplateBodyVisitor({
+      VElement(node) {
+        if (!['DialogClose', 'dialog-close'].includes(node.rawName)
+          || !insideFooter(node) || !containsButton(node)) return;
+
+        const hasAsChild = node.startTag.attributes.some((attribute) => {
+          if (!attribute.directive) return ['as-child', 'aschild'].includes(attribute.key.name.toLowerCase());
+          return attribute.key.name.name === 'bind'
+            && attribute.key.argument?.type === 'VIdentifier'
+            && ['as-child', 'aschild'].includes(attribute.key.argument.name.toLowerCase());
+        });
+
+        if (!hasAsChild) {
+          context.report({
+            loc: node.startTag.loc,
+            messageId: 'missing',
+            fix: (fixer) => fixer.insertTextAfterRange(
+              [node.startTag.range[0], node.startTag.range[0] + node.rawName.length + 1],
+              ' as-child',
+            ),
+          });
         }
       },
     });
@@ -1502,15 +1980,60 @@ const fieldLabelInputAssociation = {
   },
 };
 
-const createRequireTypeRule = (components) => ({
+// -----------------------------------------------------------------------------
+// Rule: field-input-content
+// Inputs belong inside their nearest Field's FieldContent.
+// No autofix: adding a wrapper can change layout.
+// -----------------------------------------------------------------------------
+
+const fieldInputContent = {
+  meta: {
+    type: 'problem',
+    docs: { description: 'require inputs inside Field to be wrapped in FieldContent' },
+    schema: [],
+    messages: { missing: 'An input inside <Field> must be inside that field\'s <FieldContent>.' },
+  },
+
+  create(context) {
+    const parserServices = context.sourceCode.parserServices;
+    if (!parserServices.defineTemplateBodyVisitor) return {};
+
+    return parserServices.defineTemplateBodyVisitor({
+      VElement(node) {
+        if (!['Input', 'input'].includes(node.rawName)) return;
+
+        let parent = node.parent;
+        let hasContent = false;
+
+        while (parent?.type === 'VElement') {
+          // Stop at the owning Field; an outer FieldContent cannot satisfy it.
+          if (['Field', 'field'].includes(parent.rawName)) {
+            if (!hasContent) {
+              context.report({ loc: node.startTag.loc, messageId: 'missing' });
+            }
+            return;
+          }
+
+          if (['FieldContent', 'field-content'].includes(parent.rawName)) {
+            hasContent = true;
+          }
+
+          parent = parent.parent;
+        }
+      },
+    });
+  },
+};
+
+const createRequireAttributeRule = (components, attributeName) => ({
   meta: {
     type: 'suggestion',
     docs: {
-      description: `require an explicit type on ${components.join(' and ')} elements`,
+      description: `require an explicit ${attributeName} on ${components.join(' and ')} elements`,
     },
     schema: [],
     messages: {
-      missing: '<{{ component }}> requires an explicit type or :type attribute.',
+      missing: `<{{ component }}> requires an explicit, nonempty ${attributeName} or :${attributeName} attribute.`,
     },
   },
 
@@ -1527,9 +2050,9 @@ const createRequireTypeRule = (components) => ({
           return;
         }
 
-        const hasType = node.startTag.attributes.some((attribute) => {
+        const hasAttribute = node.startTag.attributes.some((attribute) => {
           if (!attribute.directive) {
-            return attribute.key.name === 'type' && Boolean(attribute.value?.value.trim());
+            return attribute.key.name === attributeName && Boolean(attribute.value?.value.trim());
           }
 
           const expression = unwrapScriptExpression(attribute.value?.expression);
@@ -1540,12 +2063,12 @@ const createRequireTypeRule = (components) => ({
 
           return attribute.key.name.name === 'bind'
             && attribute.key.argument?.type === 'VIdentifier'
-            && attribute.key.argument.name === 'type'
+            && attribute.key.argument.name === attributeName
             && (!attribute.value || (Boolean(expression) && !isEmptyLiteral && !isEmptyTemplate));
         });
 
-        if (!hasType) {
-          // The intended type affects behavior; never guess it.
+        if (!hasAttribute) {
+          // Require an explicit choice without guessing the intended value.
           context.report({
             loc: node.startTag.loc,
             messageId: 'missing',
@@ -1557,8 +2080,22 @@ const createRequireTypeRule = (components) => ({
   },
 });
 
-const requireButtonType = createRequireTypeRule(['Button', 'button']);
-const requireInputType = createRequireTypeRule(['Input', 'input']);
+const requireButtonType = createRequireAttributeRule(['Button', 'button'], 'type');
+const requireInputType = createRequireAttributeRule(['Input', 'input'], 'type');
+
+// -----------------------------------------------------------------------------
+// Rule: require-button-variant
+// Require a nonempty variant on the Button component, excluding native buttons.
+// -----------------------------------------------------------------------------
+
+const requireButtonVariant = createRequireAttributeRule(['Button'], 'variant');
+
+// -----------------------------------------------------------------------------
+// Rule: require-button-size
+// Require a nonempty size on the Button component, excluding native buttons.
+// -----------------------------------------------------------------------------
+
+const requireButtonSize = createRequireAttributeRule(['Button'], 'size');
 
 const contextMenuItemIcon = {
   meta: {
@@ -1670,13 +2207,23 @@ const contextMenuItemIcon = {
   },
 };
 
-const workspace = {
+const escore = {
   rules: {
     ...inertiaPlusRules,
     'require-comment-before-component': requireCommentBeforeComponent,
     'table-cell-comment-consistency': tableCellCommentConsistency,
+    'table-body-second-row-comment': tableBodySecondRowComment,
+    'table-cell-content-newline': tableCellContentNewline,
+    'table-head-content-newline': tableHeadContentNewline,
     'template-comment-padding': templateCommentPadding,
+    'vue-no-multiple-empty-lines': vueNoMultipleEmptyLines,
     'dialog-section-padding': dialogSectionPadding,
+    'dialog-description-layout': dialogDescriptionLayout,
+    'empty-description-layout': emptyDescriptionLayout,
+    'dialog-open-requires-processing': dialogOpenRequiresProcessing,
+    'dialog-open-requires-dismissible': dialogOpenRequiresDismissible,
+    'dialog-open-requires-update-open': dialogOpenRequiresUpdateOpen,
+    'dialog-footer-close-as-child': dialogFooterCloseAsChild,
     'dialogs-at-template-root': dialogsAtTemplateRoot,
     'dialogs-at-template-end': dialogsAtTemplateEnd,
     'script-declaration-order': scriptDeclarationOrder,
@@ -1684,7 +2231,10 @@ const workspace = {
     'script-regions': scriptRegions,
     'no-hardcoded-inertia-urls': noHardcodedInertiaUrls,
     'field-label-input-association': fieldLabelInputAssociation,
+    'field-input-content': fieldInputContent,
     'require-button-type': requireButtonType,
+    'require-button-variant': requireButtonVariant,
+    'require-button-size': requireButtonSize,
     'require-input-type': requireInputType,
     'context-menu-item-icon': contextMenuItemIcon,
   },
@@ -1755,7 +2305,7 @@ export default defineConfigWithVueTs(
     {
         plugins: {
             'import-x': importPlugin,
-            workspace
+            escore
         },
         settings: {
             'import-x/resolver-next': [
@@ -1767,18 +2317,18 @@ export default defineConfigWithVueTs(
             ]
         },
         rules: {
-            'workspace/no-hardcoded-inertia-urls': 'error',
-            'workspace/inertia-plus-form-options': 'error',
-            'workspace/inertia-plus-const': 'error',
-            'workspace/inertia-plus-form-name': 'error',
-            'workspace/inertia-plus-single-line-opening': 'error',
-            'workspace/inertia-plus-form-definition': 'error',
-            'workspace/inertia-plus-form-submit': 'error',
-            'workspace/inertia-plus-form-methods': 'error',
-            'workspace/inertia-plus-form-method-context': 'error',
-            'workspace/inertia-plus-before-submit-call': 'error',
-            'workspace/inertia-plus-submit-processing-guard': 'error',
-            'workspace/inertia-plus-surface-openable': 'error',
+            'escore/no-hardcoded-inertia-urls': 'error',
+            'escore/inertia-plus-form-options': 'error',
+            'escore/inertia-plus-const': 'error',
+            'escore/inertia-plus-form-name': 'error',
+            'escore/inertia-plus-single-line-opening': 'error',
+            'escore/inertia-plus-form-definition': 'error',
+            'escore/inertia-plus-form-submit': 'error',
+            'escore/inertia-plus-form-methods': 'error',
+            'escore/inertia-plus-form-method-context': 'error',
+            'escore/inertia-plus-before-submit-call': 'error',
+            'escore/inertia-plus-submit-processing-guard': 'error',
+            'escore/inertia-plus-surface-openable': 'error',
             'vue/multi-word-component-names': 'off',
             '@typescript-eslint/no-explicit-any': 'off',
             '@typescript-eslint/no-unused-expressions': ['error', { allowTernary: true }],
@@ -1805,14 +2355,15 @@ export default defineConfigWithVueTs(
     {
         files: ['**/*.vue'],
         plugins: {
-            workspace
+            escore
         },
         rules: {
             // Extend component coverage here; keep component-specific inference in the rule.
-            'workspace/require-comment-before-component': [
+            'escore/require-comment-before-component': [
                 'error',
                 {
                     components: {
+                        Alert: { autofix: 'missing-only', matchesDescendantText: 'AlertTitle' },
                         TabsContent: { notWithin: 'Transition' },
                         Badge: { autofix: 'missing-only', matchesLiteralText: true, notWithin: 'TableCell' },
                         Button: {
@@ -1865,22 +2416,36 @@ export default defineConfigWithVueTs(
                         StatCard: { autofix: 'missing-only', matchesDescendantText: 'StatCardLabel' },
                         TableEmpty: { autofix: 'missing-only', matchesDescendantText: 'EmptyTitle' },
                         TableHead: { autofix: 'replace', matchesLiteralText: true },
+                        ToggleGroupItem: {},
                         ButtonGroup: {}
                     }
                 }
             ],
-            'workspace/table-cell-comment-consistency': 'error',
-            'workspace/template-comment-padding': 'error',
-            'workspace/dialog-section-padding': 'error',
-            'workspace/dialogs-at-template-root': 'error',
-            'workspace/dialogs-at-template-end': 'error',
-            'workspace/script-declaration-order': 'error',
-            'workspace/define-props-assignment': 'error',
-            'workspace/script-regions': 'warn',
-            'workspace/field-label-input-association': 'error',
-            'workspace/require-button-type': 'error',
-            'workspace/require-input-type': 'error',
-            'workspace/context-menu-item-icon': ['error', { sources: ['@lucide/vue', 'lucide-vue-next'] }]
+            'escore/table-cell-comment-consistency': 'error',
+            'escore/table-body-second-row-comment': 'error',
+            'escore/table-cell-content-newline': 'error',
+            'escore/table-head-content-newline': 'error',
+            'escore/template-comment-padding': 'error',
+            'escore/vue-no-multiple-empty-lines': 'error',
+            'escore/dialog-section-padding': 'error',
+            'escore/dialog-description-layout': 'error',
+            'escore/empty-description-layout': 'error',
+            'escore/dialog-open-requires-processing': 'error',
+            'escore/dialog-open-requires-dismissible': 'error',
+            'escore/dialog-open-requires-update-open': 'error',
+            'escore/dialog-footer-close-as-child': 'error',
+            'escore/dialogs-at-template-root': 'error',
+            'escore/dialogs-at-template-end': 'error',
+            'escore/script-declaration-order': 'error',
+            'escore/define-props-assignment': 'error',
+            'escore/script-regions': 'warn',
+            'escore/field-label-input-association': 'error',
+            'escore/field-input-content': 'error',
+            'escore/require-button-type': 'error',
+            'escore/require-button-variant': 'error',
+            'escore/require-button-size': 'error',
+            'escore/require-input-type': 'error',
+            'escore/context-menu-item-icon': ['error', { sources: ['@lucide/vue', 'lucide-vue-next'] }]
         }
     },
     {

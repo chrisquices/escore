@@ -45,6 +45,12 @@ This document defines the controlling protocol for every agent action and respon
 
 ---
 
+### Computer Control
+
+- You are banned from computer-control access. The user will never grant permission for it; do not use it or ask for permission.
+
+---
+
 ### Git
 
 - You are banned from using Git FOREVER.
@@ -60,7 +66,7 @@ This document defines the controlling protocol for every agent action and respon
 ### Code Quality
 
 - After each completed set of code changes, run `composer quality:fix` from the affected project's root before the final response.
-- Fix all the issues.
+- Do not fix reported violations, the goal of this step is to trigger the auto-fixable violations.
 - If the script is missing or the command cannot run, report that explicitly.
 
 ---
