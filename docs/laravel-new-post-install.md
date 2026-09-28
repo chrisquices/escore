@@ -19,6 +19,14 @@ Give the application a unique workspace package name in its `package.json`:
 }
 ```
 
+## Vue Icons
+
+For a Vue application, install Lucide as an application dependency. Run from the application directory:
+
+```sh
+pnpm add @lucide/vue
+```
+
 ## Vue Quality Tools
 
 For a Vue application, install the dependencies required by the shared ESLint configuration and TypeScript checks:
