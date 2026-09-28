@@ -59,3 +59,12 @@ This document defines the controlling protocol for every agent action and respon
 - Never start, restart, stop, kill, or modify a development server that was not created by you.
 
 ---
+
+### Escore UI
+
+- When working on UI in a project using `escore-packages`, use Escore’s UI kit, UI interactions, and shared libraries as the default building blocks.
+- Check the relevant implementations in `escore/packages/js` before creating components, interactions, or utilities.
+- Do not hand-roll or duplicate functionality already provided by Escore.
+- You may access the sibling Escore project even when it is outside the current workspace.
+
+---

@@ -8,7 +8,7 @@ import {
   SelectViewport,
   useForwardPropsEmits,
 } from "reka-ui"
-import { cn } from "@workspace/ui/utils"
+import { cn } from "escore-packages/ui/utils"
 import { SelectScrollDownButton, SelectScrollUpButton } from "."
 
 defineOptions({

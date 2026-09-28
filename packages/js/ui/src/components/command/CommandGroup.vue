@@ -4,8 +4,8 @@ import type { HTMLAttributes } from "vue"
 import { reactiveOmit } from "@vueuse/core"
 import { ListboxGroup, ListboxGroupLabel, useId } from "reka-ui"
 import { computed, onMounted, onUnmounted } from "vue"
-import { Caption } from "@workspace/ui/caption"
-import { cn } from "@workspace/ui/utils"
+import { Caption } from "escore-packages/ui/caption"
+import { cn } from "escore-packages/ui/utils"
 import { provideCommandGroupContext, useCommand } from "."
 
 const props = defineProps<ListboxGroupProps & {

@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import type { HTMLAttributes } from "vue"
 import { PanelLeft } from "@lucide/vue"
-import { cn } from "@workspace/ui/utils"
-import { Button } from '@workspace/ui/button'
+import { cn } from "escore-packages/ui/utils"
+import { Button } from 'escore-packages/ui/button'
 import { useSidebar } from "./utils"
 
 const props = defineProps<{

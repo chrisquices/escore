@@ -1,4 +1,4 @@
-import {cva} from "@workspace/ui/utils"
+import {cva} from "escore-packages/ui/utils"
 
 export { default as NavigationMenu } from "./NavigationMenu.vue"
 export { default as NavigationMenuContent } from "./NavigationMenuContent.vue"

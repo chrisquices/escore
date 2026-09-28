@@ -4,7 +4,7 @@ import type { HTMLAttributes } from "vue"
 import type { GridVariants } from "."
 import { Primitive } from "reka-ui"
 import { computed, provide, toRef } from "vue"
-import { cn } from "@workspace/ui/utils"
+import { cn } from "escore-packages/ui/utils"
 import { gridVariants } from "."
 import { gridVirtualizedKey } from "./context"
 

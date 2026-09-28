@@ -1,4 +1,4 @@
-import {cva, type VariantProps} from "@workspace/ui/utils"
+import {cva, type VariantProps} from "escore-packages/ui/utils"
 
 export {default as ButtonGroup} from "./ButtonGroup.vue"
 export {default as ButtonGroupSeparator} from "./ButtonGroupSeparator.vue"

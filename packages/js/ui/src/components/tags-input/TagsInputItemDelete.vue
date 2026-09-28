@@ -4,7 +4,7 @@ import type { HTMLAttributes } from "vue"
 import { X } from "@lucide/vue"
 import { reactiveOmit } from "@vueuse/core"
 import { TagsInputItemDelete, useForwardProps } from "reka-ui"
-import { cn } from "@workspace/ui/utils"
+import { cn } from "escore-packages/ui/utils"
 
 const props = defineProps<TagsInputItemDeleteProps & { class?: HTMLAttributes["class"] }>()
 

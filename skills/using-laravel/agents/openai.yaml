@@ -1,0 +1,3 @@
+interface:
+  display_name: "Using Laravel"
+  short_description: "Apply guidelines for Laravel codebases."

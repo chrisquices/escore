@@ -6,7 +6,7 @@ import {
   NavigationMenuViewport,
   useForwardProps,
 } from "reka-ui"
-import { cn } from "@workspace/ui/utils"
+import { cn } from "escore-packages/ui/utils"
 
 const props = defineProps<NavigationMenuViewportProps & { class?: HTMLAttributes["class"] }>()
 

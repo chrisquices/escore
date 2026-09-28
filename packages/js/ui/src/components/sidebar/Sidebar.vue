@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { computed } from "vue"
-import { cn } from "@workspace/ui/utils"
+import { cn } from "escore-packages/ui/utils"
 import {
   Sheet,
   SheetContent,
   SheetDescription,
   SheetHeader,
   SheetTitle,
-} from '@workspace/ui/sheet'
+} from 'escore-packages/ui/sheet'
 import { useSidebar } from "./utils"
 import type { SidebarProps } from "."
 

@@ -5,10 +5,10 @@ import { getLocalTimeZone, today } from "@internationalized/date"
 import { CalendarDays } from "@lucide/vue"
 import { useDateFormatter } from "reka-ui"
 import { computed } from "vue"
-import { cn } from "@workspace/ui/utils"
-import { Button } from "@workspace/ui/button"
-import { Calendar } from "@workspace/ui/calendar"
-import { Popover, PopoverContent, PopoverTrigger } from "@workspace/ui/popover"
+import { cn } from "escore-packages/ui/utils"
+import { Button } from "escore-packages/ui/button"
+import { Calendar } from "escore-packages/ui/calendar"
+import { Popover, PopoverContent, PopoverTrigger } from "escore-packages/ui/popover"
 
 const props = withDefaults(defineProps<{
   modelValue?: DateValue

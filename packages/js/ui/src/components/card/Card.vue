@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { HTMLAttributes } from "vue"
 import { ref } from "vue"
-import { cn } from "@workspace/ui/utils"
+import { cn } from "escore-packages/ui/utils"
 
 const props = defineProps<{
   class?: HTMLAttributes["class"]

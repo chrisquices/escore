@@ -3,7 +3,7 @@ import type { AccordionItemProps } from "reka-ui"
 import type { HTMLAttributes } from "vue"
 import { reactiveOmit } from "@vueuse/core"
 import { AccordionItem, useForwardProps } from "reka-ui"
-import { cn } from "@workspace/ui/utils"
+import { cn } from "escore-packages/ui/utils"
 
 const props = defineProps<AccordionItemProps & { class?: HTMLAttributes["class"] }>()
 

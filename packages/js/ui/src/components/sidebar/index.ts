@@ -1,6 +1,6 @@
 import type { HTMLAttributes } from "vue"
-import type {VariantProps} from "@workspace/ui/utils"
-import {cva} from "@workspace/ui/utils"
+import type {VariantProps} from "escore-packages/ui/utils"
+import {cva} from "escore-packages/ui/utils"
 
 export interface SidebarProps {
   side?: "left" | "right"

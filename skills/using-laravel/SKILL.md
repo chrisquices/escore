@@ -1,5 +1,5 @@
 ---
-name: use-laravel-guidelines
+name: using-laravel
 description: "General guidelines for managing laravel codebases. Use when working with certain files in a Laravel project: controllers, form requests, services, helpers, Artisan commands, migrations, routes, models, resources, policies, jobs, events, and listeners."
 ---
 
@@ -10,4 +10,3 @@ description: "General guidelines for managing laravel codebases. Use when workin
 ## Instructions
 
 - Read and apply [Agent Protocol](references/agent-protocol.md) completely.
-

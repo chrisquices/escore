@@ -4,8 +4,8 @@ import type { HTMLAttributes } from "vue"
 import { ChevronRight } from "@lucide/vue"
 import { reactiveOmit } from "@vueuse/core"
 import { RangeCalendarNext, useForwardProps } from "reka-ui"
-import { cn } from "@workspace/ui/utils"
-import { buttonVariants } from '@workspace/ui/button'
+import { cn } from "escore-packages/ui/utils"
+import { buttonVariants } from 'escore-packages/ui/button'
 
 const props = defineProps<RangeCalendarNextProps & { class?: HTMLAttributes["class"] }>()
 

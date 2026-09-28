@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { HTMLAttributes } from "vue"
-import { Caption } from "@workspace/ui/caption"
+import { Caption } from "escore-packages/ui/caption"
 
 const props = defineProps<{
   class?: HTMLAttributes["class"]

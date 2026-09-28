@@ -4,7 +4,7 @@ import type { HTMLAttributes } from "vue"
 import { Search } from "@lucide/vue"
 import { reactiveOmit } from "@vueuse/core"
 import { ListboxFilter, useForwardProps } from "reka-ui"
-import { cn } from "@workspace/ui/utils"
+import { cn } from "escore-packages/ui/utils"
 import { useCommand } from "."
 
 defineOptions({

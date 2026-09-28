@@ -1,0 +1,12 @@
+includes:
+  - %currentWorkingDirectory%/vendor/larastan/larastan/extension.neon
+  - %currentWorkingDirectory%/vendor/nesbot/carbon/extension.neon
+
+parameters:
+  paths:
+    - %currentWorkingDirectory%/app/
+    - %currentWorkingDirectory%/bootstrap/app.php
+    - %currentWorkingDirectory%/database/
+    - %currentWorkingDirectory%/routes/
+
+  level: 7

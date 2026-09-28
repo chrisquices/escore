@@ -3,7 +3,7 @@ import type { PrimitiveProps } from "reka-ui"
 import type { HTMLAttributes } from "vue"
 import type { CaptionVariants } from "."
 import { Primitive } from "reka-ui"
-import { cn } from "@workspace/ui/utils"
+import { cn } from "escore-packages/ui/utils"
 import { captionVariants } from "."
 
 interface Props extends PrimitiveProps {

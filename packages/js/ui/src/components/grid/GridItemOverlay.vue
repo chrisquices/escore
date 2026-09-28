@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { HTMLAttributes } from "vue"
 import type { GridItemOverlayVariants } from "."
-import { cn } from "@workspace/ui/utils"
+import { cn } from "escore-packages/ui/utils"
 import { gridItemOverlayVariants } from "."
 
 interface Props {

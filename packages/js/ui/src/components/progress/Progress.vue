@@ -6,7 +6,7 @@ import {
   ProgressIndicator,
   ProgressRoot,
 } from "reka-ui"
-import { cn } from "@workspace/ui/utils"
+import { cn } from "escore-packages/ui/utils"
 
 const props = withDefaults(
   defineProps<ProgressRootProps & { class?: HTMLAttributes["class"] }>(),

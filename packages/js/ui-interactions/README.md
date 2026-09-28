@@ -42,7 +42,7 @@ Use this shared engine implementation shape:
 ## Atelier Package Integration
 
 1. Treat `packages/ui-interactions` as the canonical source for shared, framework-independent controllers.
-2. Import controllers through explicit `@workspace/ui-interactions/*` package subpaths. Never use filesystem aliases or copy controllers into an app.
+2. Import controllers through explicit `@escore/ui-interactions/*` package subpaths. Never use filesystem aliases or copy controllers into an app.
 3. Make reusable controller changes directly in `packages/ui-interactions`.
 4. Keep app-specific orchestration and UI outside `packages/ui-interactions`; move code into the package only when it is genuinely reusable behavior.
 5. Before inspecting, creating, editing, or reviewing engine code, read and follow the complete implementation contract below.

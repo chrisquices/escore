@@ -3,7 +3,7 @@ import type { RadioGroupRootEmits, RadioGroupRootProps } from "reka-ui"
 import type { HTMLAttributes } from "vue"
 import { reactiveOmit } from "@vueuse/core"
 import { RadioGroupRoot, useForwardPropsEmits } from "reka-ui"
-import { cn } from "@workspace/ui/utils"
+import { cn } from "escore-packages/ui/utils"
 
 const props = defineProps<RadioGroupRootProps & { class?: HTMLAttributes["class"] }>()
 const emits = defineEmits<RadioGroupRootEmits>()

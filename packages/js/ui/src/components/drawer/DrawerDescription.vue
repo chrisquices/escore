@@ -3,7 +3,7 @@ import type { DrawerDescriptionProps } from "vaul-vue"
 import type { HTMLAttributes } from "vue"
 import { reactiveOmit } from "@vueuse/core"
 import { DrawerDescription } from "vaul-vue"
-import { cn } from "@workspace/ui/utils"
+import { cn } from "escore-packages/ui/utils"
 
 const props = defineProps<DrawerDescriptionProps & { class?: HTMLAttributes["class"] }>()
 

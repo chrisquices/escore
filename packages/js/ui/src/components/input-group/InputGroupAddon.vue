@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { HTMLAttributes } from "vue"
 import type { InputGroupVariants } from "."
-import { cn } from "@workspace/ui/utils"
+import { cn } from "escore-packages/ui/utils"
 import { inputGroupAddonVariants } from "."
 
 const props = withDefaults(defineProps<{

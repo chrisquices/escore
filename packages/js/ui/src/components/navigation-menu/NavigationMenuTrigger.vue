@@ -7,7 +7,7 @@ import {
   NavigationMenuTrigger,
   useForwardProps,
 } from "reka-ui"
-import { cn } from "@workspace/ui/utils"
+import { cn } from "escore-packages/ui/utils"
 import { navigationMenuTriggerStyle } from "."
 
 const props = defineProps<NavigationMenuTriggerProps & { class?: HTMLAttributes["class"] }>()

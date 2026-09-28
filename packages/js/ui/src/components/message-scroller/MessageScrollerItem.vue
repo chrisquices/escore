@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { ComponentPublicInstance, HTMLAttributes } from "vue"
-import { cn } from "@workspace/ui/utils"
+import { cn } from "escore-packages/ui/utils"
 import { useMessageScrollerRegister } from "./useMessageScroller"
 
 const props = withDefaults(defineProps<{

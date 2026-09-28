@@ -26,25 +26,25 @@ import {
   type VideoError,
   type VideoMediaSession,
   type VideoSource
-} from "@workspace/ui-interactions/video"
-import {cn} from "@workspace/ui/utils"
-import {Button} from "@workspace/ui/button"
-import {Caption} from "@workspace/ui/caption"
-import {Field, FieldTitle} from "@workspace/ui/field"
-import {Kbd, KbdGroup} from "@workspace/ui/kbd"
-import {Label} from "@workspace/ui/label"
-import {RadioGroup, RadioGroupItem} from "@workspace/ui/radio-group"
-import {Separator} from "@workspace/ui/separator"
-import {Slider} from "@workspace/ui/slider"
-import {Switch} from "@workspace/ui/switch"
+} from "escore-packages/ui-interactions/video"
+import {cn} from "escore-packages/ui/utils"
+import {Button} from "escore-packages/ui/button"
+import {Caption} from "escore-packages/ui/caption"
+import {Field, FieldTitle} from "escore-packages/ui/field"
+import {Kbd, KbdGroup} from "escore-packages/ui/kbd"
+import {Label} from "escore-packages/ui/label"
+import {RadioGroup, RadioGroupItem} from "escore-packages/ui/radio-group"
+import {Separator} from "escore-packages/ui/separator"
+import {Slider} from "escore-packages/ui/slider"
+import {Switch} from "escore-packages/ui/switch"
 import {
   Sheet,
   SheetContent,
   SheetHeader,
   SheetTitle,
   SheetTrigger,
-} from "@workspace/ui/sheet"
-import {Card, CardContent} from "@workspace/ui/card"
+} from "escore-packages/ui/sheet"
+import {Card, CardContent} from "escore-packages/ui/card"
 
 const props = withDefaults(defineProps<{
   playerId: string

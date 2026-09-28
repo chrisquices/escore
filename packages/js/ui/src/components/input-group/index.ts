@@ -1,4 +1,4 @@
-import {cva, type VariantProps} from "@workspace/ui/utils"
+import {cva, type VariantProps} from "escore-packages/ui/utils"
 
 export { default as InputGroup } from "./InputGroup.vue"
 export { default as InputGroupAddon } from "./InputGroupAddon.vue"

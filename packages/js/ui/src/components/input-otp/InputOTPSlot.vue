@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { SlotProps } from "vue-input-otp"
 import type { HTMLAttributes } from "vue"
-import { cn } from "@workspace/ui/utils"
+import { cn } from "escore-packages/ui/utils"
 
 const props = defineProps<SlotProps & { class?: HTMLAttributes["class"] }>()
 </script>

@@ -3,7 +3,7 @@ import type { EditableInputProps } from "reka-ui"
 import type { HTMLAttributes } from "vue"
 import { reactiveOmit } from "@vueuse/core"
 import { EditableInput, useForwardProps } from "reka-ui"
-import { cn } from "@workspace/ui/utils"
+import { cn } from "escore-packages/ui/utils"
 
 const props = defineProps<EditableInputProps & { class?: HTMLAttributes["class"] }>()
 

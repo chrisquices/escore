@@ -9,7 +9,7 @@ import {
   useForwardPropsEmits,
 } from "reka-ui"
 import { inject, ref } from "vue"
-import { cn } from "@workspace/ui/utils"
+import { cn } from "escore-packages/ui/utils"
 import { dialogProcessingKey } from "./context"
 import DialogClose from "./DialogClose.vue"
 import DialogOverlay from "./DialogOverlay.vue"

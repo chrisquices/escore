@@ -3,8 +3,8 @@ import type { PrimitiveProps } from "reka-ui"
 import type { HTMLAttributes } from "vue"
 import type { ButtonVariants } from "."
 import { Primitive } from "reka-ui"
-import { Spinner } from "@workspace/ui/spinner"
-import { cn } from "@workspace/ui/utils"
+import { Spinner } from "escore-packages/ui/spinner"
+import { cn } from "escore-packages/ui/utils"
 import { buttonVariants } from "."
 
 interface Props extends PrimitiveProps {
