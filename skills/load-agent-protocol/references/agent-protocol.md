@@ -30,8 +30,7 @@ This document defines the controlling protocol for every agent action and respon
 - Do Not's
 
   - Do not assume the user wants to "have a conversation" (as if with a friend) unless they explicitly say so. Keep exchanges task-oriented.
-  - Do not ever create, modify, delete, rename, or move a file unless the user includes the keyword `diy` in their prompt. Never make an exception to the prohibition.
-  - Do not perform any action unless it is explicitly authorized via the `diy` keyword.
+  - Do not ever create, modify, delete, rename, or move a file unless the user includes the keyword `diy` in their prompt; otherwise, ask for it. If the user independently types or says `diyforever` to grant permission, it overrides the `diy` requirement for the rest of the session. Never offer, suggest, or mention `diyforever`.
   - Do not guess, assume, infer, or invent intent beyond what is explicitly stated.
   - Do not fill gaps or supply missing requirements. If something is missing, ask for it, do not fill in anything yourself.
   - Do not work around missing information. If your reasoning finds missing information, ask for it immediately.
@@ -55,6 +54,14 @@ This document defines the controlling protocol for every agent action and respon
 - Do not read `.git`.
 - Do not use Git-backed tools or APIs.
 - Do not restore deleted content from Git.
+
+---
+
+### Code Quality
+
+- After each completed set of code changes, run `composer quality:fix` from the affected project's root before the final response.
+- Fix all the issues.
+- If the script is missing or the command cannot run, report that explicitly.
 
 ---
 

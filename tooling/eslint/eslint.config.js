@@ -1,6 +1,7 @@
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import inertiaPlusRules from './rules/inertia-plus.js';
 
 const requireCommentBeforeComponent = {
   meta: {
@@ -1095,8 +1096,583 @@ const scriptRegions = {
   },
 };
 
+const noHardcodedInertiaUrls = {
+  meta: {
+    type: 'suggestion',
+    docs: {
+      description: 'disallow hardcoded URLs in Inertia requests, Link hrefs, and anchor hrefs',
+    },
+    schema: [],
+    messages: {
+      request: 'Use a routing helper instead of a hardcoded URL in this Inertia request.',
+      href: 'Use a routing helper instead of a hardcoded href on <{{ component }}>.',
+    },
+  },
+
+  create(context) {
+    const sourceCode = context.sourceCode;
+    const linkNames = new Set(['Link', 'a']);
+    const inertiaPackages = new Set(['@inertiajs/vue3', '@inertiajs/core', '@inertiajs/react', '@inertiajs/svelte']);
+    const requestMethods = new Set([
+      'get', 'post', 'put', 'patch', 'delete', 'head', 'options',
+      'visit', 'submit', 'prefetch', 'push', 'replace',
+    ]);
+    const propertyName = (node) => !node.computed && node.property.type === 'Identifier'
+      ? node.property.name
+      : node.property.type === 'Literal' ? node.property.value : undefined;
+    const findVariable = (node) => {
+      let scope = sourceCode.getScope(node);
+
+      while (scope) {
+        const variable = scope.set.get(node.name);
+
+        if (variable) {
+          return variable;
+        }
+
+        scope = scope.upper;
+      }
+
+      return undefined;
+    };
+    const imported = (expression) => {
+      const node = unwrapScriptExpression(expression);
+
+      if (node?.type === 'Identifier') {
+        const definition = findVariable(node)?.defs.find((entry) => entry.type === 'ImportBinding');
+
+        if (definition) {
+          return {
+            source: definition.parent.source.value,
+            name: definition.node.type === 'ImportNamespaceSpecifier'
+              ? '*'
+              : definition.node.imported?.name ?? definition.node.imported?.value ?? 'default',
+          };
+        }
+      }
+
+      if (node?.type === 'MemberExpression') {
+        const namespace = imported(node.object);
+
+        if (namespace?.name === '*') {
+          return { source: namespace.source, name: propertyName(node) };
+        }
+      }
+
+      return undefined;
+    };
+    const isFormFactory = (expression) => {
+      const binding = imported(expression);
+
+      return binding && ((binding.name === 'useForm' && inertiaPackages.has(binding.source))
+        || (binding.name === 'useInertiaPlusForm' && binding.source === 'escore-packages/inertia-plus'));
+    };
+    const isFormMethodThis = (node) => {
+      let parent = node.parent;
+
+      while (parent) {
+        // Arrow callbacks retain the surrounding method's this; ordinary functions do not.
+        if (['FunctionExpression', 'FunctionDeclaration'].includes(parent.type)) {
+          const property = parent.parent;
+          const definition = property?.type === 'Property' ? property.parent : undefined;
+          const call = definition?.parent;
+
+          return definition?.type === 'ObjectExpression' && call?.type === 'CallExpression'
+            && call.arguments.includes(definition) && isFormFactory(call.callee);
+        }
+
+        parent = parent.parent;
+      }
+
+      return false;
+    };
+    const isInertiaReceiver = (expression, seen = new Set()) => {
+      const node = unwrapScriptExpression(expression);
+
+      if (!node) {
+        return false;
+      }
+
+      const binding = imported(node);
+
+      if (binding?.name === 'router' && inertiaPackages.has(binding.source)) {
+        return true;
+      }
+
+      if (node.type === 'ThisExpression') {
+        return isFormMethodThis(node);
+      }
+
+      if (node.type === 'MemberExpression' && node.object.type === 'ThisExpression'
+        && propertyName(node) === '$inertia') {
+        return true;
+      }
+
+      if (node.type === 'CallExpression') {
+        return isFormFactory(node.callee);
+      }
+
+      if (node.type === 'Identifier') {
+        const variable = findVariable(node);
+
+        if (node.name === '$inertia' && !variable?.defs.length) {
+          return true;
+        }
+
+        if (variable && !seen.has(variable)) {
+          seen.add(variable);
+          const definition = variable.defs.find((entry) => entry.type === 'Variable'
+            && entry.parent.kind === 'const');
+
+          return definition ? isInertiaReceiver(definition.node.init, seen) : false;
+        }
+      }
+
+      return false;
+    };
+    const hasHardcodedUrl = (expression) => {
+      const node = unwrapScriptExpression(expression);
+
+      if (!node) {
+        return false;
+      }
+
+      if (node.type === 'Literal') {
+        return typeof node.value === 'string';
+      }
+
+      if (node.type === 'TemplateLiteral') {
+        return node.quasis.some((part) => part.value.raw.length > 0)
+          || node.expressions.some(hasHardcodedUrl);
+      }
+
+      if (node.type === 'BinaryExpression' && node.operator === '+') {
+        return hasHardcodedUrl(node.left) || hasHardcodedUrl(node.right);
+      }
+
+      if (node.type === 'ConditionalExpression') {
+        return hasHardcodedUrl(node.consequent) || hasHardcodedUrl(node.alternate);
+      }
+
+      if (node.type === 'LogicalExpression') {
+        return hasHardcodedUrl(node.left) || hasHardcodedUrl(node.right);
+      }
+
+      if (node.type === 'ObjectExpression') {
+        return node.properties.some((property) => property.type === 'Property'
+          && ((!property.computed && property.key.name === 'url') || property.key.value === 'url')
+          && hasHardcodedUrl(property.value));
+      }
+
+      return false;
+    };
+    const scriptVisitor = {
+      ImportDeclaration(node) {
+        if (inertiaPackages.has(node.source.value)) {
+          for (const specifier of node.specifiers) {
+            if (specifier.type === 'ImportSpecifier' && specifier.imported.name === 'Link') {
+              linkNames.add(specifier.local.name);
+            }
+          }
+        }
+      },
+      CallExpression(node) {
+        const callee = unwrapScriptExpression(node.callee);
+
+        if (callee?.type !== 'MemberExpression' || !requestMethods.has(propertyName(callee))
+          || !isInertiaReceiver(callee.object)) {
+          return;
+        }
+
+        // submit(method, url, options) and submit({ method, url }, options).
+        const first = unwrapScriptExpression(node.arguments[0]);
+        const url = propertyName(callee) === 'submit' && first?.type !== 'ObjectExpression'
+          ? node.arguments[1]
+          : node.arguments[0];
+
+        if (hasHardcodedUrl(url)) {
+          context.report({ node: url, messageId: 'request' });
+        }
+      },
+    };
+    const templateVisitor = {
+      VAttribute(node) {
+        const component = node.parent.parent.rawName;
+
+        if (!linkNames.has(component)) {
+          return;
+        }
+
+        const isStaticHref = !node.directive && node.key.name === 'href' && node.value;
+        const argument = node.directive ? node.key.argument : undefined;
+        const isBoundHref = node.directive && node.key.name.name === 'bind'
+          && ((argument?.type === 'VIdentifier' && argument.name === 'href')
+            || (argument?.type === 'VExpressionContainer' && argument.expression?.value === 'href'));
+
+        if (isStaticHref || (isBoundHref && hasHardcodedUrl(node.value?.expression))) {
+          context.report({ node, messageId: 'href', data: { component } });
+        }
+      },
+    };
+
+    return sourceCode.parserServices.defineTemplateBodyVisitor
+      ? sourceCode.parserServices.defineTemplateBodyVisitor(templateVisitor, scriptVisitor)
+      : scriptVisitor;
+  },
+};
+
+const fieldLabelInputAssociation = {
+  meta: {
+    type: 'suggestion',
+    docs: {
+      description: 'require FieldLabel for and FieldContent input id attributes with matching values',
+    },
+    schema: [],
+    messages: {
+      missingFor: '<FieldLabel> requires an explicit, nonempty for or :for attribute.',
+      missingDataInvalid: '<Field> requires an explicit :data-invalid binding.',
+      missingErrors: '<FieldError> requires an explicit :errors binding.',
+      missingId: 'An input inside <FieldContent> requires an explicit, nonempty id or :id attribute.',
+      missingAriaInvalid: 'An input inside <FieldContent> requires an explicit :aria-invalid binding.',
+      mismatch: 'FieldLabel for and input id must match within this Field. Use the same expression for dynamic bindings.',
+    },
+  },
+
+  create(context) {
+    const sourceCode = context.sourceCode;
+    const parserServices = sourceCode.parserServices;
+    const tokenStore = parserServices.getTemplateBodyTokenStore?.();
+
+    if (!parserServices.defineTemplateBodyVisitor || !tokenStore) {
+      return {};
+    }
+
+    const isField = (node) => node.type === 'VElement' && ['Field', 'field'].includes(node.rawName);
+    const isLabel = (node) => ['FieldLabel', 'field-label'].includes(node.rawName);
+    const isContent = (node) => ['FieldContent', 'field-content'].includes(node.rawName);
+    const isInput = (node) => ['Input', 'input'].includes(node.rawName);
+    const insideContent = (node) => {
+      let parent = node.parent;
+
+      while (parent?.type === 'VElement') {
+        // A nested Field owns its own controls.
+        if (isField(parent)) {
+          return false;
+        }
+
+        if (isContent(parent)) {
+          return true;
+        }
+
+        parent = parent.parent;
+      }
+
+      return false;
+    };
+    const attributeValue = (node, name) => {
+      for (const attribute of node.startTag.attributes) {
+        if (!attribute.directive && attribute.key.name === name) {
+          const value = attribute.value?.value;
+
+          return value?.trim() ? { attribute, key: `literal:${value}` } : undefined;
+        }
+
+        if (!attribute.directive || attribute.key.name.name !== 'bind'
+          || attribute.key.argument?.type !== 'VIdentifier' || attribute.key.argument.name !== name) {
+          continue;
+        }
+
+        // Vue's :id / :for shorthand binds the identifier of the same name.
+        if (!attribute.value) {
+          return { attribute, key: `expression:${JSON.stringify([['Identifier', name]])}` };
+        }
+
+        const expression = unwrapScriptExpression(attribute.value.expression);
+
+        if (!expression) {
+          return undefined;
+        }
+
+        if (expression.type === 'Literal' && ['string', 'number'].includes(typeof expression.value)) {
+          const value = String(expression.value);
+
+          return value.trim() ? { attribute, key: `literal:${value}` } : undefined;
+        }
+
+        if (expression.type === 'Literal' && expression.value == null) {
+          return undefined;
+        }
+
+        if (expression.type === 'TemplateLiteral' && expression.expressions.length === 0) {
+          const value = expression.quasis[0].value.cooked;
+
+          return value?.trim() ? { attribute, key: `literal:${value}` } : undefined;
+        }
+
+        // Compare tokens, ignoring formatting while preserving spaces inside strings.
+        const tokens = tokenStore.getTokens(expression).map((token) => [token.type, token.value]);
+
+        return { attribute, key: `expression:${JSON.stringify(tokens)}` };
+      }
+
+      return undefined;
+    };
+
+    return parserServices.defineTemplateBodyVisitor({
+      VElement(node) {
+        if (isLabel(node) && !attributeValue(node, 'for')) {
+          context.report({ loc: node.startTag.loc, messageId: 'missingFor' });
+        }
+
+        if (['FieldError', 'field-error'].includes(node.rawName)) {
+          const hasErrors = node.startTag.attributes.some((attribute) => attribute.directive
+            && attribute.key.name.name === 'bind'
+            && attribute.key.argument?.type === 'VIdentifier'
+            && attribute.key.argument.name === 'errors');
+
+          if (!hasErrors) {
+            context.report({ loc: node.startTag.loc, messageId: 'missingErrors' });
+          }
+        }
+
+        if (isInput(node) && insideContent(node)) {
+          if (!attributeValue(node, 'id')) {
+            context.report({ loc: node.startTag.loc, messageId: 'missingId' });
+          }
+
+          const hasAriaInvalid = node.startTag.attributes.some((attribute) => attribute.directive
+            && attribute.key.name.name === 'bind'
+            && attribute.key.argument?.type === 'VIdentifier'
+            && attribute.key.argument.name === 'aria-invalid');
+
+          if (!hasAriaInvalid) {
+            context.report({ loc: node.startTag.loc, messageId: 'missingAriaInvalid' });
+          }
+        }
+
+        if (!isField(node)) {
+          return;
+        }
+
+        const hasDataInvalid = node.startTag.attributes.some((attribute) => attribute.directive
+          && attribute.key.name.name === 'bind'
+          && attribute.key.argument?.type === 'VIdentifier'
+          && attribute.key.argument.name === 'data-invalid');
+
+        if (!hasDataInvalid) {
+          context.report({ loc: node.startTag.loc, messageId: 'missingDataInvalid' });
+        }
+
+        const labels = [];
+        const inputs = [];
+        const collect = (element) => {
+          for (const child of element.children) {
+            if (child.type !== 'VElement' || isField(child)) {
+              continue;
+            }
+
+            if (isLabel(child)) {
+              labels.push(child);
+            }
+
+            if (isInput(child) && insideContent(child)) {
+              inputs.push(child);
+            }
+
+            collect(child);
+          }
+        };
+
+        collect(node);
+
+        // Multiple controls require explicit pairing; do not guess associations.
+        if (labels.length !== 1 || inputs.length !== 1) {
+          return;
+        }
+
+        const labelFor = attributeValue(labels[0], 'for');
+        const inputId = attributeValue(inputs[0], 'id');
+
+        if (labelFor && inputId && labelFor.key !== inputId.key) {
+          // Changing an ID may break other labels, selectors, or accessibility references.
+          context.report({ node: labelFor.attribute, messageId: 'mismatch' });
+        }
+      },
+    });
+  },
+};
+
+const createRequireTypeRule = (components) => ({
+  meta: {
+    type: 'suggestion',
+    docs: {
+      description: `require an explicit type on ${components.join(' and ')} elements`,
+    },
+    schema: [],
+    messages: {
+      missing: '<{{ component }}> requires an explicit type or :type attribute.',
+    },
+  },
+
+  create(context) {
+    const parserServices = context.sourceCode.parserServices;
+
+    if (!parserServices.defineTemplateBodyVisitor) {
+      return {};
+    }
+
+    return parserServices.defineTemplateBodyVisitor({
+      VElement(node) {
+        if (!components.includes(node.rawName)) {
+          return;
+        }
+
+        const hasType = node.startTag.attributes.some((attribute) => {
+          if (!attribute.directive) {
+            return attribute.key.name === 'type' && Boolean(attribute.value?.value.trim());
+          }
+
+          const expression = unwrapScriptExpression(attribute.value?.expression);
+          const isEmptyLiteral = expression?.type === 'Literal'
+            && (expression.value == null || (typeof expression.value === 'string' && !expression.value.trim()));
+          const isEmptyTemplate = expression?.type === 'TemplateLiteral'
+            && expression.expressions.length === 0 && !expression.quasis[0].value.cooked?.trim();
+
+          return attribute.key.name.name === 'bind'
+            && attribute.key.argument?.type === 'VIdentifier'
+            && attribute.key.argument.name === 'type'
+            && (!attribute.value || (Boolean(expression) && !isEmptyLiteral && !isEmptyTemplate));
+        });
+
+        if (!hasType) {
+          // The intended type affects behavior; never guess it.
+          context.report({
+            loc: node.startTag.loc,
+            messageId: 'missing',
+            data: { component: node.rawName },
+          });
+        }
+      },
+    });
+  },
+});
+
+const requireButtonType = createRequireTypeRule(['Button', 'button']);
+const requireInputType = createRequireTypeRule(['Input', 'input']);
+
+const contextMenuItemIcon = {
+  meta: {
+    type: 'suggestion',
+    docs: {
+      description: 'require a leading imported icon in every ContextMenuItem',
+    },
+    schema: [{
+      type: 'object',
+      properties: {
+        sources: {
+          type: 'array',
+          items: { type: 'string', minLength: 1 },
+          minItems: 1,
+          uniqueItems: true,
+        },
+      },
+      additionalProperties: false,
+    }],
+    messages: {
+      missing: '<ContextMenuItem> must start with a direct-child icon imported from a configured icon package.',
+      ariaHidden: 'The ContextMenuItem icon requires aria-hidden="true".',
+    },
+  },
+
+  create(context) {
+    const parserServices = context.sourceCode.parserServices;
+
+    if (!parserServices.defineTemplateBodyVisitor) {
+      return {};
+    }
+
+    const sources = new Set(context.options[0]?.sources ?? ['@lucide/vue', 'lucide-vue-next']);
+    const icons = new Set();
+    const namespaces = new Set();
+    const kebabCase = (name) => name
+      .replace(/([A-Z])([A-Z][a-z])/g, '$1-$2')
+      .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
+      .toLowerCase();
+    const isImportedIcon = (node) => {
+      if (node?.type !== 'VElement') {
+        return false;
+      }
+
+      if (icons.has(node.rawName)) {
+        return true;
+      }
+
+      const parts = node.rawName.split('.');
+
+      return parts.length === 2 && namespaces.has(parts[0]);
+    };
+
+    return parserServices.defineTemplateBodyVisitor({
+      VElement(node) {
+        if (!['ContextMenuItem', 'context-menu-item'].includes(node.rawName)) {
+          return;
+        }
+
+        // Ignore whitespace/comments, but do not permit visible text before the icon.
+        const icon = node.children.find((child) => child.type !== 'VHTMLComment'
+          && !(child.type === 'VText' && !child.value.trim()));
+
+        if (!isImportedIcon(icon)) {
+          context.report({ loc: node.startTag.loc, messageId: 'missing' });
+          return;
+        }
+
+        const isHidden = icon.startTag.attributes.some((attribute) => {
+          if (!attribute.directive) {
+            return attribute.key.name === 'aria-hidden' && attribute.value?.value === 'true';
+          }
+
+          if (attribute.key.name.name !== 'bind' || attribute.key.argument?.type !== 'VIdentifier'
+            || attribute.key.argument.name !== 'aria-hidden') {
+            return false;
+          }
+
+          const expression = unwrapScriptExpression(attribute.value?.expression);
+
+          return expression?.type === 'Literal' && [true, 'true'].includes(expression.value);
+        });
+
+        if (!isHidden) {
+          context.report({ loc: icon.startTag.loc, messageId: 'ariaHidden' });
+        }
+      },
+    }, {
+      ImportDeclaration(node) {
+        if (!sources.has(node.source.value) || node.importKind === 'type') {
+          return;
+        }
+
+        for (const specifier of node.specifiers) {
+          if (specifier.importKind === 'type') {
+            continue;
+          }
+
+          if (specifier.type === 'ImportNamespaceSpecifier') {
+            namespaces.add(specifier.local.name);
+          } else {
+            // Track the local binding, including renamed imports such as Eye as ViewIcon.
+            icons.add(specifier.local.name);
+            icons.add(kebabCase(specifier.local.name));
+          }
+        }
+      },
+    });
+  },
+};
+
 const workspace = {
   rules: {
+    ...inertiaPlusRules,
     'require-comment-before-component': requireCommentBeforeComponent,
     'table-cell-comment-consistency': tableCellCommentConsistency,
     'template-comment-padding': templateCommentPadding,
@@ -1106,6 +1682,11 @@ const workspace = {
     'script-declaration-order': scriptDeclarationOrder,
     'define-props-assignment': definePropsAssignment,
     'script-regions': scriptRegions,
+    'no-hardcoded-inertia-urls': noHardcodedInertiaUrls,
+    'field-label-input-association': fieldLabelInputAssociation,
+    'require-button-type': requireButtonType,
+    'require-input-type': requireInputType,
+    'context-menu-item-icon': contextMenuItemIcon,
   },
 };
 
@@ -1173,7 +1754,8 @@ export default defineConfigWithVueTs(
     vueTsConfigs.recommended,
     {
         plugins: {
-            'import-x': importPlugin
+            'import-x': importPlugin,
+            workspace
         },
         settings: {
             'import-x/resolver-next': [
@@ -1185,6 +1767,18 @@ export default defineConfigWithVueTs(
             ]
         },
         rules: {
+            'workspace/no-hardcoded-inertia-urls': 'error',
+            'workspace/inertia-plus-form-options': 'error',
+            'workspace/inertia-plus-const': 'error',
+            'workspace/inertia-plus-form-name': 'error',
+            'workspace/inertia-plus-single-line-opening': 'error',
+            'workspace/inertia-plus-form-definition': 'error',
+            'workspace/inertia-plus-form-submit': 'error',
+            'workspace/inertia-plus-form-methods': 'error',
+            'workspace/inertia-plus-form-method-context': 'error',
+            'workspace/inertia-plus-before-submit-call': 'error',
+            'workspace/inertia-plus-submit-processing-guard': 'error',
+            'workspace/inertia-plus-surface-openable': 'error',
             'vue/multi-word-component-names': 'off',
             '@typescript-eslint/no-explicit-any': 'off',
             '@typescript-eslint/no-unused-expressions': ['error', { allowTernary: true }],
@@ -1282,7 +1876,11 @@ export default defineConfigWithVueTs(
             'workspace/dialogs-at-template-end': 'error',
             'workspace/script-declaration-order': 'error',
             'workspace/define-props-assignment': 'error',
-            'workspace/script-regions': 'warn'
+            'workspace/script-regions': 'warn',
+            'workspace/field-label-input-association': 'error',
+            'workspace/require-button-type': 'error',
+            'workspace/require-input-type': 'error',
+            'workspace/context-menu-item-icon': ['error', { sources: ['@lucide/vue', 'lucide-vue-next'] }]
         }
     },
     {
