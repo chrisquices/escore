@@ -3,6 +3,10 @@ includes:
   - %currentWorkingDirectory%/vendor/nesbot/carbon/extension.neon
 
 parameters:
+  parallel:
+    # Run in the main process; even one worker requires a local socket.
+    maximumNumberOfProcesses: 0
+
   paths:
     - %currentWorkingDirectory%/app/
     - %currentWorkingDirectory%/bootstrap/app.php

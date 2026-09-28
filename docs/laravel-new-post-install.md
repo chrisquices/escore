@@ -62,10 +62,10 @@ Point the application's Composer scripts at the shared configurations:
 {
   "scripts": {
     "lint": [
-      "pint --config=../../tooling/pint/pint.json --parallel"
+      "pint --config=../../tooling/pint/pint.json"
     ],
     "lint:check": [
-      "pint --config=../../tooling/pint/pint.json --parallel --test"
+      "pint --config=../../tooling/pint/pint.json --test"
     ],
     "architecture:check": [
       "deptrac analyse --config-file=../../tooling/deptrac/deptrac.php"

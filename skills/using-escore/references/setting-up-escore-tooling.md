@@ -19,8 +19,8 @@ Requires these packages installed in the project:
 Update the `scripts` section in the project's `composer.json`:
 
 ```json
-"lint": "pint --parallel --config=../escore/tooling/pint/pint.json",
-"lint:check": "pint --parallel --test --config=../escore/tooling/pint/pint.json"
+"lint": "pint --config=../escore/tooling/pint/pint.json",
+"lint:check": "pint --test --config=../escore/tooling/pint/pint.json"
 ```
 
 To check violations:

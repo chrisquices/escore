@@ -13,6 +13,7 @@ if ($projectDirectory === false) {
 }
 
 return RectorConfig::configure()
+    ->withoutParallel()
     ->withPaths([
         $projectDirectory.'/app',
         $projectDirectory.'/bootstrap/app.php',
