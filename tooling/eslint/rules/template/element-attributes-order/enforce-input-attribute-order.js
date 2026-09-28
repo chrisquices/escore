@@ -28,5 +28,5 @@ export default enforceElementAttributeOrder({
     '@change',
     '@update:model-value',
   ],
-  message: 'Place {{expected}} before {{actual}} on <{{component}}> to follow the input attribute order.',
+  message: 'Move {{expected}} before {{actual}} on <{{component}}. Order existing attributes as: {{order}}. Preserve values and bindings; this rule does not require adding absent attributes.',
 });

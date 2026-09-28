@@ -9,6 +9,7 @@ const createElementLayoutRule = ({ components, exclude = [], excludeTextOnly = [
     messages: {
       inline: 'Keep text-only <{{ component }}> on one line.',
       multiline: 'Put nested <{{ component }}> content on separate lines between its tags.',
+      manualMultiline: 'Reformat nested <{{ component }}> content onto separate lines while preserving its rendered text and spacing. No autofix is offered because these line breaks could add or remove visible spaces around inline content.',
     },
   },
 
@@ -68,10 +69,16 @@ const createElementLayoutRule = ({ components, exclude = [], excludeTextOnly = [
         appendText(offset, end);
 
         const edits = [];
+        let changesInlineSpacing = node.children.some((child) => child.type === 'VExpressionContainer'
+          || (child.type === 'VText' && child.value.trim()));
         const separate = (from, to, nextIndent) => {
           const gap = sourceCode.text.slice(from, to);
           // Never replace source code or copy a preceding tag as indentation.
           if (!/^[\t \r\n]*$/.test(gap)) return;
+
+          // Vue removes newline-only gaps between child elements, but preserves
+          // a single-line space. Do not turn an intentional separator into nothing.
+          if (from > start && to < end && gap.length && !/[\r\n]/.test(gap)) changesInlineSpacing = true;
 
           const replacement = /[\r\n]/.test(gap)
             ? gap.replace(/[\t ]*$/, nextIndent)
@@ -89,9 +96,9 @@ const createElementLayoutRule = ({ components, exclude = [], excludeTextOnly = [
 
         context.report({
           loc: node.loc,
-          messageId: 'multiline',
+          messageId: changesInlineSpacing ? 'manualMultiline' : 'multiline',
           data: { component: node.rawName },
-          fix: (fixer) => edits.map((edit) => fixer.replaceTextRange(edit.range, edit.text)),
+          fix: changesInlineSpacing ? undefined : (fixer) => edits.map((edit) => fixer.replaceTextRange(edit.range, edit.text)),
         });
       },
     });

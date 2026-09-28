@@ -4,7 +4,7 @@ export default ({ elements, message = 'Native <{{ element }}> is not allowed.' }
     type: 'suggestion',
     docs: { description: 'forbid native ' + elements.join(' and ') + ' elements in Vue templates' },
     schema: [],
-    messages: { forbidden: message },
+    messages: { forbidden: typeof message === 'function' ? '{{ instruction }}' : message },
   },
 
   create(context) {
@@ -19,7 +19,10 @@ export default ({ elements, message = 'Native <{{ element }}> is not allowed.' }
         context.report({
           loc: node.startTag.loc,
           messageId: 'forbidden',
-          data: { element: node.rawName },
+          data: {
+            element: node.rawName,
+            instruction: typeof message === 'function' ? message(node) : undefined,
+          },
         });
       },
     });

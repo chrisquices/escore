@@ -2,6 +2,27 @@
 // Pass elements and their options from a rule wrapper, or omit them to use
 // the archived rule's existing ESLint components configuration.
 
+// Comment bodies do not decode entities. Encode delimiters consistently in both
+// inferred expectations and fixes so authored text cannot terminate a comment.
+export const safeTemplateCommentText = (text) => text.replace(/--|[<>]/g, (part) => (
+  part === '--' ? '&#45;&#45;' : part === '<' ? '&lt;' : '&gt;'
+));
+
+export const getStandaloneTemplateComment = (sourceCode, tokenStore, node, { allowEmpty = false } = {}) => {
+  let comment = tokenStore.getTokenBefore(node, { includeComments: true });
+  while (comment?.type === 'HTMLWhitespace') {
+    comment = tokenStore.getTokenBefore(comment, { includeComments: true });
+  }
+
+  if (comment?.type !== 'HTMLComment'
+    || (!allowEmpty && !comment.value.trim())
+    || comment.loc.end.line !== node.loc.start.line - 1
+    || sourceCode.lines[comment.loc.start.line - 1].slice(0, comment.loc.start.column).trim()
+    || sourceCode.lines[comment.loc.end.line - 1].slice(comment.loc.end.column).trim()) return undefined;
+
+  return comment;
+};
+
 export const insertStandaloneTemplateComment = (fixer, sourceCode, node, text) => {
   const linePrefix = sourceCode.lines[node.loc.start.line - 1].slice(0, node.loc.start.column);
   const indentation = linePrefix.match(/^[\t ]*/)[0];
@@ -10,14 +31,29 @@ export const insertStandaloneTemplateComment = (fixer, sourceCode, node, text) =
   // Inline markup must stay in place; only leading whitespace can be reused.
   const beforeComment = linePrefix.trim() ? `${newline}${indentation}` : '';
 
-  return fixer.insertTextBefore(node, `${beforeComment}<!-- ${text} -->${newline}${indentation}`);
+  return fixer.insertTextBefore(node, `${beforeComment}<!-- ${safeTemplateCommentText(text)} -->${newline}${indentation}`);
+};
+
+const describeRule = (elements, options) => {
+  if (!elements) return 'Require nonempty standalone comments immediately above the configured Vue components.';
+
+  const clauses = [`Require a nonempty standalone HTML comment immediately above ${elements.map((name) => `<${name}>`).join(' or ')}.`];
+  if (options.equals) clauses.push(`Use exactly "${options.equals}".`);
+  if (options.matchesLiteralText) clauses.push('Match its literal text when known.');
+  if (options.matchesDescendantText) clauses.push(`Match literal text from ${[options.matchesDescendantText].flat().map((name) => `<${name}>`).join(', falling back to ')}.`);
+  if (options.sourceComponent) clauses.push(`Infer text from a unique <${options.sourceComponent}> through native HTML descendants only.`);
+  if (options.sourceTextTransform === 'title-case') clauses.push('Capitalize each word in inferred text.');
+  if (options.endsWith || options.suffix) clauses.push(`End the comment with "${options.endsWith ?? options.suffix}".`);
+  if (options.within) clauses.push(`Apply only inside <${options.within}>.`);
+  if (options.notWithin) clauses.push(`Exempt descendants of ${[options.notWithin].flat().map((name) => `<${name}>`).join(', ')}.`);
+  return clauses.join(' ');
 };
 
 export default ({ elements, ...options } = {}) => ({
   meta: {
     type: 'suggestion',
     docs: {
-      description: 'require a standalone comment directly before configured Vue components',
+      description: describeRule(elements, options),
     },
     fixable: 'code',
     schema: elements ? [] : [
@@ -107,12 +143,12 @@ export default ({ elements, ...options } = {}) => ({
       },
     ],
     messages: {
-      expected: 'Expected a standalone HTML comment directly above <{{ component }}>.',
-      expectedExact: 'The comment above <{{ component }}> must be exactly "{{ text }}".',
+      expected: 'Add a nonempty HTML comment on its own line immediately above <{{ component }}>, with no blank line between them. {{ requirement }}',
+      expectedExact: 'Replace the comment above <{{ component }}> with <!-- {{ text }} -->. Keep it on its own line immediately above the component.',
       expectedSuffix: 'The comment above <{{ component }}> must end with "{{ suffix }}".',
-      expectedDescendantText: 'The comment above <{{ component }}> must match literal text inside <{{ descendant }}>.',
-      expectedSourceText: 'The comment above <{{ component }}> must be "{{ text }}" based on <{{ source }}>.',
-      expectedText: 'The comment above <{{ component }}> must match literal text inside it.',
+      expectedDescendantText: 'The comment above <{{ component }}> must match text from <{{ descendant }}>. Expected {{ expected }}; found {{ actual }}. Keep the comment on its own line immediately above the component.',
+      expectedSourceText: 'Replace the comment above <{{ component }}> with <!-- {{ text }} -->, derived from <{{ source }}>. Keep it on its own line immediately above the component.',
+      expectedText: 'The comment above <{{ component }}> must match its literal text. Expected {{ expected }}; found {{ actual }}. Keep the comment on its own line immediately above the component.',
     },
   },
 
@@ -312,16 +348,16 @@ export default ({ elements, ...options } = {}) => ({
             ...getDescendantLiteralTexts(node, componentName),
           }))
           .find(({ exists }) => exists);
-        const literalTexts = descendantTextComponents.length
+        const literalTexts = (descendantTextComponents.length
           ? descendantTextMatch?.literalTexts ?? []
           : componentOptions.matchesLiteralText
             ? getLiteralTexts(node)
-            : [];
+            : []).map(safeTemplateCommentText);
         const rawSourceText = componentOptions.sourceComponent && componentOptions.sourceTraversal === 'native-only'
           ? getSourceText(node, componentOptions.sourceComponent)
           : undefined;
         const sourceText = rawSourceText
-          ? transformSourceText(rawSourceText, componentOptions.sourceTextTransform)
+          ? safeTemplateCommentText(transformSourceText(rawSourceText, componentOptions.sourceTextTransform))
           : undefined;
         const inferredText = sourceText
           ? componentOptions.suffix && !sourceText.endsWith(componentOptions.suffix)
@@ -330,38 +366,35 @@ export default ({ elements, ...options } = {}) => ({
           : literalTexts.length === 1
             ? literalTexts[0]
             : undefined;
-        const autofixText = componentOptions.equals ?? inferredText;
+        const exactText = componentOptions.equals && safeTemplateCommentText(componentOptions.equals);
+        const autofixText = exactText ?? inferredText;
         const canCreateComment = ['missing-only', 'replace'].includes(componentOptions.autofix);
         const canReplaceComment = componentOptions.autofix === 'replace';
 
-        let previousToken = tokenStore.getTokenBefore(node, {
-          includeComments: true,
-        });
-
-        while (previousToken?.type === 'HTMLWhitespace') {
-          previousToken = tokenStore.getTokenBefore(previousToken, {
-            includeComments: true,
-          });
-        }
-
-        const startsOnOwnLine =
-          previousToken?.type === 'HTMLComment' &&
-          !sourceCode.lines[previousToken.loc.start.line - 1].slice(0, previousToken.loc.start.column).trim();
-        const endsOnOwnLine =
-          previousToken?.type === 'HTMLComment' &&
-          !sourceCode.lines[previousToken.loc.end.line - 1].slice(previousToken.loc.end.column).trim();
-        const isDirectlyAbove = previousToken?.loc.end.line === node.loc.start.line - 1;
+        const previousToken = getStandaloneTemplateComment(sourceCode, tokenStore, node, { allowEmpty: true });
+        const suffix = componentOptions.endsWith ?? componentOptions.suffix;
+        const expectedTexts = literalTexts.map((text) => JSON.stringify(text)).join(' or ');
+        const requirement = autofixText
+          ? `Use exactly <!-- ${autofixText} -->.`
+          : literalTexts.length
+            ? `Use one of these comment texts: ${expectedTexts}.`
+            : suffix
+              ? `Write a descriptive comment whose text ends with "${suffix}".`
+              : 'Describe the component\'s purpose; an empty comment does not satisfy this rule.';
 
         // A valid comment must occupy its own line immediately above the component.
-        if (!startsOnOwnLine || !endsOnOwnLine || !isDirectlyAbove) {
+        if (!previousToken?.value.trim()) {
           context.report({
             loc: node.startTag.loc,
             messageId: 'expected',
             data: {
               component: node.rawName,
+              requirement,
             },
             fix: canCreateComment && autofixText
-              ? (fixer) => insertStandaloneTemplateComment(fixer, sourceCode, node, autofixText)
+              ? (fixer) => previousToken
+                ? fixer.replaceText(previousToken, `<!-- ${autofixText} -->`)
+                : insertStandaloneTemplateComment(fixer, sourceCode, node, autofixText)
               : undefined,
           });
 
@@ -388,16 +421,16 @@ export default ({ elements, ...options } = {}) => ({
           return;
         }
 
-        if (componentOptions.equals && commentText !== componentOptions.equals) {
+        if (exactText && commentText !== exactText) {
           context.report({
             loc: previousToken.loc,
             messageId: 'expectedExact',
             data: {
               component: node.rawName,
-              text: componentOptions.equals,
+              text: exactText,
             },
             fix: canReplaceComment
-              ? (fixer) => fixer.replaceText(previousToken, `<!-- ${componentOptions.equals} -->`)
+              ? (fixer) => fixer.replaceText(previousToken, `<!-- ${exactText} -->`)
               : undefined,
           });
 
@@ -434,6 +467,8 @@ export default ({ elements, ...options } = {}) => ({
               data: {
                 component: node.rawName,
                 descendant: descendantTextMatch?.componentName ?? descendantTextComponents[0],
+                expected: expectedTexts,
+                actual: JSON.stringify(commentText),
               },
               fix: canReplaceComment && inferredText
                 ? (fixer) => fixer.replaceText(previousToken, `<!-- ${inferredText} -->`)

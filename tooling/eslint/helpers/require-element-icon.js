@@ -17,7 +17,7 @@ export default ({ elements }) => ({
       additionalProperties: false,
     }],
     messages: {
-      missing: '<' + elements[0] + '> must start with a direct-child icon imported from a configured icon package.',
+      missing: '<{{ component }}> must start with an icon imported from {{ sources }} as its first direct child, before any text. Choose an icon for this action or label, import it if needed, and place it directly inside the component without a wrapping element. Found {{ found }} instead.',
     },
   },
 
@@ -60,7 +60,15 @@ export default ({ elements }) => ({
           && !(child.type === 'VText' && !child.value.trim()));
 
         if (!isImportedIcon(icon)) {
-          context.report({ loc: node.startTag.loc, messageId: 'missing' });
+          context.report({
+            loc: node.startTag.loc,
+            messageId: 'missing',
+            data: {
+              component: node.rawName,
+              sources: [...sources].map((source) => `"${source}"`).join(' or '),
+              found: icon?.type === 'VElement' ? `<${icon.rawName}>` : icon ? 'text or an expression' : 'no child',
+            },
+          });
         }
       },
     }, {

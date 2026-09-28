@@ -34,9 +34,12 @@ export const reportElementOneLiner = (context, node, tokenStore) => {
         return node.children.length ? null : fixer.replaceText(node.startTag, opening);
       }
 
-      const content = node.children.map((child) => child.type === 'VText'
+      const joined = node.children.map((child) => child.type === 'VText'
         ? sourceCode.getText(child).replace(/[\t \r\n]+/g, ' ')
-        : sourceCode.getText(child)).join('').trim();
+        : sourceCode.getText(child)).join('');
+      // Keep intentional spaces at text boundaries. Removing them can join words
+      // when this element sits next to text or another inline element.
+      const content = joined.trim() ? joined : '';
 
       return [
         fixer.replaceText(node.startTag, opening),

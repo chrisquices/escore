@@ -100,6 +100,7 @@ export default ({
             expected: sourceCode.getText(sorted[firstMismatch].attribute.key),
             actual: sourceCode.getText(ranked[firstMismatch].attribute.key),
             component: node.rawName,
+            order: order.join(' → '),
           },
           fix(fixer) {
             const moved = ranked.flatMap((entry, index) => entry === sorted[index]

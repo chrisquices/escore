@@ -1,4 +1,4 @@
-import { insertStandaloneTemplateComment } from '../../../helpers/require-element-comment.js';
+import { getStandaloneTemplateComment, insertStandaloneTemplateComment, safeTemplateCommentText } from '../../../helpers/require-element-comment.js';
 
 export default {
   meta: {
@@ -9,7 +9,7 @@ export default {
     fixable: 'code',
     schema: [],
     messages: {
-      missing: 'Expected a standalone HTML comment directly above <TableCell>.',
+      missing: 'Add a nonempty HTML comment on its own line immediately above <TableCell>, with no blank line between them. {{ requirement }}',
       mismatch: 'The comment above <TableCell> must match the column {{ column }} header comment "{{ expected }}".',
     },
   },
@@ -25,23 +25,7 @@ export default {
     }
 
     // Column comments are valid only when they directly precede the component.
-    const getDirectComment = (node) => {
-      let previousToken = tokenStore.getTokenBefore(node, {
-        includeComments: true,
-      });
-
-      while (previousToken?.type === 'HTMLWhitespace') {
-        previousToken = tokenStore.getTokenBefore(previousToken, {
-          includeComments: true,
-        });
-      }
-
-      if (previousToken?.type !== 'HTMLComment' || previousToken.loc.end.line !== node.loc.start.line - 1) {
-        return undefined;
-      }
-
-      return previousToken;
-    };
+    const getDirectComment = (node) => getStandaloneTemplateComment(sourceCode, tokenStore, node);
     const findDescendants = (root, componentName) => {
       const matches = [];
       const visit = (element) => {
@@ -103,7 +87,7 @@ export default {
               const headerComments = headers.map(getDirectComment);
 
               if (headerComments.every(Boolean)) {
-                const expectedComments = headerComments.map((comment) => comment.value.trim());
+                const expectedComments = headerComments.map((comment) => safeTemplateCommentText(comment.value.trim()));
 
                 for (const tableBody of tableBodies) {
                   for (const row of findDescendants(tableBody, 'TableRow')) {
@@ -135,6 +119,11 @@ export default {
             context.report({
               loc: cell.startTag.loc,
               messageId: 'missing',
+              data: {
+                requirement: expectation
+                  ? `Use <!-- ${expectation.text} --> to match column ${expectation.column}'s header comment.`
+                  : 'Describe this cell\'s column or purpose; the header mapping cannot be inferred safely.',
+              },
               fix: expectation
                 ? (fixer) => insertStandaloneTemplateComment(fixer, sourceCode, cell, expectation.text)
                 : undefined,

@@ -4,12 +4,12 @@ export default {
   meta: {
     type: 'suggestion',
     docs: {
-      description: 'disallow hardcoded URLs in Inertia requests, Link hrefs, and anchor hrefs',
+      description: 'disallow hardcoded URLs in script and template Inertia requests, Link hrefs, and anchor hrefs',
     },
     schema: [],
     messages: {
-      request: 'Use a routing helper instead of a hardcoded URL in this Inertia request.',
-      href: 'Use a routing helper instead of a hardcoded href on <{{ component }}>.',
+      request: 'Replace this hardcoded Inertia URL with the project\'s routing helper. With Wayfinder, use the generated controller action\'s .url, such as KeyController.update(key.uid).url. Preserve the HTTP method and parameters; moving the literal into a variable is not the intended fix.',
+      href: 'Replace the hardcoded href on <{{ component }}> with a binding to the project\'s routing helper. With Wayfinder, use the generated controller action\'s .url. Preserve the destination and parameters; do not merely move the literal into a variable.',
     },
   },
 
@@ -25,6 +25,17 @@ export default {
       ? node.property.name
       : node.property.type === 'Literal' ? node.property.value : undefined;
     const findVariable = (node) => {
+      // Template expressions live outside the script AST's module scope.
+      // Their references distinguish script bindings from v-for/slot locals
+      // and variables declared inside inline callbacks.
+      for (let parent = node.parent; parent; parent = parent.parent) {
+        if (parent.type !== 'VExpressionContainer') continue;
+        const reference = parent.references?.find((entry) => entry.id === node);
+        if (!reference || reference.variable) return { defs: [{ type: 'TemplateVariable' }] };
+        const moduleScope = sourceCode.scopeManager.scopes.find((scope) => scope.type === 'module');
+        return (moduleScope ?? sourceCode.scopeManager.globalScope).set.get(node.name);
+      }
+
       let scope = sourceCode.getScope(node);
 
       while (scope) {
@@ -200,6 +211,7 @@ export default {
       },
     };
     const templateVisitor = {
+      CallExpression: scriptVisitor.CallExpression,
       VAttribute(node) {
         const component = node.parent.parent.rawName;
 

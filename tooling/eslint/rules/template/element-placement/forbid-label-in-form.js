@@ -5,7 +5,7 @@ export default {
     type: 'problem',
     docs: { description: 'forbid Label components inside native forms' },
     schema: [],
-    messages: { forbidden: 'Do not use <Label> inside <form>.' },
+    messages: { forbidden: 'Do not use <Label> inside <form>. Replace it with <FieldLabel> directly inside <Field>, preserving its text and for binding; import FieldLabel if needed.' },
   },
 
   create(context) {

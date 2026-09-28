@@ -327,7 +327,7 @@ const requireFormDefinition = {
     schema: [],
     messages: {
       definition: 'Define useInertiaPlusForm fields and methods in an inline object.',
-      unknown: 'Declare form members explicitly so only submit and optional beforeSubmit methods are present.',
+      unknown: 'Declare this form\'s data fields and methods explicitly in the inline object instead of using spreads or computed member names. Data fields are allowed; the only custom methods are submit() and optional beforeSubmit().',
     },
   },
 
@@ -395,7 +395,7 @@ const requireFormMethods = {
     docs: { description: 'restrict custom Inertia Plus form method names' },
     schema: [],
     messages: {
-      extra: 'Only submit() and optional beforeSubmit() are allowed as custom form methods; remove {{ name }} or move it outside the form.',
+      extra: 'The custom method {{ name }} is not allowed on useInertiaPlusForm. Keep data fields, submit(), and optional beforeSubmit(); place preparation in beforeSubmit() and request logic in submit(). Preserve the behavior when restructuring. Use useInertiaPlus for broader domain state that needs additional methods.',
     },
   },
 
@@ -472,7 +472,7 @@ const requireBeforeSubmitCall = {
     type: 'problem',
     docs: { description: 'require submit to invoke the optional beforeSubmit method' },
     schema: [],
-    messages: { call: 'Call this.beforeSubmit() inside submit() when beforeSubmit is defined.' },
+    messages: { call: 'Call this.beforeSubmit(...) directly from submit() after the processing guard and before the request. Pass the preparation arguments it needs; a call inside a nested callback does not satisfy this rule.' },
   },
 
   create(context) {

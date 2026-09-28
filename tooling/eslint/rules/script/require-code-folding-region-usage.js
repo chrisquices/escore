@@ -7,7 +7,7 @@ export default {
     docs: { description: 'require script code inside code-folding regions, except imports and const props' },
     schema: [],
     messages: {
-      outside: 'Place this code inside a named region. Only imports and const props = defineProps(...) may be outside regions.',
+      outside: 'Wrap this entire statement in a named region: // region --- Meaningful Name --- followed by the code and // endregion in the same script block. Pad only the banner\'s trailing dashes to 140 characters total, including indentation. Only imports and const props = defineProps(...) (including withDefaults) may remain outside regions.',
     },
   },
 

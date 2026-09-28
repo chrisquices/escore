@@ -2,11 +2,11 @@
 export default ({ elements, endGroup = elements }) => ({
   meta: {
     type: 'suggestion',
-    docs: { description: 'require configured elements at the root and end of the template' },
+    docs: { description: `Require ${elements.map((name) => `<${name}>`).join(' or ')} as direct children of the root template, in a final group containing only ${endGroup.map((name) => `<${name}>`).join(', ')}.` },
     schema: [],
     messages: {
-      nested: '<{{ component }}> must be a direct child of the root <template>.',
-      end: '<{{ component }}> must belong to the final group at the end of the root <template>. Move other content before this group.',
+      nested: 'Move <{{ component }}> to be a direct child of the root <template>, outside all wrapping elements. Preserve its bindings and any conditions or loop variables it currently depends on.',
+      end: 'Move <{{ component }}> into the final Dialog/AlertDialog group at the end of the root <template>. Move other content before this group; either dialog type may come first. Preserve each component\'s bindings and behavior.',
     },
   },
 

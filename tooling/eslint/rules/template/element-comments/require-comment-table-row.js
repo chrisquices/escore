@@ -1,3 +1,5 @@
+import { getStandaloneTemplateComment } from '../../../helpers/require-element-comment.js';
+
 // Require a comment above the second written row; a v-for counts as one row.
 export default {
   meta: {
@@ -36,16 +38,7 @@ export default {
         const secondRow = rows[1];
         if (!secondRow) return;
 
-        let comment = tokenStore.getTokenBefore(secondRow, { includeComments: true });
-        while (comment?.type === 'HTMLWhitespace') {
-          comment = tokenStore.getTokenBefore(comment, { includeComments: true });
-        }
-
-        const hasComment = comment?.type === 'HTMLComment'
-          && Boolean(comment.value.trim())
-          && comment.loc.end.line === secondRow.loc.start.line - 1
-          && !sourceCode.lines[comment.loc.start.line - 1].slice(0, comment.loc.start.column).trim()
-          && !sourceCode.lines[comment.loc.end.line - 1].slice(comment.loc.end.column).trim();
+        const hasComment = getStandaloneTemplateComment(sourceCode, tokenStore, secondRow);
 
         if (!hasComment) {
           context.report({ loc: secondRow.startTag.loc, messageId: 'missing' });
