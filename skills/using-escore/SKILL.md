@@ -1,6 +1,6 @@
 ---
 name: using-escore
-description: "General guidelines for using Escore. Use when interacting with Escore."
+description: "Use when setting up Escore or developing Vue/Inertia features in projects using escore-packages. Covers shared packages, tooling, reactive state, forms, reloads, and toast feedback."
 ---
 
 ## Required Docs
@@ -16,3 +16,6 @@ Read and apply only the files relevant to the current task in hand, do not read 
 
 - If the current task involves setting up Escore Tooling (`escore-tooling`) in a project:
   - Read and apply [Setting Up Escore Tooling](references/setting-up-escore-tooling.md) completely.
+
+- If the current task involves implementing reactive state, Inertia forms, reload actions, or toast feedback in a Vue/Inertia project using `escore-packages`:
+  - Read and apply [Using Inertia Plus](references/packages/using-inertia-plus.md) completely.
