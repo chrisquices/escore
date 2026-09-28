@@ -669,11 +669,443 @@ const templateCommentPadding = {
   },
 };
 
+const isDialogComponent = (node) => node.type === 'VElement'
+  && ['Dialog', 'AlertDialog', 'alert-dialog'].includes(node.rawName);
+
+const dialogSectionPadding = {
+  meta: {
+    type: 'layout',
+    docs: {
+      description: 'require blank lines after DialogHeader and before DialogFooter',
+    },
+    fixable: 'whitespace',
+    schema: [],
+    messages: {
+      afterHeader: 'Expected a blank line after </DialogHeader>.',
+      beforeFooter: 'Expected a blank line before <DialogFooter>.',
+    },
+  },
+
+  create(context) {
+    const sourceCode = context.sourceCode;
+    const parserServices = sourceCode.parserServices;
+
+    if (!parserServices.defineTemplateBodyVisitor) {
+      return {};
+    }
+
+    const newline = sourceCode.text.includes('\r\n') ? '\r\n' : '\n';
+    const requireBlankLine = (gap, offset, loc, messageId) => {
+      const lineBreaks = (gap.match(/\r\n|\r|\n/g) ?? []).length;
+
+      if (lineBreaks >= 2) {
+        return;
+      }
+
+      context.report({
+        loc,
+        messageId,
+        fix: (fixer) => fixer.insertTextBeforeRange(
+          [offset, offset],
+          newline.repeat(2 - lineBreaks),
+        ),
+      });
+    };
+
+    return parserServices.defineTemplateBodyVisitor({
+      VElement(node) {
+        if (['DialogHeader', 'dialog-header'].includes(node.rawName) && node.endTag) {
+          const offset = node.endTag.range[1];
+          const gap = sourceCode.text.slice(offset).match(/^\s*/)[0];
+
+          requireBlankLine(gap, offset, node.endTag.loc, 'afterHeader');
+        }
+
+        if (['DialogFooter', 'dialog-footer'].includes(node.rawName)) {
+          const offset = node.startTag.range[0];
+          const gap = sourceCode.text.slice(0, offset).match(/\s*$/)[0];
+
+          requireBlankLine(gap, offset - gap.length, node.startTag.loc, 'beforeFooter');
+        }
+      },
+    });
+  },
+};
+
+const dialogsAtTemplateRoot = {
+  meta: {
+    type: 'suggestion',
+    docs: {
+      description: 'require Dialog and AlertDialog to be direct children of the root template',
+    },
+    schema: [],
+    messages: {
+      nested: '<{{ component }}> must be a direct child of the root <template>.',
+    },
+  },
+
+  create(context) {
+    const sourceCode = context.sourceCode;
+    const templateBody = sourceCode.ast.templateBody;
+    const parserServices = sourceCode.parserServices;
+
+    if (!templateBody || !parserServices.defineTemplateBodyVisitor) {
+      return {};
+    }
+
+    // Moving components can change scope, conditionals, and layout: report only.
+    return parserServices.defineTemplateBodyVisitor({
+      VElement(node) {
+        if (isDialogComponent(node) && node.parent !== templateBody) {
+          context.report({
+            loc: node.startTag.loc,
+            messageId: 'nested',
+            data: { component: node.rawName },
+          });
+        }
+      },
+    });
+  },
+};
+
+const dialogsAtTemplateEnd = {
+  meta: {
+    type: 'suggestion',
+    docs: {
+      description: 'require Dialog and AlertDialog to form the final group in the root template',
+    },
+    schema: [],
+    messages: {
+      afterDialogs: 'Only Dialog and AlertDialog components may follow the first root-level dialog. Move other content before the dialog group.',
+    },
+  },
+
+  create(context) {
+    const sourceCode = context.sourceCode;
+    const templateBody = sourceCode.ast.templateBody;
+    const parserServices = sourceCode.parserServices;
+
+    if (!templateBody || !parserServices.defineTemplateBodyVisitor) {
+      return {};
+    }
+
+    return parserServices.defineTemplateBodyVisitor({
+      VElement(node) {
+        if (node !== templateBody) {
+          return;
+        }
+
+        let hasDialog = false;
+
+        for (const child of templateBody.children) {
+          if (isDialogComponent(child)) {
+            hasDialog = true;
+            continue;
+          }
+
+          // Comments and whitespace may separate or follow dialogs.
+          if (!hasDialog || child.type === 'VHTMLComment'
+            || (child.type === 'VText' && !child.value.trim())) {
+            continue;
+          }
+
+          context.report({
+            loc: child.startTag?.loc ?? child.loc,
+            messageId: 'afterDialogs',
+          });
+        }
+      },
+    });
+  },
+};
+
+const scriptExpressionWrappers = new Set([
+  'TSAsExpression',
+  'TSTypeAssertion',
+  'TSNonNullExpression',
+  'TSSatisfiesExpression',
+  'TSInstantiationExpression',
+  'ChainExpression',
+]);
+
+const unwrapScriptExpression = (node) => {
+  while (node && scriptExpressionWrappers.has(node.type)) {
+    node = node.expression;
+  }
+
+  return node;
+};
+
+const isDefinePropsExpression = (expression) => {
+  const node = unwrapScriptExpression(expression);
+
+  if (node?.type !== 'CallExpression' || node.callee.type !== 'Identifier') {
+    return false;
+  }
+
+  return node.callee.name === 'defineProps'
+    || (node.callee.name === 'withDefaults' && isDefinePropsExpression(node.arguments[0]));
+};
+
+const isPropsDeclarator = (node) => node?.type === 'VariableDeclarator'
+  && node.id.type === 'Identifier'
+  && node.id.name === 'props'
+  && isDefinePropsExpression(node.init);
+
+const scriptDeclarationOrder = {
+  meta: {
+    type: 'suggestion',
+    docs: {
+      description: 'require imports, types, and defineProps before other script statements',
+    },
+    schema: [],
+    messages: {
+      order: '{{ section }} must appear before {{ previous }}. Expected order: imports, types/interfaces, defineProps, then other statements.',
+    },
+  },
+
+  create(context) {
+    const documentFragment = context.sourceCode.parserServices.getDocumentFragment?.();
+
+    if (!documentFragment) {
+      return {};
+    }
+
+    const scripts = documentFragment.children.filter(
+      (node) => node.type === 'VElement' && node.rawName === 'script',
+    );
+    const sections = ['Imports', 'Types/interfaces', 'defineProps', 'Other statements'];
+    const getSection = (statement) => {
+      const node = statement.type === 'ExportNamedDeclaration' && statement.declaration
+        ? statement.declaration
+        : statement;
+
+      if (['ImportDeclaration', 'TSImportEqualsDeclaration'].includes(node.type)) {
+        return 0;
+      }
+
+      if (['TSTypeAliasDeclaration', 'TSInterfaceDeclaration'].includes(node.type)
+        || (node.type === 'ExportNamedDeclaration' && node.exportKind === 'type')) {
+        return 1;
+      }
+
+      if ((node.type === 'ExpressionStatement' && isDefinePropsExpression(node.expression))
+        || (node.type === 'VariableDeclaration' && node.declarations.some(
+          (declaration) => isDefinePropsExpression(declaration.init),
+        ))) {
+        return 2;
+      }
+
+      return 3;
+    };
+
+    // Report only: reordering executable declarations may change behavior.
+    return {
+      Program(program) {
+        // A normal <script> and <script setup> each have their own ordering.
+        for (const script of scripts) {
+          let highestSection = 0;
+
+          for (const statement of program.body) {
+            if (statement.type === 'EmptyStatement'
+              || statement.range[0] < script.startTag.range[1]
+              || statement.range[1] > (script.endTag?.range[0] ?? script.range[1])) {
+              continue;
+            }
+
+            const section = getSection(statement);
+
+            if (section < highestSection) {
+              context.report({
+                node: statement,
+                messageId: 'order',
+                data: {
+                  section: sections[section],
+                  previous: sections[highestSection].toLowerCase(),
+                },
+              });
+            }
+
+            highestSection = Math.max(highestSection, section);
+          }
+        }
+      },
+    };
+  },
+};
+
+const definePropsAssignment = {
+  meta: {
+    type: 'suggestion',
+    docs: {
+      description: 'require defineProps to be assigned to a const named props',
+    },
+    schema: [],
+    messages: {
+      assignment: 'Assign defineProps to a const named props. Destructuring, other names, and loose calls are not allowed.',
+    },
+  },
+
+  create(context) {
+    return {
+      CallExpression(node) {
+        if (node.callee.type !== 'Identifier' || node.callee.name !== 'defineProps') {
+          return;
+        }
+
+        let expression = node;
+
+        while (expression.parent) {
+          const parent = expression.parent;
+
+          if ((scriptExpressionWrappers.has(parent.type) && parent.expression === expression)
+            || (parent.type === 'CallExpression' && parent.callee.type === 'Identifier'
+              && parent.callee.name === 'withDefaults' && parent.arguments[0] === expression)) {
+            expression = parent;
+            continue;
+          }
+
+          break;
+        }
+
+        const declaration = expression.parent;
+
+        if (!isPropsDeclarator(declaration) || declaration.parent.kind !== 'const'
+          || declaration.init !== expression) {
+          // Renaming or introducing a binding requires reviewing its usages.
+          context.report({ node, messageId: 'assignment' });
+        }
+      },
+    };
+  },
+};
+
+const scriptRegions = {
+  meta: {
+    type: 'suggestion',
+    docs: {
+      description: 'require script code inside regions with 140-character opening banners',
+    },
+    fixable: 'code',
+    schema: [],
+    messages: {
+      outside: 'Place this code inside a named region. Only imports and const props = defineProps(...) may be outside regions.',
+      format: 'Use a standalone // region --- Title --- banner with trailing dashes. Malformed banners must be corrected manually.',
+      length: 'Region banner must contain exactly 140 characters, including indentation; found {{ length }}.',
+      endFormat: 'Use a standalone // endregion comment.',
+      unmatchedEnd: 'This endregion has no matching region in this script block.',
+      unclosed: 'Close this region with // endregion in the same script block.',
+    },
+  },
+
+  create(context) {
+    const sourceCode = context.sourceCode;
+    const documentFragment = sourceCode.parserServices.getDocumentFragment?.();
+
+    if (!documentFragment) {
+      return {};
+    }
+
+    return {
+      Program(program) {
+        const comments = sourceCode.getAllComments();
+        const scripts = documentFragment.children.filter(
+          (node) => node.type === 'VElement' && node.rawName === 'script',
+        );
+
+        for (const script of scripts) {
+          const start = script.startTag.range[1];
+          const end = script.endTag?.range[0] ?? script.range[1];
+          const stack = [];
+          const regions = [];
+
+          for (const comment of comments) {
+            if (comment.type !== 'Line' || comment.range[0] < start || comment.range[1] > end) {
+              continue;
+            }
+
+            const text = sourceCode.getText(comment);
+            const line = sourceCode.lines[comment.loc.start.line - 1];
+
+            if (/^\/\/\s*region\b/.test(text)) {
+              // Recognize a malformed marker but never guess its title or repair its prefix.
+              stack.push(comment);
+
+              if (!/^[\t ]*\/\/ region --- (\S(?:.*\S)?) (-+)$/.test(line)) {
+                context.report({ loc: comment.loc, messageId: 'format' });
+                continue;
+              }
+
+              const length = Array.from(line).length;
+
+              if (length !== 140) {
+                context.report({
+                  loc: comment.loc,
+                  messageId: 'length',
+                  data: { length },
+                  // Only pad a valid, short banner at its right edge.
+                  fix: length < 140
+                    ? (fixer) => fixer.insertTextAfterRange(comment.range, '-'.repeat(140 - length))
+                    : undefined,
+                });
+              }
+
+              continue;
+            }
+
+            if (/^\/\/\s*endregion\b/.test(text)) {
+              if (!/^[\t ]*\/\/ endregion$/.test(line)) {
+                context.report({ loc: comment.loc, messageId: 'endFormat' });
+              }
+
+              const opening = stack.pop();
+
+              if (opening) {
+                regions.push([opening.range[1], comment.range[0]]);
+              } else {
+                context.report({ loc: comment.loc, messageId: 'unmatchedEnd' });
+              }
+            }
+          }
+
+          for (const opening of stack) {
+            context.report({ loc: opening.loc, messageId: 'unclosed' });
+          }
+
+          for (const statement of program.body) {
+            if (statement.range[0] < start || statement.range[1] > end
+              || ['ImportDeclaration', 'TSImportEqualsDeclaration'].includes(statement.type)
+              || (statement.type === 'VariableDeclaration' && statement.kind === 'const'
+                && statement.declarations.every(isPropsDeclarator))) {
+              continue;
+            }
+
+            // Requiring the complete declaration also covers its nested code.
+            const enclosed = regions.some(([regionStart, regionEnd]) => (
+              regionStart <= statement.range[0] && regionEnd >= statement.range[1]
+            ));
+
+            if (!enclosed) {
+              context.report({ node: statement, messageId: 'outside' });
+            }
+          }
+        }
+      },
+    };
+  },
+};
+
 const workspace = {
   rules: {
     'require-comment-before-component': requireCommentBeforeComponent,
     'table-cell-comment-consistency': tableCellCommentConsistency,
     'template-comment-padding': templateCommentPadding,
+    'dialog-section-padding': dialogSectionPadding,
+    'dialogs-at-template-root': dialogsAtTemplateRoot,
+    'dialogs-at-template-end': dialogsAtTemplateEnd,
+    'script-declaration-order': scriptDeclarationOrder,
+    'define-props-assignment': definePropsAssignment,
+    'script-regions': scriptRegions,
   },
 };
 
@@ -714,9 +1146,9 @@ const vueTsModule = await importProjectPackage('@vue/eslint-config-typescript');
 const vueTs = unwrapDefault(vueTsModule);
 const defineConfigWithVueTs = vueTsModule.defineConfigWithVueTs ?? vueTs.defineConfigWithVueTs;
 const vueTsConfigs = vueTsModule.vueTsConfigs ?? vueTs.vueTsConfigs;
-const importPlugin = unwrapDefault(
-    await importProjectPackage('eslint-plugin-import')
-);
+const importModule = await importProjectPackage('eslint-plugin-import-x');
+const importPlugin = unwrapDefault(importModule);
+const { createTypeScriptImportResolver } = await importProjectPackage('eslint-import-resolver-typescript');
 const vue = unwrapDefault(await importProjectPackage('eslint-plugin-vue'));
 
 const controlStatements = [
@@ -741,16 +1173,16 @@ export default defineConfigWithVueTs(
     vueTsConfigs.recommended,
     {
         plugins: {
-            import: importPlugin
+            'import-x': importPlugin
         },
         settings: {
-            'import/resolver': {
-                typescript: {
+            'import-x/resolver-next': [
+                createTypeScriptImportResolver({
                     alwaysTryTypes: true,
-                    project: './tsconfig.json'
-                },
-                node: true
-            }
+                    project: join(projectDirectory, 'tsconfig.json')
+                }),
+                importModule.createNodeResolver()
+            ]
         },
         rules: {
             'vue/multi-word-component-names': 'off',
@@ -763,14 +1195,14 @@ export default defineConfigWithVueTs(
                     fixStyle: 'separate-type-imports'
                 }
             ],
-            'import/order': [
+            'import-x/order': [
                 'error',
                 {
                     groups: ['builtin', 'external', 'internal', 'parent', 'sibling', 'index']
                     // alphabetize: { order: 'asc', caseInsensitive: true },
                 }
             ],
-            'import/consistent-type-specifier-style': [
+            'import-x/consistent-type-specifier-style': [
                 'error',
                 'prefer-top-level'
             ]
@@ -844,7 +1276,13 @@ export default defineConfigWithVueTs(
                 }
             ],
             'workspace/table-cell-comment-consistency': 'error',
-            'workspace/template-comment-padding': 'error'
+            'workspace/template-comment-padding': 'error',
+            'workspace/dialog-section-padding': 'error',
+            'workspace/dialogs-at-template-root': 'error',
+            'workspace/dialogs-at-template-end': 'error',
+            'workspace/script-declaration-order': 'error',
+            'workspace/define-props-assignment': 'error',
+            'workspace/script-regions': 'warn'
         }
     },
     {

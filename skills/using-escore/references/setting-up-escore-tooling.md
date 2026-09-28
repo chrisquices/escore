@@ -122,7 +122,7 @@ Requires these packages installed in the project:
 - `typescript`
 - `@stylistic/eslint-plugin`
 - `@vue/eslint-config-typescript`
-- `eslint-plugin-import`
+- `eslint-plugin-import-x`
 - `eslint-plugin-vue`
 - `eslint-import-resolver-typescript`
 
@@ -150,6 +150,8 @@ npm run lint
 ## Quality
 
 Runs the configured checks or fixes through one Composer command for ease of use.
+
+`@script` calls a script in `composer.json`; `npm run script` calls one in `package.json`. Define the ESLint scripts above first, then include them below so the quality commands cover both PHP and JavaScript. Commands run in order and stop on failure.
 
 Update the `scripts` section in the project's `composer.json`:
 
