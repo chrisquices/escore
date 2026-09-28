@@ -12,6 +12,7 @@ Import from `escore-packages/inertia-plus`. Reuse its behavior instead of implem
   - Use `Dialog` for dialogs with forms in them. Use `Alert Dialogs` for dialogs with confirmations.
 - Avoid vague names such as `form`, `dialog`, or `uploadForm`. Dialog consts do not need an additional `Form` suffix.
 - By default, give each form or dialog action its own const with one responsibility. Usually define only `submit()` and optional `beforeSubmit()`. Extra methods or a larger domain object are valid when needed, but are not the standard form/dialog pattern.
+- Call the object's methods directly from the UI, including `show(values)` and `submit()`. Do not add standalone functions that only forward calls or duplicate managed state.
 - Put preparation in the corresponding `before<Action>()` method, such as `beforeSubmit()`, called by the action itself. These are application conventions, not automatic library hooks.
 - Buttons and form events call `submit()`. If preparation is needed, `submit()` calls `this.beforeSubmit()` after its processing guard and before the request. `beforeSubmit()` never calls `submit()` and is not called directly by the UI or automatically by the library.
 - Use method syntax with `this`; use arrow callbacks inside methods to retain `this`.
