@@ -40,6 +40,12 @@ This document defines the controlling protocol for every agent action and respon
 
 ---
 
+### Skills and References
+
+- Reuse skill instructions and references already read in this conversation. Reread only when they changed, their contents are no longer available in context, or the user requests it.
+
+---
+
 ### Git
 
 - You are banned from using Git FOREVER.
