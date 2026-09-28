@@ -1,28 +1,29 @@
-import requireFieldContentInField from './rules/template/element-placement/require-field-content-in-field.js';
-import requireFieldLabelInField from './rules/template/element-placement/require-field-label-in-field.js';
-import requireFormToUseField from './rules/template/element-placement/require-form-to-use-field.js';
-import requireFieldIdForAssociation from './rules/template/element-attributes/require-field-id-for-association.js';
+import requireLabelInput from './rules/template/element-association/require-label-input.js';
+import requirePlacementFieldContent from './rules/template/element-placement/require-placement-field-content.js';
+import requirePlacementFieldLabel from './rules/template/element-placement/require-placement-field-label.js';
+import requireFieldStructureForm from './rules/template/element-placement/require-field-structure-form.js';
+import requireIdForAssociationField from './rules/template/element-association/require-id-for-association-field.js';
 import forbidLabelInForm from './rules/template/element-placement/forbid-label-in-form.js';
-import enforceEmptyDescriptionOneLiner from './rules/template/element-one-liners/enforce-empty-description-one-liner.js';
-import enforceDialogDescriptionOneLiner from './rules/template/element-one-liners/enforce-dialog-description-one-liner.js';
-import enforceElementLayout from './rules/template/element-one-liners/enforce-element-layout.js';
+import enforceOneLinerEmptyDescription from './rules/template/element-one-liners/enforce-one-liner-empty-description.js';
+import enforceOneLinerDialogDescription from './rules/template/element-one-liners/enforce-one-liner-dialog-description.js';
+import enforceLayoutElement from './rules/template/element-one-liners/enforce-layout-element.js';
 import {createRequire} from 'node:module';
 import {join} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import inertiaPlusRules from './rules/packages/inertia-plus.js';
 import enforceConstProps from './rules/script/enforce-const-props.js';
-import enforceScriptOrder from './rules/script/enforce-script-order.js';
+import enforceOrderScript from './rules/script/enforce-order-script.js';
 import requireCodeFoldingRegion from './rules/script/require-code-folding-region.js';
-import requireCodeFoldingRegionUsage from './rules/script/require-code-folding-region-usage.js';
+import requireUsageCodeFoldingRegion from './rules/script/require-usage-code-folding-region.js';
 import forbidHardcodedUrls from './rules/general/forbid-hardcoded-urls.js';
-import requireContextMenuItemIcon from './rules/template/element-icons/require-context-menu-item-icon.js';
-import requireContextMenuLabelIcon from './rules/template/element-icons/require-context-menu-label-icon.js';
+import requireIconContextMenuItem from './rules/template/element-icons/require-icon-context-menu-item.js';
+import requireIconContextMenuLabel from './rules/template/element-icons/require-icon-context-menu-label.js';
 import forbidConsecutiveBlankLines from './rules/general/forbid-consecutive-blank-lines.js';
 import enforceBlankLineAboveComment from './rules/general/enforce-blank-line-above-comment.js';
 import enforceBlankLineBelowDialogHeader from './rules/template/element-spacing/enforce-blank-line-below-dialog-header.js';
 import enforceBlankLineAboveDialogFooter from './rules/template/element-spacing/enforce-blank-line-above-dialog-footer.js';
-import enforceDialogPlacement from './rules/template/element-placement/enforce-dialog-placement.js';
-import enforceAlertDialogPlacement from './rules/template/element-placement/enforce-alert-dialog-placement.js';
+import enforcePlacementDialog from './rules/template/element-placement/enforce-placement-dialog.js';
+import enforcePlacementAlertDialog from './rules/template/element-placement/enforce-placement-alert-dialog.js';
 import forbidOneLinerButton from './rules/template/element-one-liners/forbid-one-liner-button.js';
 import forbidOneLinerTableCell from './rules/template/element-one-liners/forbid-one-liner-table-cell.js';
 import forbidOneLinerTableHead from './rules/template/element-one-liners/forbid-one-liner-table-head.js';
@@ -58,7 +59,7 @@ import requireCommentTableRow from './rules/template/element-comments/require-co
 import requireAttributeButtonType from './rules/template/element-attributes/require-attribute-button-type.js';
 import requireAttributeButtonSize from './rules/template/element-attributes/require-attribute-button-size.js';
 import requireAttributeButtonVariant from './rules/template/element-attributes/require-attribute-button-variant.js';
-import enforceInputAttributeOrder from './rules/template/element-attributes-order/enforce-input-attribute-order.js';
+import enforceAttributeOrderInput from './rules/template/element-attributes-order/enforce-attribute-order-input.js';
 import requireAttributeInputId from './rules/template/element-attributes/require-attribute-input-id.js';
 import requireAttributeInputType from './rules/template/element-attributes/require-attribute-input-type.js';
 import forbidNativeLabel from './rules/template/element-native/forbid-native-label.js';
@@ -75,9 +76,10 @@ import forbidAttributeTitle from './rules/template/element-attributes/forbid-att
 
 const escore = {
     rules: {
-        'require-field-content-in-field': requireFieldContentInField,
-        'require-field-label-in-field': requireFieldLabelInField,
-        'require-form-to-use-field': requireFormToUseField,
+        'require-label-input': requireLabelInput,
+        'require-placement-field-content': requirePlacementFieldContent,
+        'require-placement-field-label': requirePlacementFieldLabel,
+        'require-field-structure-form': requireFieldStructureForm,
         'forbid-label-in-form': forbidLabelInForm,
         ...inertiaPlusRules,
         'forbid-native-label': forbidNativeLabel,
@@ -116,25 +118,25 @@ const escore = {
         'forbid-one-liner-button': forbidOneLinerButton,
         'require-comment-button': requireCommentButton,
         'require-comment-alert': requireCommentAlert,
-        'enforce-element-layout': enforceElementLayout,
+        'enforce-layout-element': enforceLayoutElement,
         'enforce-blank-line-above-comment': enforceBlankLineAboveComment,
         'forbid-consecutive-blank-lines': forbidConsecutiveBlankLines,
         'enforce-blank-line-below-dialog-header': enforceBlankLineBelowDialogHeader,
         'enforce-blank-line-above-dialog-footer': enforceBlankLineAboveDialogFooter,
-        'enforce-dialog-description-one-liner': enforceDialogDescriptionOneLiner,
-        'enforce-empty-description-one-liner': enforceEmptyDescriptionOneLiner,
+        'enforce-one-liner-dialog-description': enforceOneLinerDialogDescription,
+        'enforce-one-liner-empty-description': enforceOneLinerEmptyDescription,
         'require-attribute-dialog-processing': requireAttributeDialogProcessing,
         'require-attribute-dialog-dismissible': requireAttributeDialogDismissible,
         'require-attribute-dialog-update-open': requireAttributeDialogUpdateOpen,
         'require-attribute-dialog-close-as-child': requireAttributeDialogCloseAsChild,
-        'enforce-dialog-placement': enforceDialogPlacement,
-        'enforce-alert-dialog-placement': enforceAlertDialogPlacement,
-        'enforce-script-order': enforceScriptOrder,
+        'enforce-placement-dialog': enforcePlacementDialog,
+        'enforce-placement-alert-dialog': enforcePlacementAlertDialog,
+        'enforce-order-script': enforceOrderScript,
         'enforce-const-props': enforceConstProps,
         'require-code-folding-region': requireCodeFoldingRegion,
-        'require-code-folding-region-usage': requireCodeFoldingRegionUsage,
+        'require-usage-code-folding-region': requireUsageCodeFoldingRegion,
         'forbid-hardcoded-urls': forbidHardcodedUrls,
-        'require-field-id-for-association': requireFieldIdForAssociation,
+        'require-id-for-association-field': requireIdForAssociationField,
         'require-attribute-field-label-for': requireAttributeFieldLabelFor,
         'require-attribute-field-data-invalid': requireAttributeFieldDataInvalid,
         'require-attribute-field-error-errors': requireAttributeFieldErrorErrors,
@@ -143,9 +145,9 @@ const escore = {
         'require-attribute-button-size': requireAttributeButtonSize,
         'require-attribute-input-type': requireAttributeInputType,
         'require-attribute-input-id': requireAttributeInputId,
-        'enforce-input-attribute-order': enforceInputAttributeOrder,
-        'require-context-menu-item-icon': requireContextMenuItemIcon,
-        'require-context-menu-label-icon': requireContextMenuLabelIcon,
+        'enforce-attribute-order-input': enforceAttributeOrderInput,
+        'require-icon-context-menu-item': requireIconContextMenuItem,
+        'require-icon-context-menu-label': requireIconContextMenuLabel,
     },
 };
 
@@ -301,41 +303,42 @@ export default defineConfigWithVueTs(
             'escore/forbid-one-liner-button': 'error',
             'escore/require-comment-button': 'error',
             'escore/require-comment-alert': 'error',
-            'escore/enforce-element-layout': 'error',
+            'escore/enforce-layout-element': 'error',
             'escore/enforce-blank-line-below-dialog-header': 'error',
             'escore/enforce-blank-line-above-dialog-footer': 'error',
-            'escore/enforce-dialog-description-one-liner': 'error',
-            'escore/enforce-empty-description-one-liner': 'error',
+            'escore/enforce-one-liner-dialog-description': 'error',
+            'escore/enforce-one-liner-empty-description': 'error',
             'escore/require-attribute-dialog-processing': 'error',
             'escore/require-attribute-dialog-dismissible': 'error',
             'escore/require-attribute-dialog-update-open': 'error',
             'escore/require-attribute-dialog-close-as-child': 'error',
-            'escore/enforce-dialog-placement': 'error',
-            'escore/enforce-alert-dialog-placement': 'error',
-            'escore/enforce-script-order': 'error',
+            'escore/enforce-placement-dialog': 'error',
+            'escore/enforce-placement-alert-dialog': 'error',
+            'escore/enforce-order-script': 'error',
             'escore/enforce-const-props': 'error',
             'escore/require-code-folding-region': 'warn',
-            'escore/require-code-folding-region-usage': 'warn',
-            'escore/require-field-id-for-association': 'error',
+            'escore/require-usage-code-folding-region': 'warn',
+            'escore/require-id-for-association-field': 'error',
+            'escore/require-label-input': 'error',
             'escore/require-attribute-field-label-for': 'error',
             'escore/require-attribute-field-data-invalid': 'error',
             'escore/require-attribute-field-error-errors': 'error',
             'escore/forbid-label-in-form': 'error',
-            'escore/require-field-content-in-field': 'error',
-            'escore/require-field-label-in-field': 'error',
-            'escore/require-form-to-use-field': 'error',
+            'escore/require-placement-field-content': 'error',
+            'escore/require-placement-field-label': 'error',
+            'escore/require-field-structure-form': 'error',
             'escore/require-attribute-button-type': 'error',
             'escore/require-attribute-button-variant': 'error',
             'escore/require-attribute-button-size': 'error',
             'escore/require-attribute-input-type': 'error',
             'escore/require-attribute-input-id': 'error',
-            'escore/enforce-input-attribute-order': 'error',
+            'escore/enforce-attribute-order-input': 'error',
             'escore/forbid-attribute-aria': 'error',
             'escore/forbid-attribute-title': 'error',
             'escore/forbid-native-label': 'error',
             'escore/require-attribute-label-for': 'error',
-            'escore/require-context-menu-item-icon': ['warn', {sources: ['@lucide/vue', 'lucide-vue-next']}],
-            'escore/require-context-menu-label-icon': ['warn', {sources: ['@lucide/vue', 'lucide-vue-next']}]
+            'escore/require-icon-context-menu-item': ['warn', {sources: ['@lucide/vue', 'lucide-vue-next']}],
+            'escore/require-icon-context-menu-label': ['warn', {sources: ['@lucide/vue', 'lucide-vue-next']}]
         }
     },
     {

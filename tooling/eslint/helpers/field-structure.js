@@ -4,6 +4,16 @@ export const isField = (node) => isElement(node, ['Field', 'field']);
 export const isFieldLabel = (node) => isElement(node, ['FieldLabel', 'field-label']);
 export const isFieldContent = (node) => isElement(node, ['FieldContent', 'field-content']);
 export const isInput = (node) => isElement(node, ['Input', 'input']);
+export const isHiddenInput = (node, attributeValue) => isInput(node)
+  && attributeValue(node, 'type')?.key.toLowerCase() === 'literal:hidden';
+
+export const findOwningField = (node) => {
+  for (let parent = node.parent; parent?.type === 'VElement'; parent = parent.parent) {
+    if (isField(parent)) return parent;
+  }
+
+  return undefined;
+};
 
 export const findContainingForm = (node) => {
   for (let parent = node.parent; parent?.type === 'VElement'; parent = parent.parent) {
