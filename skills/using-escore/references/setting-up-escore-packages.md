@@ -29,7 +29,7 @@ Merge into the existing `defineConfig` options, keeping other settings:
 
 ```ts
 resolve: {
-    dedupe: ['vue'],
+    dedupe: ['vue', '@inertiajs/vue3', '@inertiajs/core'],
 },
 server: {
     fs: {
@@ -41,7 +41,7 @@ server: {
 },
 ```
 
-This shares Vue and allows access to Escore's source.
+This shares Vue and Inertia instances with the app and allows access to Escore's source.
 
 ## 3. Styles
 
