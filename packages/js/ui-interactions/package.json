@@ -1,0 +1,48 @@
+{
+  "name": "@escore/ui-interactions",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    "./audio": {
+      "types": "./src/audio.d.ts",
+      "default": "./src/audio.js"
+    },
+    "./video": {
+      "types": "./src/video.d.ts",
+      "default": "./src/video.js"
+    },
+    "./image": {
+      "types": "./src/image.d.ts",
+      "default": "./src/image.js"
+    },
+    "./draggable": {
+      "types": "./src/draggable.d.ts",
+      "default": "./src/draggable.js"
+    },
+    "./droppable": {
+      "types": "./src/droppable.d.ts",
+      "default": "./src/droppable.js"
+    },
+    "./dropzone": {
+      "types": "./src/dropzone.d.ts",
+      "default": "./src/dropzone.js"
+    },
+    "./selection": {
+      "types": "./src/selection.d.ts",
+      "default": "./src/selection.js"
+    },
+    "./virtualize": {
+      "types": "./src/virtualize.d.ts",
+      "default": "./src/virtualize.js"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@napi-rs/canvas": "^0.1.100",
+    "typescript": "^5.9.3"
+  }
+}

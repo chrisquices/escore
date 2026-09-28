@@ -1,0 +1,75 @@
+:root[data-theme='hologate'] {
+  color-scheme: light;
+
+  /* Base */
+  --background: oklch(97% 0.015 92);
+  --foreground: oklch(25% 0.015 92);
+  --foreground-muted: oklch(45% 0.015 92);
+  --foreground-subtle: oklch(53% 0.015 92);
+
+  /* Shell & Surfaces */
+  --topbar: var(--surface);
+  --topbar-foreground: var(--foreground);
+  --topbar-primary: var(--primary);
+  --topbar-primary-foreground: var(--primary-foreground);
+  --topbar-accent: var(--accent);
+  --topbar-accent-foreground: var(--accent-foreground);
+  --topbar-border: var(--border);
+  --topbar-ring: var(--ring);
+
+  --sidebar: var(--surface);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: var(--accent-foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
+
+  --surface: oklch(100% 0 0 / 0.75);
+  --surface-muted: oklch(94% 0.015 92);
+  --surface-foreground: var(--foreground);
+
+  --popover: oklch(99% 0.006 92);
+  --popover-foreground: var(--foreground);
+
+  --overlay: oklch(20% 0.015 92 / 0.25);
+
+  /* Colors */
+  --primary: oklch(30% 0.015 92);
+  --primary-foreground: oklch(98% 0.01 92);
+  --secondary: oklch(93% 0.015 92);
+  --secondary-foreground: oklch(25% 0.015 92);
+  --accent: oklch(90% 0.015 92);
+  --accent-foreground: oklch(25% 0.015 92);
+
+  --success-foreground: var(--primary-foreground);
+  --info-foreground: var(--primary-foreground);
+  --warning-foreground: var(--primary-foreground);
+  --destructive-foreground: var(--primary-foreground);
+  --red-foreground: var(--primary-foreground);
+  --orange-foreground: var(--primary-foreground);
+  --yellow-foreground: var(--primary-foreground);
+  --green-foreground: var(--primary-foreground);
+  --blue-foreground: var(--primary-foreground);
+  --purple-foreground: var(--primary-foreground);
+  --neutral-foreground: var(--primary-foreground);
+
+  /* Shadows */
+  --shadow-raised: 0 1px 2px 0 oklch(25% 0.015 92 / 0.06), 0 1px 3px 0 oklch(25% 0.015 92 / 0.08);
+  --shadow-surface: 0 4px 8px 0 oklch(25% 0.015 92 / 0.08);
+  --shadow-popover: 0 4px 8px 0 oklch(25% 0.015 92 / 0.12);
+
+  /* Misc */
+  --border: oklch(87% 0.015 92);
+  --border-faint: oklch(90% 0.015 92 / 0.7);
+  --input: oklch(99% 0.006 92 / 0.8);
+  --input-border: oklch(85% 0.015 92 / 0.8);
+  --ring: oklch(45% 0.015 92 / 0.3);
+
+  --bg-ambient-section-top-right: oklch(94.5% 0.015 92);
+  --bg-ambient-section-bottom-right: oklch(96.5% 0.015 92);
+  --bg-ambient-section-bottom-left: oklch(94.5% 0.015 92);
+  --bg-ambient-section-top-left: oklch(96.5% 0.015 92);
+  --bg-ambient-section-center: oklch(97.5% 0.015 92);
+}

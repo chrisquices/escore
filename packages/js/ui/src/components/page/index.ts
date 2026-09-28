@@ -1,0 +1,6 @@
+export { default as Page } from "./Page.vue"
+export { default as PageSection } from "./PageSection.vue"
+export { default as PageSectionContent } from "./PageSectionContent.vue"
+export { default as PageSectionHeading } from "./PageSectionHeading.vue"
+export { default as PageSectionHeadingActions } from "./PageSectionHeadingActions.vue"
+export { default as PageSectionHeadingTitle } from "./PageSectionHeadingTitle.vue"

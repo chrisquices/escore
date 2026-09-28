@@ -1,0 +1,3 @@
+interface:
+  display_name: "Load Agent Protocol"
+  short_description: "Load and apply the controlling agent protocol."

@@ -1,0 +1,49 @@
+:root[data-theme='escode'] {
+  color-scheme: dark;
+
+  /* Harmonia Noir Base */
+  --theme-lightness: 10%;
+  --theme-opacity: 1;
+  --theme-chroma: 0.025;
+  --theme-hue: 250;
+
+  --topbar: transparent;
+  --sidebar: transparent;
+
+
+  /* Base */
+  --background: oklch(clamp(0%, calc(15% + (var(--theme-lightness) * var(--theme-opacity))), 100%) var(--theme-chroma) var(--theme-hue));
+  --foreground: oklch(calc(100% - (var(--theme-lightness) * var(--theme-opacity) * 0.5)) var(--theme-chroma) var(--theme-hue));
+  --foreground-muted: oklch(calc(max(var(--theme-lightness), calc(100% - var(--theme-lightness))) - 10%) var(--theme-chroma) var(--theme-hue));
+  --foreground-subtle: oklch(calc(max(var(--theme-lightness), calc(100% - var(--theme-lightness))) - 20%) var(--theme-chroma) var(--theme-hue));
+
+  /* Surfaces */
+  --surface: oklch(clamp(0%, calc(7% + (var(--theme-lightness) * var(--theme-opacity))), 100%) var(--theme-chroma) var(--theme-hue));
+  --surface-muted: oklch(clamp(0%, calc(11% + (var(--theme-lightness) * var(--theme-opacity))), 100%) var(--theme-chroma) var(--theme-hue));
+  --popover: oklch(clamp(0%, calc(11% + (var(--theme-lightness) * var(--theme-opacity))), 100%) var(--theme-chroma) var(--theme-hue));
+
+  /* Colors */
+  --primary: oklch(95% var(--theme-chroma) var(--theme-hue));
+  --primary-foreground: oklch(30% var(--theme-chroma) var(--theme-hue));
+  --secondary: oklch(30% calc(var(--theme-chroma) * 2) var(--theme-hue));
+  --secondary-foreground: oklch(95% var(--theme-chroma) var(--theme-hue));
+  --accent: oklch(95% calc(var(--theme-chroma) * 3) var(--theme-hue));
+  --accent-foreground: oklch(20% var(--theme-chroma) var(--theme-hue));
+
+  /* Borders & Shadows */
+  --border: oklch(21% var(--theme-chroma) var(--theme-hue));
+  --shadow-surface: 0 4px 8px 0 oklch(17% calc(var(--theme-chroma)) var(--theme-hue));
+  --shadow-popover: 0 4px 8px 0 oklch(20% calc(var(--theme-chroma) * 0.5) var(--theme-hue));
+
+  /* Ambient Background */
+  --bg-ambient-section-center: oklch(clamp(0%, calc(13% + (var(--theme-lightness) * var(--theme-opacity))), 100%) var(--theme-chroma) var(--theme-hue));
+  --bg-ambient-section-top-right: oklch(clamp(0%, calc(11% + (var(--theme-lightness) * var(--theme-opacity))), 100%) var(--theme-chroma) var(--theme-hue));
+  --bg-ambient-section-bottom-right: oklch(clamp(0%, calc(13% + (var(--theme-lightness) * var(--theme-opacity))), 100%) var(--theme-chroma) var(--theme-hue));
+  --bg-ambient-section-bottom-left: oklch(clamp(0%, calc(11% + (var(--theme-lightness) * var(--theme-opacity))), 100%) var(--theme-chroma) var(--theme-hue));
+  --bg-ambient-section-top-left: oklch(clamp(0%, calc(13% + (var(--theme-lightness) * var(--theme-opacity))), 100%) var(--theme-chroma) var(--theme-hue));
+
+  --input: oklch(clamp(0%, calc(7% + (var(--theme-lightness) * var(--theme-opacity))), 100%) var(--theme-chroma) var(--theme-hue));
+  --input-border: oklch(clamp(0%, calc(17% + (var(--theme-lightness) * var(--theme-opacity))), 100%) var(--theme-chroma) var(--theme-hue));
+
+
+}

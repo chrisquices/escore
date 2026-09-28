@@ -1,0 +1,18 @@
+<script setup lang="ts">
+import type { HTMLAttributes } from "vue"
+import { cn } from "@workspace/ui/utils"
+
+const props = defineProps<{
+  class?: HTMLAttributes["class"]
+}>()
+</script>
+
+<template>
+  <div
+    data-slot="sidebar-content"
+    data-sidebar="content"
+    :class="cn('flex min-h-0 flex-1 py-2 flex-col overflow-auto group-data-[collapsible=icon]:overflow-hidden', props.class)"
+  >
+    <slot />
+  </div>
+</template>
