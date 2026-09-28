@@ -1,0 +1,21 @@
+<idea-plugin>
+    <id>escore.ide.integration</id>
+    <name>Escore IDE Integration</name>
+    <vendor>Escore</vendor>
+    <description>Compact HTML and Vue class lists and ARIA attribute values, with hover controls for native HTML element folds.</description>
+
+    <depends>com.intellij.modules.platform</depends>
+    <depends>com.intellij.modules.xml</depends>
+    <depends>com.intellij.modules.lang</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <toolWindow id="Escore" anchor="right" icon="AllIcons.Nodes.Plugin"
+                    factoryClass="escore.ide.ui.EscoreToolWindowFactory"/>
+        <editorFactoryListener implementation="escore.ide.folding.CollapsibleHtmlClasses$FactoryListener"/>
+        <editorFactoryListener implementation="escore.ide.folding.CollapsibleHtmlAria$FactoryListener"/>
+        <editorFactoryListener implementation="escore.ide.folding.CollapsibleHtmlElements$FactoryListener"/>
+        <!-- Vue inherits HTML folding; register here to preserve native template folds. -->
+        <lang.foldingBuilder language="HTML" implementationClass="escore.ide.folding.CollapsibleHtmlClasses$FoldingBuilder"/>
+        <lang.foldingBuilder language="HTML" implementationClass="escore.ide.folding.CollapsibleHtmlAria$FoldingBuilder"/>
+    </extensions>
+</idea-plugin>

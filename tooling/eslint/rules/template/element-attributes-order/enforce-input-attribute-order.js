@@ -1,0 +1,32 @@
+import enforceElementAttributeOrder from '../../../helpers/enforce-element-attribute-order.js';
+
+export default enforceElementAttributeOrder({
+  elements: ['Input', 'input'],
+  order: [
+    'id',
+    'name',
+    'type',
+    'v-model',
+    'model-value',
+    'default-value',
+    'placeholder',
+    'required',
+    'min',
+    'minlength',
+    'max',
+    'maxlength',
+    'step',
+    'accept',
+    'error',
+    'disabled',
+    'readonly',
+    'autofocus',
+    'autocomplete',
+    'inputmode',
+    'passwordrules',
+    'class',
+    '@change',
+    '@update:model-value',
+  ],
+  message: 'Place {{expected}} before {{actual}} on <{{component}}> to follow the input attribute order.',
+});
