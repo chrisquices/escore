@@ -181,6 +181,7 @@
   --shadow-surface: 0 4px 8px 0 oklch(22% var(--theme-chroma) var(--theme-hue));
 }
 
+:root:not([data-theme]), :root[data-theme=''],
 [data-theme='harmonia-noir'], [data-theme='selene-noir'], [data-theme='theia-noir'], [data-theme='asteria-noir'] {
   --theme-lightness: 10%;
   --theme-opacity: 0.55;
