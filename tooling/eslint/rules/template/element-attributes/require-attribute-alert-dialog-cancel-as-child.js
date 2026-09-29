@@ -1,8 +1,8 @@
 import requireElementAsChild from '../../../helpers/require-element-as-child.js';
 
 export default requireElementAsChild({
-  elements: ['DialogClose', 'dialog-close'],
-  within: ['DialogFooter', 'dialog-footer'],
+  elements: ['AlertDialogCancel', 'alert-dialog-cancel'],
+  within: ['AlertDialogFooter', 'alert-dialog-footer'],
   children: ['Button'],
   boundaries: ['Dialog', 'AlertDialog', 'alert-dialog'],
 });

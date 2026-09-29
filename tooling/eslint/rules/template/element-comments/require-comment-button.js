@@ -8,6 +8,8 @@ export default requireElementComment({
     'ComboboxTrigger',
     'ContextMenuTrigger',
     'DialogClose',
+    'AlertDialogCancel',
+    'AlertDialogAction',
     'DropdownMenuTrigger',
     'PopoverTrigger',
     'nav',
