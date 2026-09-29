@@ -5,7 +5,6 @@ import requireFieldStructureForm from './rules/template/element-placement/requir
 import requireIdForAssociationField from './rules/template/element-association/require-id-for-association-field.js';
 import forbidLabelInForm from './rules/template/element-placement/forbid-label-in-form.js';
 import enforceOneLinerDialogDescription from './rules/template/element-one-liners/enforce-one-liner-dialog-description.js';
-import enforceOneLinerAlertDialogDescription from './rules/template/element-one-liners/enforce-one-liner-alert-dialog-description.js';
 import enforceLayoutElement from './rules/template/element-one-liners/enforce-layout-element.js';
 import enforceSingleCallClickHandler from './rules/template/element-event-handlers/enforce-single-call-click-handler.js';
 import {createRequire} from 'node:module';
@@ -38,16 +37,12 @@ import requireIconContextMenuLabel from './rules/template/element-icons/require-
 import forbidConsecutiveBlankLines from './rules/general/forbid-consecutive-blank-lines.js';
 import enforceBlankLineAboveComment from './rules/general/enforce-blank-line-above-comment.js';
 import enforceBlankLineBelowDialogHeader from './rules/template/element-spacing/enforce-blank-line-below-dialog-header.js';
-import enforceBlankLineBelowAlertDialogHeader from './rules/template/element-spacing/enforce-blank-line-below-alert-dialog-header.js';
 import enforceBlankLineAboveDialogFooter from './rules/template/element-spacing/enforce-blank-line-above-dialog-footer.js';
-import enforceBlankLineAboveAlertDialogFooter from './rules/template/element-spacing/enforce-blank-line-above-alert-dialog-footer.js';
 import enforcePlacementDialog from './rules/template/element-placement/enforce-placement-dialog.js';
-import enforcePlacementAlertDialog from './rules/template/element-placement/enforce-placement-alert-dialog.js';
 import forbidOneLinerButton from './rules/template/element-one-liners/forbid-one-liner-button.js';
 import forbidOneLinerTableCell from './rules/template/element-one-liners/forbid-one-liner-table-cell.js';
 import forbidOneLinerTableHead from './rules/template/element-one-liners/forbid-one-liner-table-head.js';
 import requireCommentButton from './rules/template/element-comments/require-comment-button.js';
-import requireCommentAlert from './rules/template/element-comments/require-comment-alert.js';
 import requireCommentTabsContent from './rules/template/element-comments/require-comment-tabs-content.js';
 import requireCommentBadge from './rules/template/element-comments/require-comment-badge.js';
 import requireCommentCard from './rules/template/element-comments/require-comment-card.js';
@@ -56,10 +51,7 @@ import requireCommentContextMenuItem from './rules/template/element-comments/req
 import requireCommentContextMenuLabel from './rules/template/element-comments/require-comment-context-menu-label.js';
 import requireCommentContextMenuSeparator from './rules/template/element-comments/require-comment-context-menu-separator.js';
 import requireCommentDialog from './rules/template/element-comments/require-comment-dialog.js';
-import requireCommentAlertDialog from './rules/template/element-comments/require-comment-alert-dialog.js';
 import requireCommentDialogClose from './rules/template/element-comments/require-comment-dialog-close.js';
-import requireCommentAlertDialogCancel from './rules/template/element-comments/require-comment-alert-dialog-cancel.js';
-import requireCommentAlertDialogAction from './rules/template/element-comments/require-comment-alert-dialog-action.js';
 import requireCommentDropdownMenu from './rules/template/element-comments/require-comment-dropdown-menu.js';
 import requireCommentDropdownMenuItem from './rules/template/element-comments/require-comment-dropdown-menu-item.js';
 import requireCommentDropdownMenuSeparator from './rules/template/element-comments/require-comment-dropdown-menu-separator.js';
@@ -138,10 +130,7 @@ const escore = {
         'require-comment-context-menu-label': requireCommentContextMenuLabel,
         'require-comment-context-menu-separator': requireCommentContextMenuSeparator,
         'require-comment-dialog': requireCommentDialog,
-        'require-comment-alert-dialog': requireCommentAlertDialog,
         'require-comment-dialog-close': requireCommentDialogClose,
-        'require-comment-alert-dialog-cancel': requireCommentAlertDialogCancel,
-        'require-comment-alert-dialog-action': requireCommentAlertDialogAction,
         'require-comment-dropdown-menu': requireCommentDropdownMenu,
         'require-comment-dropdown-menu-item': requireCommentDropdownMenuItem,
         'require-comment-dropdown-menu-separator': requireCommentDropdownMenuSeparator,
@@ -163,17 +152,13 @@ const escore = {
         'forbid-one-liner-table-head': forbidOneLinerTableHead,
         'forbid-one-liner-button': forbidOneLinerButton,
         'require-comment-button': requireCommentButton,
-        'require-comment-alert': requireCommentAlert,
         'enforce-layout-element': enforceLayoutElement,
         'enforce-single-call-click-handler': enforceSingleCallClickHandler,
         'enforce-blank-line-above-comment': enforceBlankLineAboveComment,
         'forbid-consecutive-blank-lines': forbidConsecutiveBlankLines,
         'enforce-blank-line-below-dialog-header': enforceBlankLineBelowDialogHeader,
-        'enforce-blank-line-below-alert-dialog-header': enforceBlankLineBelowAlertDialogHeader,
         'enforce-blank-line-above-dialog-footer': enforceBlankLineAboveDialogFooter,
-        'enforce-blank-line-above-alert-dialog-footer': enforceBlankLineAboveAlertDialogFooter,
         'enforce-one-liner-dialog-description': enforceOneLinerDialogDescription,
-        'enforce-one-liner-alert-dialog-description': enforceOneLinerAlertDialogDescription,
         'require-attribute-dialog-processing': requireAttributeDialogProcessing,
         'require-attribute-alert-dialog-processing': requireAttributeAlertDialogProcessing,
         'require-attribute-dialog-dismissible': requireAttributeDialogDismissible,
@@ -183,7 +168,6 @@ const escore = {
         'require-attribute-dialog-close-as-child': requireAttributeDialogCloseAsChild,
         'require-attribute-alert-dialog-cancel-as-child': requireAttributeAlertDialogCancelAsChild,
         'enforce-placement-dialog': enforcePlacementDialog,
-        'enforce-placement-alert-dialog': enforcePlacementAlertDialog,
         'enforce-order-script': enforceOrderScript,
         'enforce-layout-inertia-request-options': enforceLayoutInertiaRequestOptions,
         'enforce-blank-line-above-inertia-request': enforceBlankLineAboveInertiaRequest,
@@ -344,10 +328,7 @@ export default defineConfigWithVueTs(
             'escore/require-comment-context-menu-label': 'error',
             'escore/require-comment-context-menu-separator': 'error',
             'escore/require-comment-dialog': 'error',
-            'escore/require-comment-alert-dialog': 'error',
             'escore/require-comment-dialog-close': 'error',
-            'escore/require-comment-alert-dialog-cancel': 'error',
-            'escore/require-comment-alert-dialog-action': 'error',
             'escore/require-comment-dropdown-menu': 'error',
             'escore/require-comment-dropdown-menu-item': 'error',
             'escore/require-comment-dropdown-menu-separator': 'error',
@@ -369,15 +350,11 @@ export default defineConfigWithVueTs(
             'escore/forbid-one-liner-table-head': 'error',
             'escore/forbid-one-liner-button': 'error',
             'escore/require-comment-button': 'error',
-            'escore/require-comment-alert': 'error',
             'escore/enforce-layout-element': 'error',
             'escore/enforce-single-call-click-handler': 'error',
             'escore/enforce-blank-line-below-dialog-header': 'error',
-            'escore/enforce-blank-line-below-alert-dialog-header': 'error',
             'escore/enforce-blank-line-above-dialog-footer': 'error',
-            'escore/enforce-blank-line-above-alert-dialog-footer': 'error',
             'escore/enforce-one-liner-dialog-description': 'error',
-            'escore/enforce-one-liner-alert-dialog-description': 'error',
             'escore/require-attribute-dialog-processing': 'error',
             'escore/require-attribute-alert-dialog-processing': 'error',
             'escore/require-attribute-dialog-dismissible': 'error',
@@ -387,7 +364,6 @@ export default defineConfigWithVueTs(
             'escore/require-attribute-dialog-close-as-child': 'error',
             'escore/require-attribute-alert-dialog-cancel-as-child': 'error',
             'escore/enforce-placement-dialog': 'error',
-            'escore/enforce-placement-alert-dialog': 'error',
             'escore/enforce-order-script': 'error',
             'escore/enforce-layout-inertia-request-options': 'error',
             'escore/enforce-blank-line-above-inertia-request': 'error',

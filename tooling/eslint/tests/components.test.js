@@ -4,6 +4,10 @@ import {createRequire} from 'node:module';
 import {join} from 'node:path';
 import test from 'node:test';
 import createComponentRules from '../helpers/create-component-rules.js';
+import accordionRules from '../rules/components/accordion.js';
+import alertRules from '../rules/components/alert.js';
+import alertDialogRules from '../rules/components/alert-dialog.js';
+import aspectRatioRules from '../rules/components/aspect-ratio.js';
 import emptyRules from '../rules/components/empty.js';
 
 // Dependencies belong to the consuming project, as they do in eslint.config.js.
@@ -66,26 +70,154 @@ test('valid Empty, optional media/content, and unrestricted leaf content', () =>
 test('missing optional parent does not require its children; present parent does', () => {
     const result = lint(empty('\n\n<EmptyContent />'));
     assert.equal(result.messages.length, 1);
-    assert.equal(result.messages[0].ruleId, 'escore/empty-must-have-required-children');
-    assert.match(result.messages[0].message, /missing direct <Button> child inside <EmptyContent>/);
+    assert.equal(result.messages[0].ruleId, 'escore/empty-must-follow-structure');
+    assert.equal(result.messages[0].message, 'Add <Button> directly inside <EmptyContent>. Preserve existing content and bindings.');
     assert.equal(lint(empty('\n\n<EmptyContent />'), {fix: true}).fixed, false);
 });
 
 test('wrappers cannot satisfy direct children and unexpected text is rejected', () => {
-    const result = lint(empty('', `<div>${header()}</div>`), {only: ['empty-must-have-required-children', 'empty-must-not-have-extra-children']});
-    assert.deepEqual(result.messages.map((message) => message.messageId).sort(), ['missing', 'unexpected']);
+    const result = lint(empty('', `<div>${header()}</div>`), {only: ['empty-must-follow-structure']});
+    assert.deepEqual(result.messages.map((message) => message.messageId).sort(), ['misplaced', 'missing', 'unexpected']);
     for (const content of ['loose text', '{{ value }}', '<Wrong />']) {
-        const messages = lint(empty(`\n${content}`), {only: ['empty-must-not-have-extra-children']}).messages;
+        const messages = lint(empty(`\n${content}`), {only: ['empty-must-follow-structure']}).messages;
         assert.equal(messages.length, 1);
         assert.equal(messages[0].messageId, 'unexpected');
     }
 });
 
-test('wrong order is separate from existence and is never automatically moved', () => {
+test('wrong order does not report missing children or automatically move content', () => {
     const reversed = header().replace(/(<EmptyTitle>.*<\/EmptyTitle>)\n    (<EmptyDescription>.*<\/EmptyDescription>)/, '$2\n    $1');
     const result = lint(empty('', reversed), {fix: true});
     assert.deepEqual(result.messages.map((message) => message.messageId), ['order']);
     assert.equal(result.fixed, false);
+});
+
+test('orphaned Alert, Empty, and Accordion children report placement without requiring a root', () => {
+    const cases = [
+        {
+            family: 'alert', rules: alertRules,
+            markup: '<section class="grid gap-4">\n<!-- Incorrect structure -->\n<AlertTitle>Title outside its parent</AlertTitle>\n<AlertDescription>Description outside its parent.</AlertDescription>\n</section>',
+            misplaced: [['AlertTitle', 'Alert'], ['AlertDescription', 'Alert']],
+        },
+        {
+            family: 'empty', rules: emptyRules,
+            markup: `<section class="space-y-4">
+    <h2>01 · Complete</h2>
+    <EmptyMedia variant="icon"><span>□</span></EmptyMedia>
+    <EmptyHeader>
+        <EmptyTitle>No projects yet</EmptyTitle>
+        <EmptyDescription>
+            Create a project to keep your work organized in one place.
+        </EmptyDescription>
+    </EmptyHeader>
+    <EmptyContent><button>Create project</button></EmptyContent>
+</section>`,
+            misplaced: [['EmptyMedia', 'EmptyHeader'], ['EmptyHeader', 'Empty'], ['EmptyContent', 'Empty']],
+        },
+        {
+            family: 'accordion', rules: accordionRules,
+            markup: '<section><AccordionItem value="first"><AccordionTrigger>Question</AccordionTrigger><AccordionContent>Answer</AccordionContent></AccordionItem></section>',
+            misplaced: [['AccordionItem', 'Accordion']],
+        },
+    ];
+    for (const {family, rules, markup, misplaced} of cases) {
+        const sourceCode = template(markup);
+        const result = lint(sourceCode, {rules, fix: true});
+        assert.equal(result.output, sourceCode, 'placement must never invent or move wrappers');
+        assert.equal(result.fixed, false);
+        assert.deepEqual(result.messages.map(({ruleId, messageId, message}) => ({ruleId, messageId, message})), misplaced.map(([child, parent]) => ({
+            ruleId: `escore/${family}-must-follow-structure`,
+            messageId: 'misplaced',
+            message: `Move <${child}> directly inside <${parent}>; currently inside <section>. Preserve its content and bindings.`,
+        })));
+    }
+});
+
+test('placement checks kebab names, template wrappers, and family children inside unrestricted leaves', () => {
+    for (const markup of [
+        '<empty-title>No results</empty-title>',
+        '<template v-if="visible"><empty-title>No results</empty-title></template>',
+    ]) {
+        const result = lint(template(markup), {only: ['empty-must-follow-structure']});
+        assert.deepEqual(result.messages.map((message) => message.messageId), ['misplaced']);
+        assert.match(result.messages[0].message, /Move <empty-title> directly inside <EmptyHeader>/);
+    }
+    const result = lint(empty('', header('<EmptyMedia />')), {only: ['empty-must-follow-structure']});
+    assert.deepEqual(result.messages.map((message) => message.messageId), ['misplaced']);
+    assert.match(result.messages[0].message, /Move <EmptyMedia> directly inside <EmptyHeader>; currently inside <EmptyTitle>/);
+});
+
+test('misplaced children have one placement error while extra occurrences still report unexpected children', () => {
+    const misplaced = lint(empty('\n<EmptyMedia />'));
+    assert.deepEqual(misplaced.messages.map((message) => message.messageId), ['misplaced']);
+    const duplicated = lint(empty('', header().replace('</EmptyHeader>', '<EmptyTitle>Duplicate</EmptyTitle></EmptyHeader>')));
+    assert.deepEqual(duplicated.messages.map((message) => message.messageId), ['unexpected']);
+});
+
+test('placement allows every declared parent for repeated names and repeatable entries', () => {
+    const rules = createComponentRules([entry('Panel', [
+        entry('PanelHeader', [entry('PanelLabel', undefined, ['required', 'repeatable'])]),
+        entry('PanelFooter', [entry('PanelLabel', undefined, ['optional'])]),
+    ])]);
+    const valid = template('<Panel><PanelHeader><PanelLabel /><PanelLabel /></PanelHeader><PanelFooter><PanelLabel /></PanelFooter></Panel>');
+    assert.deepEqual(lint(valid, {rules}).messages, []);
+    const result = lint(template('<section><PanelLabel /></section>'), {rules});
+    assert.deepEqual(result.messages.map((message) => message.messageId), ['misplaced']);
+    assert.match(result.messages[0].message, /directly inside <PanelHeader> or <PanelFooter>/);
+});
+
+test('placement keeps shared components and family roots usable elsewhere', () => {
+    assert.deepEqual(lint(template('<Button /><section><Button /></section>')).messages, []);
+    const rules = createComponentRules([entry('Panel', [entry('Panel', undefined, ['optional'])])]);
+    assert.deepEqual(lint(template('<Panel /><section><Panel><Panel /></Panel></section>'), {rules}).messages, []);
+});
+
+test('top-level means the file template, including for conditional and slot wrappers', () => {
+    const rules = createComponentRules([entry('Panel', undefined, ['required', 'top-level'])]);
+    assert.deepEqual(lint(template('<Panel /><PageContent />'), {rules}).messages, []);
+    for (const content of [
+        '<main><Panel /></main>',
+        '<template v-if="visible"><Panel /></template>',
+        '<Layout><template #default><Panel /></template></Layout>',
+        '<Teleport to="body"><Panel /></Teleport>',
+    ]) {
+        const markup = template(content);
+        const result = lint(markup, {rules, fix: true});
+        assert.equal(result.output, markup, 'placement fixes must preserve surrounding conditions and scope');
+        assert.equal(result.fixed, false);
+        assert.deepEqual(result.messages.map((message) => message.messageId), ['topLevel']);
+        assert.match(result.messages[0].message, /Move <Panel> directly inside the root <template>/);
+    }
+});
+
+test('last-in-template allows an unordered final group, mixed spelling, comments, and whitespace', () => {
+    const rules = createComponentRules([entry('SurfaceDialog', undefined, ['required', 'top-level', 'last-in-template'])]);
+    for (const content of [
+        '<PageContent />',
+        '<PageContent /><SurfaceDialog />',
+        '<PageContent /><Dialog /><SurfaceDialog id="b" /><surface-dialog id="a" />',
+        '<PageContent /><Dialog /><surface-dialog id="a" /><SurfaceDialog id="b" />',
+        '<SurfaceDialog v-if="first" /><!-- Alternative -->\n<surface-dialog v-else />\n<!-- Trailing comment -->\n',
+        '<SurfaceDialog v-for="item in items" :key="item.id" />',
+    ]) {
+        assert.deepEqual(lint(template(content), {rules}).messages, [], content);
+    }
+});
+
+test('last-in-template rejects later elements, text, and interpolations without moving anything', () => {
+    const rules = createComponentRules([entry('SurfaceDialog', undefined, ['required', 'top-level', 'last-in-template'])]);
+    for (const other of ['<PageContent />', '<Dialog />', 'Visible text', '{{ status }}']) {
+        for (const count of [1, 2]) {
+            const markup = template(`${'<SurfaceDialog />'.repeat(count)}${other}<SurfaceDialog />`);
+            const result = lint(markup, {rules, fix: true});
+            assert.equal(result.output, markup);
+            assert.equal(result.fixed, false);
+            assert.deepEqual(result.messages.map((message) => message.messageId), Array(count).fill('lastInTemplate'));
+            assert.match(result.messages[0].message, /Order among <SurfaceDialog> instances is unrestricted/);
+        }
+    }
+    const nested = lint(template('<main><SurfaceDialog /></main><PageContent />'), {rules});
+    assert.deepEqual(nested.messages.map((message) => message.messageId), ['topLevel'], 'fix placement before reporting template order');
 });
 
 test('duplicate components are matched by occurrence and extra occurrences are reported', () => {
@@ -112,6 +244,229 @@ test('optional repeated names reserve occurrences for required entries', () => {
     assert.equal(lint(template('<Panel />'), {rules}).messages.length, 1);
 });
 
+test('repeatable children allow one or more when required and zero or more when optional', () => {
+    for (const presence of ['required', 'optional']) {
+        const rules = createComponentRules([entry('Panel', [
+            entry('Item', [entry('Label')], [presence, 'repeatable']),
+        ])]);
+        for (const count of [0, 1, 4]) {
+            const markup = template(`<Panel>${'<Item><Label /></Item>'.repeat(count)}</Panel>`);
+            const result = lint(markup, {rules});
+            assert.deepEqual(result.messages.map((message) => message.messageId), count === 0 && presence === 'required' ? ['missing'] : []);
+        }
+        const result = lint(template('<Panel><Item><Label /></Item><Item /><Item><Wrong /></Item></Panel>'), {rules});
+        assert.deepEqual(result.messages.map((message) => message.messageId).sort(), ['missing', 'missing', 'unexpected']);
+    }
+});
+
+test('repeatable groups keep their declared position and do not accept wrappers', () => {
+    const rules = createComponentRules([entry('Panel', [
+        entry('Header'), entry('Item', undefined, ['required', 'repeatable']), entry('Footer'),
+    ])]);
+    assert.deepEqual(lint(template('<Panel><Header /><Item /><Item /><Footer /></Panel>'), {rules}).messages, []);
+    for (const content of ['<Header /><Item /><Footer /><Item />', '<Item /><Header /><Item /><Footer />']) {
+        const result = lint(template(`<Panel>${content}</Panel>`), {rules, fix: true});
+        assert.deepEqual(result.messages.map((message) => message.messageId), ['order']);
+        assert.equal(result.fixed, false);
+    }
+    const wrapped = lint(template('<Panel><Header /><div><Item /></div><Footer /></Panel>'), {rules});
+    assert.deepEqual(wrapped.messages.map((message) => message.messageId).sort(), ['missing', 'unexpected']);
+});
+
+test('repeatable entries reserve occurrences for later required entries of the same name', () => {
+    for (const presence of ['required', 'optional']) {
+        const rules = createComponentRules([entry('Panel', [
+            entry('Item', [entry('Label')], [presence, 'repeatable']),
+            entry('Item', [entry('Button')]),
+        ])]);
+        const result = lint(template('<Panel><Item><Button /></Item></Panel>'), {rules});
+        if (presence === 'optional') assert.deepEqual(result.messages, []);
+        else assert.ok(result.messages.some((message) => message.messageId === 'missing'));
+        for (const count of [1, 3]) {
+            const markup = template(`<Panel>${'<Item><Label /></Item>'.repeat(count)}<Item><Button /></Item></Panel>`);
+            assert.deepEqual(lint(markup, {rules}).messages, []);
+        }
+    }
+    const rules = createComponentRules([entry('Panel', [
+        entry('Item', [entry('Label')], ['required', 'repeatable']),
+        entry('Item', [entry('Button')], ['required', 'repeatable']),
+    ])]);
+    assert.deepEqual(lint(template('<Panel><Item><Label /></Item><Item><Label /></Item><Item><Button /></Item></Panel>'), {rules}).messages, []);
+});
+
+test('declared separators distinguish repeatable groups with the same name', () => {
+    const rules = createComponentRules([entry('Panel', [
+        entry('Item', [entry('Label')], ['optional', 'repeatable']),
+        entry('Divider'),
+        entry('Item', [entry('Button')], ['required', 'repeatable']),
+    ])]);
+    for (const prefix of ['', '<Item><Label /></Item>', '<Item><Label /></Item><Item><Label /></Item>']) {
+        const markup = template(`<Panel>${prefix}<Divider /><Item><Button /></Item><Item><Button /></Item></Panel>`);
+        assert.deepEqual(lint(markup, {rules}).messages, []);
+    }
+});
+
+test('blank lines surround whole repeatable groups and preserve gaps inside them', () => {
+    const rules = createComponentRules([entry('Panel', [
+        entry('Header'), blank(), entry('Item', undefined, ['optional', 'repeatable']), blank(), entry('Footer'),
+    ])]);
+    const markup = template('<Panel>\n<Header />\n<!-- Items -->\n<Item />\n<Item />\n<Footer />\n</Panel>');
+    const expected = markup.replace('<Header />\n', '<Header />\n\n').replace('<Item />\n<Footer />', '<Item />\n\n<Footer />');
+    assert.equal(fixed(markup, {rules}), expected);
+    assert.equal(fixed(template('<Panel>\n<Header />\n<Footer />\n</Panel>'), {rules}), template('<Panel>\n<Header />\n\n<Footer />\n</Panel>'));
+
+    const adjacentGroups = createComponentRules([entry('Panel', [
+        entry('Before', undefined, ['required', 'repeatable']), blank(), entry('After', undefined, ['required', 'repeatable']),
+    ])]);
+    assert.equal(fixed(template('<Panel>\n<Before />\n<Before />\n<After />\n<After />\n</Panel>'), {rules: adjacentGroups}), template('<Panel>\n<Before />\n<Before />\n\n<After />\n<After />\n</Panel>'));
+});
+
+test('comments and layout are checked separately for every repeated child', () => {
+    const rules = createComponentRules([entry('Panel', [
+        comment(), entry('Item', [source('Label', ['required', 'one-liner'])], ['required', 'repeatable']),
+    ])]);
+    const markup = template('<Panel>\n<Item><Label>\nFirst\n</Label></Item>\n<Item><Label>\nSecond\n</Label></Item>\n</Panel>');
+    const output = fixed(markup, {rules});
+    assert.ok(output.includes('<!-- First -->\n<Item><Label> First </Label></Item>'));
+    assert.ok(output.includes('<!-- Second -->\n<Item><Label> Second </Label></Item>'));
+});
+
+test('Accordion validates every repeated item and falls back to the next usable trigger', () => {
+    const markup = template(`<Accordion>
+    <AccordionItem value="first">
+        <AccordionTrigger>{{ heading }}</AccordionTrigger>
+        <AccordionContent>First answer</AccordionContent>
+    </AccordionItem>
+    <AccordionItem value="second">
+        <AccordionTrigger>
+            Second question
+        </AccordionTrigger>
+        <AccordionContent>Second answer</AccordionContent>
+    </AccordionItem>
+</Accordion>`);
+    const output = fixed(markup, {rules: accordionRules});
+    assert.ok(output.includes('<!-- Second question -->\n<Accordion>'));
+    assert.ok(output.includes('<AccordionTrigger>Second question</AccordionTrigger>'));
+    assert.equal((output.match(/<\/AccordionTrigger>\n\n        <AccordionContent>/g) ?? []).length, 2);
+    const missing = output.replace('        <AccordionContent>Second answer</AccordionContent>\n', '');
+    assert.deepEqual(lint(missing, {rules: accordionRules}).messages.map((message) => message.messageId), ['missing']);
+    assert.equal(lint(missing, {rules: accordionRules}).messages[0].message, 'Add <AccordionContent> directly inside <AccordionItem>, after <AccordionTrigger>. Preserve existing content and bindings.');
+    const backwards = output.replace('<AccordionTrigger>Second question</AccordionTrigger>\n\n        <AccordionContent>Second answer</AccordionContent>', '<AccordionContent>Second answer</AccordionContent>\n\n        <AccordionTrigger>Second question</AccordionTrigger>');
+    assert.deepEqual(lint(backwards, {rules: accordionRules}).messages.map((message) => message.messageId), ['order']);
+});
+
+test('controlled AlertDialog comments, header spacing, and one-liners settle with an optional icon', () => {
+    const rules = {...alertRules, ...alertDialogRules};
+    const markup = `<Button @click="isOpen = true">Open</Button>
+<AlertDialog :open="isOpen" @update:open="isOpen = $event">
+    <AlertDialogContent>
+        <AlertDialogHeader>
+            <AlertDialogTitle>Delete project?</AlertDialogTitle>
+            <AlertDialogDescription>
+                This cannot be undone.
+            </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction variant="destructive">Delete</AlertDialogAction>
+        </AlertDialogFooter>
+    </AlertDialogContent>
+</AlertDialog>`;
+    for (const withIcon of [false, true]) {
+        const content = withIcon
+            ? markup.replace('<AlertDialogHeader>\n', '<AlertDialogHeader>\n            <AlertDialogIcon />\n')
+            : markup;
+        const output = fixed(template(content), {rules});
+        assert.match(output, /<!-- Delete project\? -->\n<AlertDialog/);
+        assert.match(output, /<AlertDialogDescription>This cannot be undone\.<\/AlertDialogDescription>/);
+        assert.match(output, /<\/AlertDialogHeader>\n\n        <AlertDialogFooter>/);
+        assert.match(output, /<!-- Cancel -->\n            <AlertDialogCancel>/);
+        assert.match(output, /<!-- Delete -->\n            <AlertDialogAction/);
+        const missingDescription = output.replace('            <AlertDialogDescription>This cannot be undone.</AlertDialogDescription>\n', '');
+        assert.equal(lint(missingDescription, {rules}).messages[0].message, 'Add <AlertDialogDescription> directly inside <AlertDialogHeader>, after <AlertDialogTitle>. Preserve existing content and bindings.');
+
+        const nested = output.replace('<template>\n', '<template>\n<main>\n').replace('\n</template>', '\n</main>\n</template>');
+        assert.deepEqual(lint(nested, {rules}).messages.map((message) => message.messageId), ['topLevel']);
+        const followedByDialog = output.replace('\n</template>', '\n<Dialog />\n</template>');
+        assert.deepEqual(lint(followedByDialog, {rules}).messages.map((message) => message.messageId), ['lastInTemplate']);
+
+        for (const trigger of [
+            '<AlertDialogTrigger as-child><Button>Open</Button></AlertDialogTrigger>',
+            '<AlertDialogTrigger>Open</AlertDialogTrigger>',
+        ]) {
+            const banned = output.replace('    <AlertDialogContent>', `    ${trigger}\n    <AlertDialogContent>`);
+            const result = lint(banned, {rules, fix: true});
+            assert.equal(result.output, banned, 'the agent must preserve opener behavior when replacing the trigger');
+            assert.equal(result.fixed, false);
+            assert.deepEqual(result.messages.map((message) => message.messageId), ['forbidden']);
+            assert.match(result.messages[0].message, /Control <AlertDialog> with :open and @update:open/);
+        }
+    }
+});
+
+test('AlertDialogTrigger is forbidden outside the dialog too, with any as-child value or spelling', () => {
+    for (const name of ['AlertDialogTrigger', 'alert-dialog-trigger']) {
+        for (const attribute of ['', ' as-child', ' :as-child="false"']) {
+            const markup = template(`<section><${name}${attribute}><button type="button">Open</button></${name}></section>`);
+            const result = lint(markup, {rules: alertDialogRules, fix: true});
+            assert.equal(result.output, markup);
+            assert.deepEqual(result.messages.map((message) => message.ruleId), ['escore/alertdialog-must-follow-structure']);
+            assert.equal(result.messages[0].messageId, 'forbidden');
+            assert.equal(result.messages[0].message, `Do not use <${name}>. Control <AlertDialog> with :open and @update:open; keep the opener outside the dialog and preserve its behavior.`);
+        }
+    }
+});
+
+test('forbidden declarations are reusable template-wide bans and are never suggested as allowed children', () => {
+    const rules = createComponentRules([entry('Panel', [
+        entry('LegacyTrigger', undefined, ['forbidden']),
+        entry('PanelBody'),
+    ])]);
+    assert.deepEqual(lint(template('<Panel><PanelBody /></Panel>'), {rules}).messages, []);
+    const markup = template('<LegacyTrigger /><Panel><LegacyTrigger /><LegacyTrigger /><PanelBody /></Panel>');
+    const result = lint(markup, {rules, fix: true});
+    assert.equal(result.output, markup);
+    assert.deepEqual(result.messages.map((message) => message.messageId), ['forbidden', 'forbidden', 'forbidden']);
+    assert.match(result.messages[0].message, /Do not use <LegacyTrigger>; it is forbidden/);
+    const unexpected = lint(template('<Panel><Unknown /></Panel>'), {rules}).messages;
+    assert.deepEqual(unexpected.map((message) => message.messageId), ['missing', 'unexpected']);
+    assert.ok(unexpected.every((message) => !message.message.includes('LegacyTrigger')));
+});
+
+test('AlertDialog descendants need their declared parents even without the dialog root', () => {
+    const markup = template(`<section>
+    <AlertDialogHeader>
+        <AlertDialogTitle>Delete project?</AlertDialogTitle>
+        <AlertDialogDescription>This cannot be undone.</AlertDialogDescription>
+    </AlertDialogHeader>
+    <AlertDialogAction>Delete</AlertDialogAction>
+</section>`);
+    const result = lint(markup, {rules: {...alertRules, ...alertDialogRules}, fix: true});
+    assert.equal(result.output, markup);
+    assert.deepEqual(result.messages.map((message) => message.ruleId), [
+        'escore/alertdialog-must-follow-structure', 'escore/alertdialog-must-follow-structure',
+    ]);
+    assert.match(result.messages[0].message, /Move <AlertDialogHeader> directly inside <AlertDialogContent>/);
+    assert.match(result.messages[1].message, /Move <AlertDialogAction> directly inside <AlertDialogFooter>/);
+});
+
+test('AlertDialog root and action props are checked against their Vue source', () => {
+    const markup = template('<AlertDialog open="sometimes"><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete?</AlertDialogTitle><AlertDialogDescription>Confirm.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction variant="sometimes">Delete</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>');
+    const result = lint(markup, {rules: alertDialogRules, only: ['alertdialog-must-have-valid-props']});
+    assert.deepEqual(result.messages.map((message) => message.messageId), ['propValue', 'propValue']);
+    assert.match(result.messages[0].message, /Set open on <AlertDialog> to boolean; received "sometimes"/);
+    assert.match(result.messages[1].message, /Set variant on <AlertDialogAction> to .*"destructive".*received "sometimes"/);
+});
+
+test('Comment and BlankLine cannot be repeatable', () => {
+    assert.throws(() => createComponentRules([
+        entry('Comment', undefined, ['required', 'repeatable']), entry('Panel'),
+    ]), /Comment cannot.*be repeatable/);
+    assert.throws(() => createComponentRules([entry('Panel', [
+        entry('Header'), entry('BlankLine', undefined, ['required', 'repeatable']), entry('Footer'),
+    ])]), /BlankLine cannot.*be repeatable/);
+});
+
 test('matching supports kebab components without confusing Button and native button', () => {
     const kebab = empty().replaceAll('EmptyHeader', 'empty-header').replaceAll('EmptyTitle', 'empty-title').replaceAll('EmptyDescription', 'empty-description');
     assert.deepEqual(lint(kebab).messages, []);
@@ -126,9 +481,9 @@ test('multiple roots and nested family roots are checked separately', () => {
 <Empty>${header()}\n\n<EmptyContent /></Empty>`);
     assert.deepEqual(lint(sourceCode).messages.map((message) => message.messageId), ['missing']);
     const nested = empty('', header('<Empty />'));
-    const result = lint(nested, {only: ['empty-must-have-required-children']});
+    const result = lint(nested, {only: ['empty-must-follow-structure']});
     assert.equal(result.messages.length, 1);
-    assert.match(result.messages[0].message, /missing direct <EmptyHeader> child inside <Empty>/);
+    assert.equal(result.messages[0].message, 'Add <EmptyHeader> directly inside <Empty>. Preserve existing content and bindings.');
 });
 
 test('blank lines are fixed only between existing entries', () => {
@@ -186,6 +541,7 @@ test('missing source entries fall through without hiding structural violations',
     const result = lint(sourceCode, {fix: true});
     assert.match(result.output, /<!-- Fallback -->/);
     assert.deepEqual(result.messages.map((message) => message.messageId), ['missing']);
+    assert.equal(result.messages[0].message, 'Add <EmptyTitle> directly inside <EmptyHeader>, before <EmptyDescription>. Preserve existing content and bindings.');
 });
 
 test('comment sources follow definition order, not incorrect markup order', () => {
@@ -251,6 +607,21 @@ test('invalid definitions fail early with a useful path', () => {
         [entry('Panel', [entry('Header'), blank()])],
         [entry('Panel', [comment()])],
         [entry('Panel', [source('Comment'), entry('Header')])],
+        [entry('Panel', undefined, ['forbidden'])],
+        [entry('Panel', [entry('PanelTrigger', undefined, ['required', 'forbidden'])])],
+        [entry('Panel', [entry('PanelTrigger', undefined, ['optional', 'forbidden'])])],
+        [entry('Panel', [entry('PanelTrigger', undefined, ['forbidden', 'one-liner'])])],
+        [entry('Panel', [entry('PanelTrigger', undefined, ['forbidden', 'repeatable'])])],
+        [entry('Panel', [entry('PanelTrigger', [], ['forbidden'])])],
+        [entry('Panel', [entry('Comment', undefined, ['forbidden'])])],
+        [entry('Panel', [entry('BlankLine', undefined, ['forbidden'])])],
+        [entry('Panel', [comment(), entry('PanelTrigger', undefined, ['forbidden'])])],
+        [entry('Panel', [entry('PanelTrigger', undefined, ['forbidden']), blank(), entry('PanelBody')])],
+        [entry('Panel', [entry('PanelTrigger', undefined, ['forbidden']), entry('PanelBody', [entry('PanelTrigger')])])],
+        [entry('Comment', undefined, ['required', 'top-level']), entry('Panel')],
+        [entry('Panel', [entry('Header'), entry('BlankLine', undefined, ['required', 'last-in-template']), entry('Footer')])],
+        [entry('Panel', [entry('PanelHeader', undefined, ['required', 'top-level'])])],
+        [entry('Panel', [entry('PanelHeader', undefined, ['required', 'last-in-template'])])],
     ]) {
         assert.throws(() => createComponentRules(structure), /Invalid component structure at structure/);
     }
@@ -393,11 +764,11 @@ test('the shared configuration enables general rules globally and family rules f
         const enabled = new Set(config.flatMap((item) => Object.keys(item.rules ?? {}).filter((name) => name.startsWith('escore/'))));
         const generalScope = ['comment-must-have-blank-line-above', 'all-must-not-have-aria-attributes', 'all-must-not-have-title-attribute']
             .every((name) => config.some((item) => !item.files && item.rules?.['escore/' + name] === 'error'));
-        const componentScope = config.some((item) => item.files?.includes('**/*.vue') && item.rules?.['escore/empty-must-have-valid-comments'] === 'error');
+        const componentScope = ['empty', 'accordion', 'alert', 'alertdialog', 'aspectratio'].every((family) => config.some((item) => item.files?.includes('**/*.vue') && item.rules?.['escore/' + family + '-must-follow-structure'] === 'error'));
         console.log(JSON.stringify({registered: [...registered].sort(), enabled: [...enabled].sort(), generalScope, componentScope}));
     `], {cwd: projectDirectory, encoding: 'utf8'});
     const result = JSON.parse(output);
-    const expected = [...Object.keys(emptyRules), 'comment-must-have-blank-line-above', 'all-must-not-have-aria-attributes', 'all-must-not-have-title-attribute'].sort();
+    const expected = [...Object.keys(emptyRules), ...Object.keys(accordionRules), ...Object.keys(alertRules), ...Object.keys(alertDialogRules), ...Object.keys(aspectRatioRules), 'comment-must-have-blank-line-above', 'all-must-not-have-aria-attributes', 'all-must-not-have-title-attribute'].sort();
     assert.deepEqual(result.registered, expected);
     assert.deepEqual(result.enabled, expected.map((name) => `escore/${name}`));
     assert.equal(result.generalScope, true);

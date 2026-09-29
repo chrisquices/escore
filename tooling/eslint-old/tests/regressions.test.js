@@ -10,7 +10,6 @@ import forbidOneLinerTableHead from '../rules/template/element-one-liners/forbid
 import forbidOneLinerTableCell from '../rules/template/element-one-liners/forbid-one-liner-table-cell.js';
 import requireCommentButton from '../rules/template/element-comments/require-comment-button.js';
 import requireCommentTableHead from '../rules/template/element-comments/require-comment-table-head.js';
-import requireCommentAlert from '../rules/template/element-comments/require-comment-alert.js';
 import requireCommentDialog from '../rules/template/element-comments/require-comment-dialog.js';
 
 // Resolve the consuming project's dependencies, just like the shared config.
@@ -323,18 +322,6 @@ test('comments are not inferred from dynamic text or combined conditional and re
     const source = template(`<Button ${directive}>Fallback</Button>`);
     assert.equal(lint(requireCommentButton, source, { fix: true }).output, source);
   }
-});
-
-test('distinct descendant labels remain alternatives, including conditional source roots', () => {
-  const markup = '<Alert><AlertTitle v-if="first">First <strong>choice</strong></AlertTitle><AlertTitle v-else>Second choice</AlertTitle></Alert>';
-  for (const label of ['First choice', 'Second choice']) {
-    assert.deepEqual(lint(requireCommentAlert, template(`<!-- ${label} -->\n${markup}`)).messages, []);
-  }
-  const source = template(markup);
-  const result = lint(requireCommentAlert, source, { fix: true });
-  assert.equal(result.output, source);
-  assert.equal(result.fixed, false);
-  assert.equal(result.messages.length, 1);
 });
 
 test('dialog title casing respects Unicode words, combining marks, separators, and suffixes', () => {

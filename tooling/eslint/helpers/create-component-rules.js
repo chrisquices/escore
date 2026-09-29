@@ -2,14 +2,48 @@ import {compileStructure, matchesComponent, matchStructure, walkStructure} from 
 import {checkComment} from './component-comments.js';
 import {checkSpacing} from './component-spacing.js';
 import {checkLayout} from './component-layout.js';
+import {checkProps} from './component-props.js';
 
 // One definition produces independently configurable rules for each concern.
-export default function createComponentRules(structure) {
+export default function createComponentRules(structure, {forbiddenMessage} = {}) {
     const root = compileStructure(structure);
     const family = root.name.toLowerCase();
     const analyses = new WeakMap();
+    const allowedParents = new Map();
+    const forbidden = new Set();
+    const pending = [root];
 
-    function createRule(description, messages, check, fixable, type = fixable === 'whitespace' ? 'layout' : 'problem') {
+    for (const parent of pending) {
+        for (const child of parent.children ?? []) {
+            if (child.special) continue;
+            if (child.forbidden) {
+                forbidden.add(child.name);
+                continue;
+            }
+            pending.push(child);
+
+            // Family children follow the root's name; shared components stay usable elsewhere.
+            // The root itself can appear anywhere, including inside another family instance.
+            if (child.name === root.name || !child.name.startsWith(root.name)) continue;
+
+            if (!allowedParents.has(child.name)) allowedParents.set(child.name, new Set());
+            allowedParents.get(child.name).add(parent.name);
+        }
+    }
+
+    function misplacedParents(node) {
+        for (const [name, parents] of allowedParents) {
+            if (!matchesComponent(node, name)) continue;
+            if (![...parents].some((parent) => matchesComponent(node.parent, parent))) return parents;
+            break;
+        }
+    }
+
+    function createRule(description, messages, check, {
+        fixable,
+        type = fixable === 'whitespace' ? 'layout' : 'problem',
+        checkElement,
+    } = {}) {
         return {
             meta: {
                 type,
@@ -27,6 +61,7 @@ export default function createComponentRules(structure) {
 
                 return services.defineTemplateBodyVisitor({
                     VElement(node) {
+                        checkElement?.(context, node);
                         if (!matchesComponent(node, root.name)) return;
                         if (!instances.has(node)) instances.set(node, matchStructure(root, node));
                         for (const instance of walkStructure(instances.get(node))) check(context, instance);
@@ -37,6 +72,15 @@ export default function createComponentRules(structure) {
     }
 
     return {
+        [`${family}-must-have-valid-props`]: createRule(
+            `Validate ${root.name} family props against their component source.`,
+            {
+                propMissing: 'Add the required {{ prop }} prop to <{{ element }}>; its component source requires it.',
+                propValue: 'Set {{ prop }} on <{{ element }}> to {{ expected }}; received {{ actual }}.',
+            },
+            checkProps,
+        ),
+
         [`${family}-must-have-valid-comments`]: createRule(
             `Require valid comments within ${root.name}.`,
             {
@@ -45,36 +89,49 @@ export default function createComponentRules(structure) {
                 commentMismatch: 'Replace the comment above <{{ element }}> with <!-- {{ expected }} --> to match the first usable comment source.',
             },
             checkComment,
-            'code',
+            {fixable: 'code'},
         ),
 
-        [`${family}-must-have-required-children`]: createRule(
-            `Require declared direct children within ${root.name}.`,
+        [`${family}-must-follow-structure`]: createRule(
+            `Enforce declared parents, required children, allowed children, and child order for ${root.name}.`,
             {
-                missing: 'Add the missing direct <{{ child }}> child inside <{{ parent }}> at structure position {{ position }}. Preserve existing content and bindings.',
+                forbidden: forbiddenMessage ?? 'Do not use <{{ element }}>; it is forbidden. Replace it while preserving its content and behavior.',
+                topLevel: 'Move <{{ element }}> directly inside the root <template>, outside all wrappers. Preserve its conditions, bindings, and behavior.',
+                lastInTemplate: 'Move <{{ element }}> after all other root <template> children. Order among <{{ root }}> instances is unrestricted. Preserve conditions and bindings.',
+                misplaced: 'Move <{{ element }}> directly inside {{ expected }}; currently inside {{ actual }}. Preserve its content and bindings.',
+                missing: 'Add <{{ child }}> directly inside <{{ parent }}>{{ placement }}. Preserve existing content and bindings.',
+                unexpected: 'Unexpected {{ actual }} directly inside <{{ parent }}>. Move or remove it to match the declared children: {{ expected }}. Preserve existing behavior.',
+                order: 'Reorder the direct children of <{{ parent }}> as: {{ expected }}. Preserve their content and bindings.',
             },
             (context, instance) => {
                 for (const child of instance.missing) {
+                    const siblings = instance.entry.children;
+                    const index = siblings.indexOf(child);
+                    const before = instance.children.findLast((sibling) => siblings.indexOf(sibling.entry) < index);
+                    const after = instance.children.find((sibling) => siblings.indexOf(sibling.entry) > index);
+                    const anchor = before ?? after;
+                    let placement = '';
+
+                    if (anchor && !instance.outOfOrder) {
+                        placement = `, ${before ? 'after' : 'before'} <${anchor.node.rawName}>`;
+                        if (instance.children.filter((sibling) => sibling.entry.name === anchor.entry.name).length > 1) {
+                            placement += ` at line ${anchor.node.loc.start.line}, column ${anchor.node.loc.start.column + 1}`;
+                        }
+                    }
+
                     context.report({
                         loc: instance.node.startTag.loc,
                         messageId: 'missing',
                         data: {
                             parent: instance.node.rawName,
                             child: child.name,
-                            position: child.path,
+                            placement,
                         },
                     });
                 }
-            },
-        ),
-
-        [`${family}-must-not-have-extra-children`]: createRule(
-            `Enforce allowed direct children within ${root.name}.`,
-            {
-                unexpected: 'Unexpected {{ actual }} directly inside <{{ parent }}>. Move or remove it to match the declared children: {{ expected }}. Preserve existing behavior.',
-            },
-            (context, instance) => {
                 for (const child of instance.unexpected) {
+                    // The element visitor gives misplaced family children one specific repair.
+                    if (misplacedParents(child) || [...forbidden].some((name) => matchesComponent(child, name))) continue;
                     context.report({
                         loc: child.startTag?.loc ?? child.loc,
                         messageId: 'unexpected',
@@ -84,21 +141,12 @@ export default function createComponentRules(structure) {
                                 ? `<${child.rawName}>`
                                 : 'text or an interpolation',
                             expected: instance.entry.children
-                                .filter((entry) => !entry.special)
+                                .filter((entry) => !entry.special && !entry.forbidden)
                                 .map((entry) => `<${entry.name}>`)
                                 .join(', ') || 'none',
                         },
                     });
                 }
-            },
-        ),
-
-        [`${family}-must-follow-child-order`]: createRule(
-            `Enforce declared child order within ${root.name}.`,
-            {
-                order: 'Reorder the direct children of <{{ parent }}> as: {{ expected }}. Preserve their content and bindings.',
-            },
-            (context, instance) => {
                 if (!instance.outOfOrder) return;
 
                 context.report({
@@ -112,6 +160,58 @@ export default function createComponentRules(structure) {
                     },
                 });
             },
+            {
+                checkElement(context, node) {
+                    if (matchesComponent(node, root.name)) {
+                        const templateBody = context.sourceCode.ast.templateBody;
+                        if (node.parent !== templateBody) {
+                            if (root.topLevel) context.report({
+                                loc: node.startTag.loc,
+                                messageId: 'topLevel',
+                                data: {element: node.rawName},
+                            });
+                            return;
+                        }
+
+                        if (root.lastInTemplate && templateBody.children.slice(templateBody.children.indexOf(node) + 1).some((child) => (
+                            child.type !== 'VComment' && child.type !== 'VHTMLComment'
+                            && !(child.type === 'VText' && !child.value.trim())
+                            && !matchesComponent(child, root.name)
+                        ))) {
+                            context.report({
+                                loc: node.startTag.loc,
+                                messageId: 'lastInTemplate',
+                                data: {element: node.rawName, root: root.name},
+                            });
+                        }
+                        return;
+                    }
+
+                    if ([...forbidden].some((name) => matchesComponent(node, name))) {
+                        context.report({
+                            loc: node.startTag.loc,
+                            messageId: 'forbidden',
+                            data: {element: node.rawName, root: root.name},
+                        });
+                        return;
+                    }
+
+                    const parents = misplacedParents(node);
+                    if (!parents) return;
+
+                    context.report({
+                        loc: node.startTag.loc,
+                        messageId: 'misplaced',
+                        data: {
+                            element: node.rawName,
+                            expected: [...parents].map((parent) => `<${parent}>`).join(' or '),
+                            actual: node.parent?.type === 'VElement'
+                                ? `<${node.parent.rawName}>`
+                                : 'the template root',
+                        },
+                    });
+                },
+            },
         ),
 
         [`${family}-must-have-required-blank-lines`]: createRule(
@@ -120,7 +220,7 @@ export default function createComponentRules(structure) {
                 spacing: 'Keep exactly one blank line between <{{ before }}> and <{{ after }}>, before any leading comments attached to <{{ after }}>.',
             },
             checkSpacing,
-            'whitespace',
+            {fixable: 'whitespace'},
         ),
 
         [`${family}-must-follow-line-layout`]: createRule(
@@ -130,8 +230,7 @@ export default function createComponentRules(structure) {
                 multiLine: 'Put the opening tag, content, and closing tag of <{{ element }}> on separate lines. Preserve text and bindings.',
             },
             checkLayout,
-            'code',
-            'layout',
+            {fixable: 'code', type: 'layout'},
         ),
     };
 }

@@ -8,7 +8,12 @@ export function checkSpacing(context, instance) {
     if (!tokenStore) return;
 
     const entries = instance.entry.children;
-    const matched = new Map(instance.children.map((child) => [child.entry, child.node]));
+    const matched = new Map();
+    for (const child of instance.children) {
+        const group = matched.get(child.entry);
+        if (group) group.last = child.node;
+        else matched.set(child.entry, {first: child.node, last: child.node});
+    }
     const checked = new Set();
 
     for (const [index, entry] of entries.entries()) {
@@ -18,8 +23,8 @@ export function checkSpacing(context, instance) {
         // No trailing gap when all following optional components are absent.
         if (!before || !after) continue;
 
-        const left = matched.get(before);
-        const right = matched.get(after);
+        const left = matched.get(before).last;
+        const right = matched.get(after).first;
         if (checked.has(right)) continue;
         checked.add(right);
 
