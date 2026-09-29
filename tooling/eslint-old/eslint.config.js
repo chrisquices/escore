@@ -1,11 +1,9 @@
 import requireLabelInput from './rules/template/element-association/require-label-input.js';
-import emptyRules from './rules/components/empty.js';
 import requirePlacementFieldContent from './rules/template/element-placement/require-placement-field-content.js';
 import requirePlacementFieldLabel from './rules/template/element-placement/require-placement-field-label.js';
 import requireFieldStructureForm from './rules/template/element-placement/require-field-structure-form.js';
 import requireIdForAssociationField from './rules/template/element-association/require-id-for-association-field.js';
 import forbidLabelInForm from './rules/template/element-placement/forbid-label-in-form.js';
-import enforceOneLinerEmptyDescription from './rules/template/element-one-liners/enforce-one-liner-empty-description.js';
 import enforceOneLinerDialogDescription from './rules/template/element-one-liners/enforce-one-liner-dialog-description.js';
 import enforceOneLinerAlertDialogDescription from './rules/template/element-one-liners/enforce-one-liner-alert-dialog-description.js';
 import enforceLayoutElement from './rules/template/element-one-liners/enforce-layout-element.js';
@@ -65,7 +63,6 @@ import requireCommentAlertDialogAction from './rules/template/element-comments/r
 import requireCommentDropdownMenu from './rules/template/element-comments/require-comment-dropdown-menu.js';
 import requireCommentDropdownMenuItem from './rules/template/element-comments/require-comment-dropdown-menu-item.js';
 import requireCommentDropdownMenuSeparator from './rules/template/element-comments/require-comment-dropdown-menu-separator.js';
-import requireCommentEmpty from './rules/template/element-comments/require-comment-empty.js';
 import requireCommentField from './rules/template/element-comments/require-comment-field.js';
 import requireCommentFieldSet from './rules/template/element-comments/require-comment-field-set.js';
 import requireCommentPageSection from './rules/template/element-comments/require-comment-page-section.js';
@@ -110,7 +107,6 @@ import forbidAttributeAria from './rules/template/element-attributes/forbid-attr
 
 const escore = {
     rules: {
-        ...emptyRules,
         'require-label-input': requireLabelInput,
         'require-placement-field-content': requirePlacementFieldContent,
         'require-placement-field-label': requirePlacementFieldLabel,
@@ -149,7 +145,6 @@ const escore = {
         'require-comment-dropdown-menu': requireCommentDropdownMenu,
         'require-comment-dropdown-menu-item': requireCommentDropdownMenuItem,
         'require-comment-dropdown-menu-separator': requireCommentDropdownMenuSeparator,
-        'require-comment-empty': requireCommentEmpty,
         'require-comment-field': requireCommentField,
         'require-comment-field-set': requireCommentFieldSet,
         'require-comment-page-section': requireCommentPageSection,
@@ -179,7 +174,6 @@ const escore = {
         'enforce-blank-line-above-alert-dialog-footer': enforceBlankLineAboveAlertDialogFooter,
         'enforce-one-liner-dialog-description': enforceOneLinerDialogDescription,
         'enforce-one-liner-alert-dialog-description': enforceOneLinerAlertDialogDescription,
-        'enforce-one-liner-empty-description': enforceOneLinerEmptyDescription,
         'require-attribute-dialog-processing': requireAttributeDialogProcessing,
         'require-attribute-alert-dialog-processing': requireAttributeAlertDialogProcessing,
         'require-attribute-dialog-dismissible': requireAttributeDialogDismissible,
@@ -357,7 +351,6 @@ export default defineConfigWithVueTs(
             'escore/require-comment-dropdown-menu': 'error',
             'escore/require-comment-dropdown-menu-item': 'error',
             'escore/require-comment-dropdown-menu-separator': 'error',
-            'escore/require-comment-empty': 'error',
             'escore/require-comment-field': 'error',
             'escore/require-comment-field-set': 'error',
             'escore/require-comment-page-section': 'error',
@@ -385,7 +378,6 @@ export default defineConfigWithVueTs(
             'escore/enforce-blank-line-above-alert-dialog-footer': 'error',
             'escore/enforce-one-liner-dialog-description': 'error',
             'escore/enforce-one-liner-alert-dialog-description': 'error',
-            'escore/enforce-one-liner-empty-description': 'error',
             'escore/require-attribute-dialog-processing': 'error',
             'escore/require-attribute-alert-dialog-processing': 'error',
             'escore/require-attribute-dialog-dismissible': 'error',
@@ -412,13 +404,6 @@ export default defineConfigWithVueTs(
             'escore/require-placement-field-content': 'error',
             'escore/require-placement-field-label': 'error',
             'escore/require-field-structure-form': 'error',
-            'escore/enforce-children-empty': 'error',
-            'escore/enforce-children-emptyheader': 'error',
-            'escore/enforce-children-emptycontent': 'error',
-            'escore/require-empty-to-directly-have-emptyheader': 'error',
-            'escore/require-emptyheader-to-directly-have-emptytitle': 'error',
-            'escore/require-emptyheader-to-directly-have-emptydescription': 'error',
-            'escore/enforce-blank-line-above-emptycontent': 'error',
             'escore/require-attribute-button-type': 'error',
             'escore/require-attribute-button-variant': 'error',
             'escore/require-attribute-button-size': 'error',
