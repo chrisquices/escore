@@ -44,6 +44,19 @@ Within `rules/template/`:
 | `element-spacing/` | Whitespace and separation around elements. |
 | `element-association/` | Required relationships and consistency between related elements. |
 | `element-icons/` | Rules governing icons used within elements. |
+| `element-event-handlers/` | Rules governing event handlers declared on template elements. |
+
+## Before creating a rule
+
+Discuss new rules with the user before implementing them. Provide:
+
+- A recommendation for or against the rule, with reasoning, useful context, and tradeoffs.
+- The intended behavior and scope, including allowed/flagged examples and relevant exceptions.
+- The proposed filename, prefix and why it fits, and destination folder.
+- Whether it autofixes or only reports, what can be fixed safely, and any inference limits.
+- Relevant shared helpers and interactions with existing rules.
+
+Implement after approval. Honor approval already given for the agreed behavior; do not ask for it again.
 
 ## Adding a rule
 

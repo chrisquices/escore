@@ -8,6 +8,7 @@ import enforceOneLinerEmptyDescription from './rules/template/element-one-liners
 import enforceOneLinerDialogDescription from './rules/template/element-one-liners/enforce-one-liner-dialog-description.js';
 import enforceOneLinerAlertDialogDescription from './rules/template/element-one-liners/enforce-one-liner-alert-dialog-description.js';
 import enforceLayoutElement from './rules/template/element-one-liners/enforce-layout-element.js';
+import enforceSingleCallClickHandler from './rules/template/element-event-handlers/enforce-single-call-click-handler.js';
 import {createRequire} from 'node:module';
 import {join} from 'node:path';
 import {pathToFileURL} from 'node:url';
@@ -138,6 +139,7 @@ const escore = {
         'require-comment-button': requireCommentButton,
         'require-comment-alert': requireCommentAlert,
         'enforce-layout-element': enforceLayoutElement,
+        'enforce-single-call-click-handler': enforceSingleCallClickHandler,
         'enforce-blank-line-above-comment': enforceBlankLineAboveComment,
         'forbid-consecutive-blank-lines': forbidConsecutiveBlankLines,
         'enforce-blank-line-below-dialog-header': enforceBlankLineBelowDialogHeader,
@@ -339,6 +341,7 @@ export default defineConfigWithVueTs(
             'escore/require-comment-button': 'error',
             'escore/require-comment-alert': 'error',
             'escore/enforce-layout-element': 'error',
+            'escore/enforce-single-call-click-handler': 'error',
             'escore/enforce-blank-line-below-dialog-header': 'error',
             'escore/enforce-blank-line-below-alert-dialog-header': 'error',
             'escore/enforce-blank-line-above-dialog-footer': 'error',
