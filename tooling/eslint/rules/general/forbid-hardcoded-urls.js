@@ -82,7 +82,24 @@ export default {
       return binding && ((binding.name === 'useForm' && inertiaPackages.has(binding.source))
         || (binding.name === 'useInertiaPlusForm' && binding.source === 'escore-packages/inertia-plus'));
     };
-    const isFormMethodThis = (node) => {
+    const hasNativeFormMethod = (call, method) => {
+      if (!isFormFactory(call.callee)) return false;
+      if (method !== 'submit' || imported(call.callee).name === 'useForm') return true;
+
+      const definition = unwrapScriptExpression(call.arguments[1]);
+
+      // Inertia Plus definitions may replace submit with an application method
+      // whose arguments are not URLs. Unknown definitions cannot prove otherwise.
+      return definition?.type === 'ObjectExpression' && definition.properties.every((property) => {
+        if (property.type !== 'Property') return false;
+
+        const name = !property.computed && property.key.type === 'Identifier'
+          ? property.key.name
+          : property.key.type === 'Literal' ? String(property.key.value) : undefined;
+        return name !== undefined && name !== 'submit';
+      });
+    };
+    const isFormMethodThis = (node, method) => {
       let parent = node.parent;
 
       while (parent) {
@@ -93,7 +110,7 @@ export default {
           const call = definition?.parent;
 
           return definition?.type === 'ObjectExpression' && call?.type === 'CallExpression'
-            && call.arguments.includes(definition) && isFormFactory(call.callee);
+            && call.arguments.includes(definition) && hasNativeFormMethod(call, method);
         }
 
         parent = parent.parent;
@@ -101,7 +118,7 @@ export default {
 
       return false;
     };
-    const isInertiaReceiver = (expression, seen = new Set()) => {
+    const isInertiaReceiver = (expression, method, seen = new Set()) => {
       const node = unwrapScriptExpression(expression);
 
       if (!node) {
@@ -115,7 +132,7 @@ export default {
       }
 
       if (node.type === 'ThisExpression') {
-        return isFormMethodThis(node);
+        return isFormMethodThis(node, method);
       }
 
       if (node.type === 'MemberExpression' && node.object.type === 'ThisExpression'
@@ -124,7 +141,7 @@ export default {
       }
 
       if (node.type === 'CallExpression') {
-        return isFormFactory(node.callee);
+        return hasNativeFormMethod(node, method);
       }
 
       if (node.type === 'Identifier') {
@@ -139,7 +156,7 @@ export default {
           const definition = variable.defs.find((entry) => entry.type === 'Variable'
             && entry.parent.kind === 'const');
 
-          return definition ? isInertiaReceiver(definition.node.init, seen) : false;
+          return definition ? isInertiaReceiver(definition.node.init, method, seen) : false;
         }
       }
 
@@ -195,7 +212,7 @@ export default {
         const callee = unwrapScriptExpression(node.callee);
 
         if (callee?.type !== 'MemberExpression' || !requestMethods.has(propertyName(callee))
-          || !isInertiaReceiver(callee.object)) {
+          || !isInertiaReceiver(callee.object, propertyName(callee))) {
           return;
         }
 

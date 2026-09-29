@@ -49,6 +49,34 @@ const hasUnknownBindings = (attribute) => attribute.directive
     || (attribute.key.name.name === 'model' && attribute.key.argument
       && argumentName(attribute.key.argument) === undefined));
 
+const emittedKeys = (attribute) => {
+  if (!attribute.directive) return [normalize(attribute.key.name)];
+
+  const directive = attribute.key.name.name;
+  const argument = argumentName(attribute.key.argument);
+
+  if (directive === 'model') {
+    if (attribute.key.argument && argument === undefined) return [];
+
+    const prop = argument ?? 'modelValue';
+    const keys = [prop, `onUpdate:${prop}`];
+    if (attribute.key.modifiers.length) {
+      keys.push(argument === undefined ? 'modelModifiers' : `${argument}Modifiers`);
+    }
+    return keys.map(normalize);
+  }
+
+  if (directive === 'bind' && argument !== undefined) return [normalize(argument)];
+
+  if (directive === 'on' && argument !== undefined) {
+    const modifiers = attribute.key.modifiers.map((modifier) => modifier.name)
+      .filter((modifier) => ['once', 'capture', 'passive'].includes(modifier));
+    return [normalize(`on${argument}${modifiers.join('')}`)];
+  }
+
+  return [];
+};
+
 export default ({
   elements,
   order,
@@ -116,6 +144,17 @@ export default ({
             if (crossesUnknownBinding) {
               return null;
             }
+
+            const replacements = new Map(ranked.map((entry, index) => [entry.attribute, sorted[index].attribute]));
+            const positions = new Map(attributes.map((attribute, index) => [replacements.get(attribute) ?? attribute, index]));
+            const keys = attributes.map(emittedKeys);
+            const reversesSharedBinding = attributes.some((attribute, index) => attributes.slice(index + 1)
+              .some((other, offset) => positions.get(attribute) > positions.get(other)
+                && keys[index].some((key) => keys[index + offset + 1].includes(key))));
+
+            // v-model also emits a prop and an update listener. Reordering either
+            // against an explicit binding can change precedence or handler order.
+            if (reversesSharedBinding) return null;
 
             // Replace whole attribute tokens, never reconstruct their values or
             // copy surrounding markup. Unlisted attributes stay in their slots.

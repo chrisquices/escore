@@ -66,7 +66,7 @@ This document defines the controlling protocol for every agent action and respon
 ### Code Quality
 
 - After each completed set of code changes, run `composer quality:fix` from the affected project's root before the final response.
-- Do not fix reported violations, the goal of this step is to trigger the auto-fixable violations.
+- Do not fix reported violations unless the user asked you to fix violations/findings.
 - If the script is missing or the command cannot run, report that explicitly.
 
 ---

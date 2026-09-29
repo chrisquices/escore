@@ -60,6 +60,9 @@ import requireAttributeButtonType from './rules/template/element-attributes/requ
 import requireAttributeButtonSize from './rules/template/element-attributes/require-attribute-button-size.js';
 import requireAttributeButtonVariant from './rules/template/element-attributes/require-attribute-button-variant.js';
 import enforceAttributeOrderInput from './rules/template/element-attributes-order/enforce-attribute-order-input.js';
+import enforceAttributeOrderDialog from './rules/template/element-attributes-order/enforce-attribute-order-dialog.js';
+import enforceAttributeLayoutInput from './rules/template/element-attributes-layout/enforce-attribute-layout-input.js';
+import enforceAttributeLayoutDialog from './rules/template/element-attributes-layout/enforce-attribute-layout-dialog.js';
 import requireAttributeInputId from './rules/template/element-attributes/require-attribute-input-id.js';
 import requireAttributeInputType from './rules/template/element-attributes/require-attribute-input-type.js';
 import forbidNativeLabel from './rules/template/element-native/forbid-native-label.js';
@@ -146,6 +149,9 @@ const escore = {
         'require-attribute-input-type': requireAttributeInputType,
         'require-attribute-input-id': requireAttributeInputId,
         'enforce-attribute-order-input': enforceAttributeOrderInput,
+        'enforce-attribute-order-dialog': enforceAttributeOrderDialog,
+        'enforce-attribute-layout-input': enforceAttributeLayoutInput,
+        'enforce-attribute-layout-dialog': enforceAttributeLayoutDialog,
         'require-icon-context-menu-item': requireIconContextMenuItem,
         'require-icon-context-menu-label': requireIconContextMenuLabel,
     },
@@ -333,6 +339,9 @@ export default defineConfigWithVueTs(
             'escore/require-attribute-input-type': 'error',
             'escore/require-attribute-input-id': 'error',
             'escore/enforce-attribute-order-input': 'error',
+            'escore/enforce-attribute-order-dialog': 'error',
+            'escore/enforce-attribute-layout-input': 'error',
+            'escore/enforce-attribute-layout-dialog': 'error',
             'escore/forbid-attribute-aria': 'error',
             'escore/forbid-attribute-title': 'error',
             'escore/forbid-native-label': 'error',

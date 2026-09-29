@@ -1,5 +1,7 @@
 // Shared multiline element structure and boundary fixes; attribute formatting is preserved.
 
+import { preservesElementWhitespace } from './enforce-element-one-liner.js';
+
 export default ({ elements, message = 'Keep <{{ component }}> opening tag, content, and closing tag on separate lines.' }) => ({
   meta: {
     type: 'layout',
@@ -39,6 +41,8 @@ export default ({ elements, message = 'Keep <{{ component }}> opening tag, conte
           messageId: 'newline',
           data: { component: node.rawName },
           fix(fixer) {
+            if (preservesElementWhitespace(node)) return null;
+
             const indent = indentation(node);
             const parentIndent = node.parent?.type === 'VElement' ? indentation(node.parent) : '';
             const indentUnit = indent.startsWith(parentIndent) && indent.length > parentIndent.length

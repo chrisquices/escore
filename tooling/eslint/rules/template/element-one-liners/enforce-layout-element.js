@@ -108,6 +108,8 @@ const createElementLayoutRule = ({ components, exclude = [], excludeTextOnly = [
 export default createElementLayoutRule({
   excludeTextOnly: [
     'Button', 'button',
+    // Attribute-layout rules own these opening tags, including paired tags.
+    'Input', 'input', 'Dialog',
     'DialogDescription', 'dialog-description', 'EmptyDescription', 'empty-description',
   ],
   exclude: ['TableHead', 'table-head', 'TableCell', 'table-cell'],

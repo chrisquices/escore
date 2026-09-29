@@ -261,6 +261,21 @@ const requireFormName = {
 // Autofix whitespace only; preserve comments and multiline token contents.
 // -----------------------------------------------------------------------------
 
+function hasMultilinePrefixBody(sourceCode, node, end) {
+  if (!node || node.range[0] >= end) return false;
+
+  // Newlines can terminate statements, class fields, and type members. Only
+  // inspect the prefix; the definition body itself is not being flattened.
+  if (['BlockStatement', 'ClassBody', 'StaticBlock', 'TSTypeLiteral',
+    'TSInterfaceBody', 'TSModuleBlock'].includes(node.type)
+    && node.loc.start.line !== node.loc.end.line) return true;
+
+  return (sourceCode.visitorKeys[node.type] ?? []).some((key) => {
+    const children = Array.isArray(node[key]) ? node[key] : [node[key]];
+    return children.some((child) => hasMultilinePrefixBody(sourceCode, child, end));
+  });
+}
+
 const requireSingleLineOpening = {
   meta: {
     type: 'layout',
@@ -291,6 +306,8 @@ const requireSingleLineOpening = {
           node,
           messageId: 'opening',
           fix(fixer) {
+            if (hasMultilinePrefixBody(sourceCode, start, opening.range[0])) return null;
+
             const tokens = sourceCode.getTokens(start, { includeComments: true })
               .filter((token) => token.range[1] <= opening.range[1]);
 

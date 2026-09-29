@@ -216,17 +216,22 @@ export default ({ elements, ...options } = {}) => ({
 
       return false;
     };
+    const hasUncertainText = (element, root) => element.rawName === 'slot'
+      || element.startTag.attributes.some((attribute) => attribute.directive
+        && (['text', 'html'].includes(attribute.key.name.name)
+          || (element !== root && ['if', 'else-if', 'else', 'for', 'show'].includes(attribute.key.name.name))));
     const getLiteralTexts = (element) => {
-      const literalTexts = new Set();
+      const fragments = [];
       let hasDynamicText = false;
       const collectLiteralTexts = (currentElement) => {
+        if (hasUncertainText(currentElement, element)) {
+          hasDynamicText = true;
+          return;
+        }
+
         for (const child of currentElement.children) {
           if (child.type === 'VText') {
-            const text = child.value.replace(/\s+/g, ' ').trim();
-
-            if (text) {
-              literalTexts.add(text);
-            }
+            fragments.push(child.value);
           } else if (child.type === 'VExpressionContainer') {
             hasDynamicText = true;
           } else if (child.type === 'VElement') {
@@ -237,7 +242,9 @@ export default ({ elements, ...options } = {}) => ({
 
       collectLiteralTexts(element);
 
-      return hasDynamicText ? [] : [...literalTexts];
+      // Join before normalizing so inline boundaries and repeated words survive.
+      const text = fragments.join('').replace(/\s+/g, ' ').trim();
+      return hasDynamicText || !text ? [] : [text];
     };
     const getDescendantLiteralTexts = (element, componentName) => {
       const literalTexts = new Set();
@@ -268,13 +275,14 @@ export default ({ elements, ...options } = {}) => ({
       const fragments = [];
       let hasDynamicText = false;
       const visit = (currentElement) => {
+        if (hasUncertainText(currentElement, element)) {
+          hasDynamicText = true;
+          return;
+        }
+
         for (const child of currentElement.children) {
           if (child.type === 'VText') {
-            const text = child.value.replace(/\s+/g, ' ').trim();
-
-            if (text) {
-              fragments.push(text);
-            }
+            fragments.push(child.value);
           } else if (child.type === 'VExpressionContainer') {
             hasDynamicText = true;
           } else if (child.type === 'VElement' && nativeHtmlElements.has(child.rawName)) {
@@ -290,7 +298,7 @@ export default ({ elements, ...options } = {}) => ({
         return undefined;
       }
 
-      return fragments.join(' ').replace(/\s+/g, ' ').trim();
+      return fragments.join('').replace(/\s+/g, ' ').trim() || undefined;
     };
     const getSourceText = (element, componentName) => {
       const sources = [];
@@ -322,7 +330,7 @@ export default ({ elements, ...options } = {}) => ({
         return text;
       }
 
-      return text.replace(/\b[\p{L}\p{N}]/gu, (character) => character.toUpperCase());
+      return text.replace(/(?<![\p{L}\p{N}\p{M}_])[\p{L}\p{N}]/gu, (character) => character.toUpperCase());
     };
 
     return parserServices.defineTemplateBodyVisitor({
