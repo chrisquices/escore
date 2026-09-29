@@ -1,4 +1,11 @@
 import requireLabelInput from './rules/template/element-association/require-label-input.js';
+import enforceChildrenEmpty from './rules/components/empty/enforce-children-empty.js';
+import enforceChildrenEmptyheader from './rules/components/empty/enforce-children-emptyheader.js';
+import enforceChildrenEmptycontent from './rules/components/empty/enforce-children-emptycontent.js';
+import requireEmptyToDirectlyHaveEmptyheader from './rules/components/empty/require-empty-to-directly-have-emptyheader.js';
+import requireEmptyheaderToDirectlyHaveEmptytitle from './rules/components/empty/require-emptyheader-to-directly-have-emptytitle.js';
+import requireEmptyheaderToDirectlyHaveEmptydescription from './rules/components/empty/require-emptyheader-to-directly-have-emptydescription.js';
+import enforceBlankLineAboveEmptycontent from './rules/components/empty/enforce-blank-line-above-emptycontent.js';
 import requirePlacementFieldContent from './rules/template/element-placement/require-placement-field-content.js';
 import requirePlacementFieldLabel from './rules/template/element-placement/require-placement-field-label.js';
 import requireFieldStructureForm from './rules/template/element-placement/require-field-structure-form.js';
@@ -110,6 +117,13 @@ import forbidAttributeTitle from './rules/template/element-attributes/forbid-att
 
 const escore = {
     rules: {
+        'enforce-children-empty': enforceChildrenEmpty,
+        'enforce-children-emptyheader': enforceChildrenEmptyheader,
+        'enforce-children-emptycontent': enforceChildrenEmptycontent,
+        'require-empty-to-directly-have-emptyheader': requireEmptyToDirectlyHaveEmptyheader,
+        'require-emptyheader-to-directly-have-emptytitle': requireEmptyheaderToDirectlyHaveEmptytitle,
+        'require-emptyheader-to-directly-have-emptydescription': requireEmptyheaderToDirectlyHaveEmptydescription,
+        'enforce-blank-line-above-emptycontent': enforceBlankLineAboveEmptycontent,
         'require-label-input': requireLabelInput,
         'require-placement-field-content': requirePlacementFieldContent,
         'require-placement-field-label': requirePlacementFieldLabel,
@@ -412,6 +426,13 @@ export default defineConfigWithVueTs(
             'escore/require-placement-field-content': 'error',
             'escore/require-placement-field-label': 'error',
             'escore/require-field-structure-form': 'error',
+            'escore/enforce-children-empty': 'error',
+            'escore/enforce-children-emptyheader': 'error',
+            'escore/enforce-children-emptycontent': 'error',
+            'escore/require-empty-to-directly-have-emptyheader': 'error',
+            'escore/require-emptyheader-to-directly-have-emptytitle': 'error',
+            'escore/require-emptyheader-to-directly-have-emptydescription': 'error',
+            'escore/enforce-blank-line-above-emptycontent': 'error',
             'escore/require-attribute-button-type': 'error',
             'escore/require-attribute-button-variant': 'error',
             'escore/require-attribute-button-size': 'error',

@@ -16,6 +16,8 @@ Keep the thing before the subject: `require-comment-alert.js`, `enforce-one-line
 
 Prefixes describe intent. Severity (`warn`/`error`) and autofix support are separate decisions; none of these prefixes guarantees an autofix.
 
+For component relationships, use `require-<parent>-to-directly-have-<child>.js` for immediate children, or `to-have` for descendants at any depth. Keep each component name together, without internal hyphens.
+
 ## Structure
 
 Paths below are relative to `tooling/eslint`.
@@ -27,6 +29,7 @@ Paths below are relative to `tooling/eslint`.
 | `rules/general/` | Rules spanning multiple code contexts or governing a file as a whole. |
 | `rules/script/` | Rules applying only inside Vue `<script>` and `<script setup>` sections. |
 | `rules/packages/` | Rules governing the use of specific packages and their APIs. |
+| `rules/components/<family>/` | Component-family definitions and atomic Vue template rules. |
 | `rules/template/` | Rules applying only inside Vue `<template>` sections, grouped by concern. |
 | `tests/` | Validation of rule behavior and autofix correctness. |
 
@@ -45,6 +48,10 @@ Within `rules/template/`:
 | `element-association/` | Required relationships and consistency between related elements. |
 | `element-icons/` | Rules governing icons used within elements. |
 | `element-event-handlers/` | Rules governing event handlers declared on template elements. |
+
+### Component families
+
+Component-family rules live in `rules/components/<family>/`. Each family's `structure.js` defines its relationships and layout; atomic rules enforce them. Keep required existence separate from allowed structure, and component-specific details in the family's files.
 
 ## Before creating a rule
 
