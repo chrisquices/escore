@@ -16,7 +16,7 @@ Keep the thing before the subject: `require-comment-alert.js`, `enforce-one-line
 
 Prefixes describe intent. Severity (`warn`/`error`) and autofix support are separate decisions; none of these prefixes guarantees an autofix.
 
-For component relationships, use `require-<parent>-to-directly-have-<child>.js` for immediate children, or `to-have` for descendants at any depth. Keep each component name together, without internal hyphens.
+For component relationship rule IDs, use `require-<parent>-to-directly-have-<child>` for immediate children, or `to-have` for descendants at any depth. Keep each component name together, without internal hyphens.
 
 ## Structure
 
@@ -29,7 +29,7 @@ Paths below are relative to `tooling/eslint`.
 | `rules/general/` | Rules spanning multiple code contexts or governing a file as a whole. |
 | `rules/script/` | Rules applying only inside Vue `<script>` and `<script setup>` sections. |
 | `rules/packages/` | Rules governing the use of specific packages and their APIs. |
-| `rules/components/<family>/` | Component-family definitions and atomic Vue template rules. |
+| `rules/components/<family>.js` | A component family's structure and independent Vue template rules in one file. |
 | `rules/template/` | Rules applying only inside Vue `<template>` sections, grouped by concern. |
 | `tests/` | Validation of rule behavior and autofix correctness. |
 
@@ -51,7 +51,7 @@ Within `rules/template/`:
 
 ### Component families
 
-Component-family rules live in `rules/components/<family>/`. Each family's `structure.js` defines its relationships and layout; atomic rules enforce them. Keep required existence separate from allowed structure, and component-specific details in the family's files.
+Each `rules/components/<family>.js` contains the family's structure definition and separately named rules. Keep required existence, allowed structure, and spacing independent; shared helpers implement the checks and fixes.
 
 ## Before creating a rule
 
@@ -76,9 +76,9 @@ Implement after approval. Honor approval already given for the agreed behavior; 
 
 ## Adding a rule
 
-1. Create one file per atomic rule in the relevant group. Keep attribute existence, order, and layout separate. Package rules stay flat inside `rules/packages/<package>/`, without script/template subfolders; shared helpers belong in `helpers/`.
+1. Keep rules atomic. Component-family rules share `rules/components/<family>.js`; otherwise create one file per rule. Keep attribute existence, order, and layout separate. Package rules stay flat inside `rules/packages/<package>/`, without script/template subfolders; shared helpers belong in `helpers/`.
 2. Reuse the corresponding helper. Component-specific files supply targets and conditions; shared behavior belongs in the helper. All one-liner rules use the shared one-liner foundations.
-3. Import the rule in `eslint.config.js`, register it under its filename stem, then enable `escore/<filename-stem>` in the appropriate file scope. Creating or registering a file alone does not enable it.
+3. Import and register rules in `eslint.config.js`, then enable `escore/<rule-id>` in the appropriate file scope. Use the filename stem as the ID for standalone rules; family files export a map of separate rule IDs. Creating or registering a file alone does not enable it.
 4. Write an actionable violation message: identify what failed, the expected result, and how to repair it. Include actual/expected values when useful; descriptions alone are not enough.
 
 ## Rule boundaries and fixes

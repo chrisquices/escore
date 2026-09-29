@@ -1,237 +1,36 @@
-import requireLabelInput from './rules/template/element-association/require-label-input.js';
-import enforceChildrenEmpty from './rules/components/empty/enforce-children-empty.js';
-import enforceChildrenEmptyheader from './rules/components/empty/enforce-children-emptyheader.js';
-import enforceChildrenEmptycontent from './rules/components/empty/enforce-children-emptycontent.js';
-import requireEmptyToDirectlyHaveEmptyheader from './rules/components/empty/require-empty-to-directly-have-emptyheader.js';
-import requireEmptyheaderToDirectlyHaveEmptytitle from './rules/components/empty/require-emptyheader-to-directly-have-emptytitle.js';
-import requireEmptyheaderToDirectlyHaveEmptydescription from './rules/components/empty/require-emptyheader-to-directly-have-emptydescription.js';
-import enforceBlankLineAboveEmptycontent from './rules/components/empty/enforce-blank-line-above-emptycontent.js';
-import requirePlacementFieldContent from './rules/template/element-placement/require-placement-field-content.js';
-import requirePlacementFieldLabel from './rules/template/element-placement/require-placement-field-label.js';
-import requireFieldStructureForm from './rules/template/element-placement/require-field-structure-form.js';
-import requireIdForAssociationField from './rules/template/element-association/require-id-for-association-field.js';
-import forbidLabelInForm from './rules/template/element-placement/forbid-label-in-form.js';
-import enforceOneLinerEmptyDescription from './rules/template/element-one-liners/enforce-one-liner-empty-description.js';
-import enforceOneLinerDialogDescription from './rules/template/element-one-liners/enforce-one-liner-dialog-description.js';
-import enforceOneLinerAlertDialogDescription from './rules/template/element-one-liners/enforce-one-liner-alert-dialog-description.js';
-import enforceLayoutElement from './rules/template/element-one-liners/enforce-layout-element.js';
-import enforceSingleCallClickHandler from './rules/template/element-event-handlers/enforce-single-call-click-handler.js';
+import {readdir} from 'node:fs/promises';
 import {createRequire} from 'node:module';
 import {join} from 'node:path';
 import {pathToFileURL} from 'node:url';
-import requireOptionsInertiaPlusForm from './rules/packages/inertia-plus/require-options-inertia-plus-form.js';
-import requireConstInertiaPlus from './rules/packages/inertia-plus/require-const-inertia-plus.js';
-import requireNameInertiaPlusForm from './rules/packages/inertia-plus/require-name-inertia-plus-form.js';
-import enforceOneLinerInertiaPlusOpening from './rules/packages/inertia-plus/enforce-one-liner-inertia-plus-opening.js';
-import requireDefinitionInertiaPlusForm from './rules/packages/inertia-plus/require-definition-inertia-plus-form.js';
-import requireSubmitInertiaPlusForm from './rules/packages/inertia-plus/require-submit-inertia-plus-form.js';
-import forbidExtraMethodsInertiaPlusForm from './rules/packages/inertia-plus/forbid-extra-methods-inertia-plus-form.js';
-import enforceMethodContextInertiaPlusForm from './rules/packages/inertia-plus/enforce-method-context-inertia-plus-form.js';
-import requireCallInertiaPlusBeforeSubmit from './rules/packages/inertia-plus/require-call-inertia-plus-before-submit.js';
-import requireProcessingGuardInertiaPlusSubmit from './rules/packages/inertia-plus/require-processing-guard-inertia-plus-submit.js';
-import requireOpenableInertiaPlusSurface from './rules/packages/inertia-plus/require-openable-inertia-plus-surface.js';
-import enforceBlankLineAboveInertiaPlusSubmit from './rules/packages/inertia-plus/enforce-blank-line-above-inertia-plus-submit.js';
-import enforceBlankLineAboveInertiaPlusBeforeSubmit from './rules/packages/inertia-plus/enforce-blank-line-above-inertia-plus-before-submit.js';
-import enforceOrderInertiaPlusFormMethods from './rules/packages/inertia-plus/enforce-order-inertia-plus-form-methods.js';
-import enforceConstProps from './rules/script/enforce-const-props.js';
-import forbidArrowFunction from './rules/script/forbid-arrow-function.js';
-import enforceOrderScript from './rules/script/enforce-order-script.js';
-import enforceLayoutInertiaRequestOptions from './rules/script/enforce-layout-inertia-request-options.js';
-import enforceBlankLineAboveInertiaRequest from './rules/script/enforce-blank-line-above-inertia-request.js';
-import requireCodeFoldingRegion from './rules/script/require-code-folding-region.js';
-import requireUsageCodeFoldingRegion from './rules/script/require-usage-code-folding-region.js';
-import forbidHardcodedUrls from './rules/general/forbid-hardcoded-urls.js';
-import requireIconContextMenuItem from './rules/template/element-icons/require-icon-context-menu-item.js';
-import requireIconContextMenuLabel from './rules/template/element-icons/require-icon-context-menu-label.js';
-import forbidConsecutiveBlankLines from './rules/general/forbid-consecutive-blank-lines.js';
-import enforceBlankLineAboveComment from './rules/general/enforce-blank-line-above-comment.js';
-import enforceBlankLineBelowDialogHeader from './rules/template/element-spacing/enforce-blank-line-below-dialog-header.js';
-import enforceBlankLineBelowAlertDialogHeader from './rules/template/element-spacing/enforce-blank-line-below-alert-dialog-header.js';
-import enforceBlankLineAboveDialogFooter from './rules/template/element-spacing/enforce-blank-line-above-dialog-footer.js';
-import enforceBlankLineAboveAlertDialogFooter from './rules/template/element-spacing/enforce-blank-line-above-alert-dialog-footer.js';
-import enforcePlacementDialog from './rules/template/element-placement/enforce-placement-dialog.js';
-import enforcePlacementAlertDialog from './rules/template/element-placement/enforce-placement-alert-dialog.js';
-import forbidOneLinerButton from './rules/template/element-one-liners/forbid-one-liner-button.js';
-import forbidOneLinerTableCell from './rules/template/element-one-liners/forbid-one-liner-table-cell.js';
-import forbidOneLinerTableHead from './rules/template/element-one-liners/forbid-one-liner-table-head.js';
-import requireCommentButton from './rules/template/element-comments/require-comment-button.js';
-import requireCommentAlert from './rules/template/element-comments/require-comment-alert.js';
-import requireCommentTabsContent from './rules/template/element-comments/require-comment-tabs-content.js';
-import requireCommentBadge from './rules/template/element-comments/require-comment-badge.js';
-import requireCommentCard from './rules/template/element-comments/require-comment-card.js';
-import requireCommentCombobox from './rules/template/element-comments/require-comment-combobox.js';
-import requireCommentContextMenuItem from './rules/template/element-comments/require-comment-context-menu-item.js';
-import requireCommentContextMenuLabel from './rules/template/element-comments/require-comment-context-menu-label.js';
-import requireCommentContextMenuSeparator from './rules/template/element-comments/require-comment-context-menu-separator.js';
-import requireCommentDialog from './rules/template/element-comments/require-comment-dialog.js';
-import requireCommentAlertDialog from './rules/template/element-comments/require-comment-alert-dialog.js';
-import requireCommentDialogClose from './rules/template/element-comments/require-comment-dialog-close.js';
-import requireCommentAlertDialogCancel from './rules/template/element-comments/require-comment-alert-dialog-cancel.js';
-import requireCommentAlertDialogAction from './rules/template/element-comments/require-comment-alert-dialog-action.js';
-import requireCommentDropdownMenu from './rules/template/element-comments/require-comment-dropdown-menu.js';
-import requireCommentDropdownMenuItem from './rules/template/element-comments/require-comment-dropdown-menu-item.js';
-import requireCommentDropdownMenuSeparator from './rules/template/element-comments/require-comment-dropdown-menu-separator.js';
-import requireCommentEmpty from './rules/template/element-comments/require-comment-empty.js';
-import requireCommentField from './rules/template/element-comments/require-comment-field.js';
-import requireCommentFieldSet from './rules/template/element-comments/require-comment-field-set.js';
-import requireCommentPageSection from './rules/template/element-comments/require-comment-page-section.js';
-import requireCommentPopover from './rules/template/element-comments/require-comment-popover.js';
-import requireCommentSeparator from './rules/template/element-comments/require-comment-separator.js';
-import requireCommentSidepanelHeader from './rules/template/element-comments/require-comment-sidepanel-header.js';
-import requireCommentSidepanelSectionHeader from './rules/template/element-comments/require-comment-sidepanel-section-header.js';
-import requireCommentStatCard from './rules/template/element-comments/require-comment-stat-card.js';
-import requireCommentTableEmpty from './rules/template/element-comments/require-comment-table-empty.js';
-import requireCommentTableHead from './rules/template/element-comments/require-comment-table-head.js';
-import requireCommentToggleGroupItem from './rules/template/element-comments/require-comment-toggle-group-item.js';
-import requireCommentButtonGroup from './rules/template/element-comments/require-comment-button-group.js';
-import requireCommentTableCell from './rules/template/element-comments/require-comment-table-cell.js';
-import requireCommentTableRow from './rules/template/element-comments/require-comment-table-row.js';
-import requireAttributeButtonType from './rules/template/element-attributes/require-attribute-button-type.js';
-import requireAttributeButtonSize from './rules/template/element-attributes/require-attribute-button-size.js';
-import requireAttributeButtonVariant from './rules/template/element-attributes/require-attribute-button-variant.js';
-import enforceAttributeOrderInput from './rules/template/element-attributes-order/enforce-attribute-order-input.js';
-import enforceAttributeOrderDialog from './rules/template/element-attributes-order/enforce-attribute-order-dialog.js';
-import enforceAttributeOrderAlertDialog from './rules/template/element-attributes-order/enforce-attribute-order-alert-dialog.js';
-import enforceAttributeLayoutInput from './rules/template/element-attributes-layout/enforce-attribute-layout-input.js';
-import enforceAttributeLayoutButton from './rules/template/element-attributes-layout/enforce-attribute-layout-button.js';
-import enforceAttributeLayoutDialog from './rules/template/element-attributes-layout/enforce-attribute-layout-dialog.js';
-import enforceAttributeLayoutAlertDialog from './rules/template/element-attributes-layout/enforce-attribute-layout-alert-dialog.js';
-import requireAttributeInputId from './rules/template/element-attributes/require-attribute-input-id.js';
-import requireAttributeInputType from './rules/template/element-attributes/require-attribute-input-type.js';
-import forbidNativeLabel from './rules/template/element-native/forbid-native-label.js';
-import forbidNativeButton from './rules/template/element-native/forbid-native-button.js';
-import requireAttributeLabelFor from './rules/template/element-attributes/require-attribute-label-for.js';
-import requireAttributeDialogProcessing from './rules/template/element-attributes/require-attribute-dialog-processing.js';
-import requireAttributeAlertDialogProcessing from './rules/template/element-attributes/require-attribute-alert-dialog-processing.js';
-import requireAttributeDialogDismissible from './rules/template/element-attributes/require-attribute-dialog-dismissible.js';
-import requireAttributeAlertDialogDismissible from './rules/template/element-attributes/require-attribute-alert-dialog-dismissible.js';
-import requireAttributeDialogUpdateOpen from './rules/template/element-attributes/require-attribute-dialog-update-open.js';
-import requireAttributeAlertDialogUpdateOpen from './rules/template/element-attributes/require-attribute-alert-dialog-update-open.js';
-import requireAttributeDialogCloseAsChild from './rules/template/element-attributes/require-attribute-dialog-close-as-child.js';
-import requireAttributeAlertDialogCancelAsChild from './rules/template/element-attributes/require-attribute-alert-dialog-cancel-as-child.js';
-import requireAttributeFieldLabelFor from './rules/template/element-attributes/require-attribute-field-label-for.js';
-import requireAttributeFieldDataInvalid from './rules/template/element-attributes/require-attribute-field-data-invalid.js';
-import requireAttributeFieldErrorErrors from './rules/template/element-attributes/require-attribute-field-error-errors.js';
-import forbidAttributeAria from './rules/template/element-attributes/forbid-attribute-aria.js';
-import forbidAttributeTitle from './rules/template/element-attributes/forbid-attribute-title.js';
+import commentMustHaveBlankLineAbove from './rules/general/comment-must-have-blank-line-above.js';
+import allMustNotHaveAriaAttributes from './rules/general/all-must-not-have-aria-attributes.js';
+import allMustNotHaveTitleAttribute from './rules/general/all-must-not-have-title-attribute.js';
 
-const escore = {
-    rules: {
-        'enforce-children-empty': enforceChildrenEmpty,
-        'enforce-children-emptyheader': enforceChildrenEmptyheader,
-        'enforce-children-emptycontent': enforceChildrenEmptycontent,
-        'require-empty-to-directly-have-emptyheader': requireEmptyToDirectlyHaveEmptyheader,
-        'require-emptyheader-to-directly-have-emptytitle': requireEmptyheaderToDirectlyHaveEmptytitle,
-        'require-emptyheader-to-directly-have-emptydescription': requireEmptyheaderToDirectlyHaveEmptydescription,
-        'enforce-blank-line-above-emptycontent': enforceBlankLineAboveEmptycontent,
-        'require-label-input': requireLabelInput,
-        'require-placement-field-content': requirePlacementFieldContent,
-        'require-placement-field-label': requirePlacementFieldLabel,
-        'require-field-structure-form': requireFieldStructureForm,
-        'forbid-label-in-form': forbidLabelInForm,
-        'require-options-inertia-plus-form': requireOptionsInertiaPlusForm,
-        'require-const-inertia-plus': requireConstInertiaPlus,
-        'require-name-inertia-plus-form': requireNameInertiaPlusForm,
-        'enforce-one-liner-inertia-plus-opening': enforceOneLinerInertiaPlusOpening,
-        'require-definition-inertia-plus-form': requireDefinitionInertiaPlusForm,
-        'require-submit-inertia-plus-form': requireSubmitInertiaPlusForm,
-        'forbid-extra-methods-inertia-plus-form': forbidExtraMethodsInertiaPlusForm,
-        'enforce-method-context-inertia-plus-form': enforceMethodContextInertiaPlusForm,
-        'require-call-inertia-plus-before-submit': requireCallInertiaPlusBeforeSubmit,
-        'require-processing-guard-inertia-plus-submit': requireProcessingGuardInertiaPlusSubmit,
-        'require-openable-inertia-plus-surface': requireOpenableInertiaPlusSurface,
-        'enforce-blank-line-above-inertia-plus-submit': enforceBlankLineAboveInertiaPlusSubmit,
-        'enforce-blank-line-above-inertia-plus-before-submit': enforceBlankLineAboveInertiaPlusBeforeSubmit,
-        'enforce-order-inertia-plus-form-methods': enforceOrderInertiaPlusFormMethods,
-        'forbid-native-label': forbidNativeLabel,
-        'forbid-native-button': forbidNativeButton,
-        'require-attribute-label-for': requireAttributeLabelFor,
-        'forbid-attribute-aria': forbidAttributeAria,
-        'forbid-attribute-title': forbidAttributeTitle,
-        'require-comment-tabs-content': requireCommentTabsContent,
-        'require-comment-badge': requireCommentBadge,
-        'require-comment-card': requireCommentCard,
-        'require-comment-combobox': requireCommentCombobox,
-        'require-comment-context-menu-item': requireCommentContextMenuItem,
-        'require-comment-context-menu-label': requireCommentContextMenuLabel,
-        'require-comment-context-menu-separator': requireCommentContextMenuSeparator,
-        'require-comment-dialog': requireCommentDialog,
-        'require-comment-alert-dialog': requireCommentAlertDialog,
-        'require-comment-dialog-close': requireCommentDialogClose,
-        'require-comment-alert-dialog-cancel': requireCommentAlertDialogCancel,
-        'require-comment-alert-dialog-action': requireCommentAlertDialogAction,
-        'require-comment-dropdown-menu': requireCommentDropdownMenu,
-        'require-comment-dropdown-menu-item': requireCommentDropdownMenuItem,
-        'require-comment-dropdown-menu-separator': requireCommentDropdownMenuSeparator,
-        'require-comment-empty': requireCommentEmpty,
-        'require-comment-field': requireCommentField,
-        'require-comment-field-set': requireCommentFieldSet,
-        'require-comment-page-section': requireCommentPageSection,
-        'require-comment-popover': requireCommentPopover,
-        'require-comment-separator': requireCommentSeparator,
-        'require-comment-sidepanel-header': requireCommentSidepanelHeader,
-        'require-comment-sidepanel-section-header': requireCommentSidepanelSectionHeader,
-        'require-comment-stat-card': requireCommentStatCard,
-        'require-comment-table-empty': requireCommentTableEmpty,
-        'require-comment-table-head': requireCommentTableHead,
-        'require-comment-toggle-group-item': requireCommentToggleGroupItem,
-        'require-comment-button-group': requireCommentButtonGroup,
-        'require-comment-table-cell': requireCommentTableCell,
-        'require-comment-table-row': requireCommentTableRow,
-        'forbid-one-liner-table-cell': forbidOneLinerTableCell,
-        'forbid-one-liner-table-head': forbidOneLinerTableHead,
-        'forbid-one-liner-button': forbidOneLinerButton,
-        'require-comment-button': requireCommentButton,
-        'require-comment-alert': requireCommentAlert,
-        'enforce-layout-element': enforceLayoutElement,
-        'enforce-single-call-click-handler': enforceSingleCallClickHandler,
-        'enforce-blank-line-above-comment': enforceBlankLineAboveComment,
-        'forbid-consecutive-blank-lines': forbidConsecutiveBlankLines,
-        'enforce-blank-line-below-dialog-header': enforceBlankLineBelowDialogHeader,
-        'enforce-blank-line-below-alert-dialog-header': enforceBlankLineBelowAlertDialogHeader,
-        'enforce-blank-line-above-dialog-footer': enforceBlankLineAboveDialogFooter,
-        'enforce-blank-line-above-alert-dialog-footer': enforceBlankLineAboveAlertDialogFooter,
-        'enforce-one-liner-dialog-description': enforceOneLinerDialogDescription,
-        'enforce-one-liner-alert-dialog-description': enforceOneLinerAlertDialogDescription,
-        'enforce-one-liner-empty-description': enforceOneLinerEmptyDescription,
-        'require-attribute-dialog-processing': requireAttributeDialogProcessing,
-        'require-attribute-alert-dialog-processing': requireAttributeAlertDialogProcessing,
-        'require-attribute-dialog-dismissible': requireAttributeDialogDismissible,
-        'require-attribute-alert-dialog-dismissible': requireAttributeAlertDialogDismissible,
-        'require-attribute-dialog-update-open': requireAttributeDialogUpdateOpen,
-        'require-attribute-alert-dialog-update-open': requireAttributeAlertDialogUpdateOpen,
-        'require-attribute-dialog-close-as-child': requireAttributeDialogCloseAsChild,
-        'require-attribute-alert-dialog-cancel-as-child': requireAttributeAlertDialogCancelAsChild,
-        'enforce-placement-dialog': enforcePlacementDialog,
-        'enforce-placement-alert-dialog': enforcePlacementAlertDialog,
-        'enforce-order-script': enforceOrderScript,
-        'enforce-layout-inertia-request-options': enforceLayoutInertiaRequestOptions,
-        'enforce-blank-line-above-inertia-request': enforceBlankLineAboveInertiaRequest,
-        'enforce-const-props': enforceConstProps,
-        'forbid-arrow-function': forbidArrowFunction,
-        'require-code-folding-region': requireCodeFoldingRegion,
-        'require-usage-code-folding-region': requireUsageCodeFoldingRegion,
-        'forbid-hardcoded-urls': forbidHardcodedUrls,
-        'require-id-for-association-field': requireIdForAssociationField,
-        'require-attribute-field-label-for': requireAttributeFieldLabelFor,
-        'require-attribute-field-data-invalid': requireAttributeFieldDataInvalid,
-        'require-attribute-field-error-errors': requireAttributeFieldErrorErrors,
-        'require-attribute-button-type': requireAttributeButtonType,
-        'require-attribute-button-variant': requireAttributeButtonVariant,
-        'require-attribute-button-size': requireAttributeButtonSize,
-        'require-attribute-input-type': requireAttributeInputType,
-        'require-attribute-input-id': requireAttributeInputId,
-        'enforce-attribute-order-input': enforceAttributeOrderInput,
-        'enforce-attribute-order-dialog': enforceAttributeOrderDialog,
-        'enforce-attribute-order-alert-dialog': enforceAttributeOrderAlertDialog,
-        'enforce-attribute-layout-input': enforceAttributeLayoutInput,
-        'enforce-attribute-layout-button': enforceAttributeLayoutButton,
-        'enforce-attribute-layout-dialog': enforceAttributeLayoutDialog,
-        'enforce-attribute-layout-alert-dialog': enforceAttributeLayoutAlertDialog,
-        'require-icon-context-menu-item': requireIconContextMenuItem,
-        'require-icon-context-menu-label': requireIconContextMenuLabel,
-    },
+const generalRules = {
+    'comment-must-have-blank-line-above': commentMustHaveBlankLineAbove,
+    'all-must-not-have-aria-attributes': allMustNotHaveAriaAttributes,
+    'all-must-not-have-title-attribute': allMustNotHaveTitleAttribute,
 };
+
+// Component files export rule maps generated from their structure definitions.
+const componentDirectory = new URL('./rules/components/', import.meta.url);
+const componentFiles = (await readdir(componentDirectory, {withFileTypes: true}))
+    .filter((entry) => entry.isFile() && entry.name.endsWith('.js'))
+    .map((entry) => entry.name)
+    .sort();
+const componentRules = {};
+
+for (const file of componentFiles) {
+    const {default: rules} = await import(new URL(file, componentDirectory).href);
+    for (const [name, rule] of Object.entries(rules)) {
+        if (Object.hasOwn(componentRules, name) || Object.hasOwn(generalRules, name)) {
+            throw new Error(`Duplicate component rule: ${name} (${file}).`);
+        }
+        componentRules[name] = rule;
+    }
+}
+
+const escore = {rules: {...generalRules, ...componentRules}};
 
 const projectDirectory = process.cwd();
 
@@ -310,23 +109,7 @@ export default defineConfigWithVueTs(
             ]
         },
         rules: {
-            'escore/enforce-blank-line-above-comment': 'error',
-            'escore/forbid-consecutive-blank-lines': 'error',
-            'escore/forbid-hardcoded-urls': 'error',
-            'escore/require-options-inertia-plus-form': 'error',
-            'escore/require-const-inertia-plus': 'error',
-            'escore/require-name-inertia-plus-form': 'error',
-            'escore/enforce-one-liner-inertia-plus-opening': 'error',
-            'escore/require-definition-inertia-plus-form': 'error',
-            'escore/require-submit-inertia-plus-form': 'error',
-            'escore/forbid-extra-methods-inertia-plus-form': 'error',
-            'escore/enforce-method-context-inertia-plus-form': 'error',
-            'escore/require-call-inertia-plus-before-submit': 'error',
-            'escore/require-processing-guard-inertia-plus-submit': 'error',
-            'escore/require-openable-inertia-plus-surface': 'error',
-            'escore/enforce-blank-line-above-inertia-plus-submit': 'error',
-            'escore/enforce-blank-line-above-inertia-plus-before-submit': 'error',
-            'escore/enforce-order-inertia-plus-form-methods': 'error',
+            ...Object.fromEntries(Object.keys(generalRules).map((name) => [`escore/${name}`, 'error'])),
             'vue/multi-word-component-names': 'off',
             '@typescript-eslint/no-explicit-any': 'off',
             '@typescript-eslint/no-unused-expressions': ['error', {allowTernary: true}],
@@ -355,104 +138,7 @@ export default defineConfigWithVueTs(
         plugins: {
             escore
         },
-        rules: {
-            'escore/require-comment-tabs-content': 'error',
-            'escore/require-comment-badge': 'error',
-            'escore/require-comment-card': 'error',
-            'escore/require-comment-combobox': 'error',
-            'escore/require-comment-context-menu-item': 'error',
-            'escore/require-comment-context-menu-label': 'error',
-            'escore/require-comment-context-menu-separator': 'error',
-            'escore/require-comment-dialog': 'error',
-            'escore/require-comment-alert-dialog': 'error',
-            'escore/require-comment-dialog-close': 'error',
-            'escore/require-comment-alert-dialog-cancel': 'error',
-            'escore/require-comment-alert-dialog-action': 'error',
-            'escore/require-comment-dropdown-menu': 'error',
-            'escore/require-comment-dropdown-menu-item': 'error',
-            'escore/require-comment-dropdown-menu-separator': 'error',
-            'escore/require-comment-empty': 'error',
-            'escore/require-comment-field': 'error',
-            'escore/require-comment-field-set': 'error',
-            'escore/require-comment-page-section': 'error',
-            'escore/require-comment-popover': 'error',
-            'escore/require-comment-separator': 'error',
-            'escore/require-comment-sidepanel-header': 'error',
-            'escore/require-comment-sidepanel-section-header': 'error',
-            'escore/require-comment-stat-card': 'error',
-            'escore/require-comment-table-empty': 'error',
-            'escore/require-comment-table-head': 'error',
-            'escore/require-comment-toggle-group-item': 'error',
-            'escore/require-comment-button-group': 'error',
-            'escore/require-comment-table-cell': 'error',
-            'escore/require-comment-table-row': 'error',
-            'escore/forbid-one-liner-table-cell': 'error',
-            'escore/forbid-one-liner-table-head': 'error',
-            'escore/forbid-one-liner-button': 'error',
-            'escore/require-comment-button': 'error',
-            'escore/require-comment-alert': 'error',
-            'escore/enforce-layout-element': 'error',
-            'escore/enforce-single-call-click-handler': 'error',
-            'escore/enforce-blank-line-below-dialog-header': 'error',
-            'escore/enforce-blank-line-below-alert-dialog-header': 'error',
-            'escore/enforce-blank-line-above-dialog-footer': 'error',
-            'escore/enforce-blank-line-above-alert-dialog-footer': 'error',
-            'escore/enforce-one-liner-dialog-description': 'error',
-            'escore/enforce-one-liner-alert-dialog-description': 'error',
-            'escore/enforce-one-liner-empty-description': 'error',
-            'escore/require-attribute-dialog-processing': 'error',
-            'escore/require-attribute-alert-dialog-processing': 'error',
-            'escore/require-attribute-dialog-dismissible': 'error',
-            'escore/require-attribute-alert-dialog-dismissible': 'error',
-            'escore/require-attribute-dialog-update-open': 'error',
-            'escore/require-attribute-alert-dialog-update-open': 'error',
-            'escore/require-attribute-dialog-close-as-child': 'error',
-            'escore/require-attribute-alert-dialog-cancel-as-child': 'error',
-            'escore/enforce-placement-dialog': 'error',
-            'escore/enforce-placement-alert-dialog': 'error',
-            'escore/enforce-order-script': 'error',
-            'escore/enforce-layout-inertia-request-options': 'error',
-            'escore/enforce-blank-line-above-inertia-request': 'error',
-            'escore/enforce-const-props': 'error',
-            'escore/forbid-arrow-function': 'error',
-            'escore/require-code-folding-region': 'warn',
-            'escore/require-usage-code-folding-region': 'warn',
-            'escore/require-id-for-association-field': 'error',
-            'escore/require-label-input': 'error',
-            'escore/require-attribute-field-label-for': 'error',
-            'escore/require-attribute-field-data-invalid': 'error',
-            'escore/require-attribute-field-error-errors': 'error',
-            'escore/forbid-label-in-form': 'error',
-            'escore/require-placement-field-content': 'error',
-            'escore/require-placement-field-label': 'error',
-            'escore/require-field-structure-form': 'error',
-            'escore/enforce-children-empty': 'error',
-            'escore/enforce-children-emptyheader': 'error',
-            'escore/enforce-children-emptycontent': 'error',
-            'escore/require-empty-to-directly-have-emptyheader': 'error',
-            'escore/require-emptyheader-to-directly-have-emptytitle': 'error',
-            'escore/require-emptyheader-to-directly-have-emptydescription': 'error',
-            'escore/enforce-blank-line-above-emptycontent': 'error',
-            'escore/require-attribute-button-type': 'error',
-            'escore/require-attribute-button-variant': 'error',
-            'escore/require-attribute-button-size': 'error',
-            'escore/require-attribute-input-type': 'error',
-            'escore/require-attribute-input-id': 'error',
-            'escore/enforce-attribute-order-input': 'error',
-            'escore/enforce-attribute-order-dialog': 'error',
-            'escore/enforce-attribute-order-alert-dialog': 'error',
-            'escore/enforce-attribute-layout-input': 'error',
-            'escore/enforce-attribute-layout-button': 'error',
-            'escore/enforce-attribute-layout-dialog': 'error',
-            'escore/enforce-attribute-layout-alert-dialog': 'error',
-            'escore/forbid-attribute-aria': 'error',
-            'escore/forbid-attribute-title': 'error',
-            'escore/forbid-native-label': 'error',
-            'escore/forbid-native-button': 'error',
-            'escore/require-attribute-label-for': 'error',
-            'escore/require-icon-context-menu-item': ['warn', {sources: ['@lucide/vue', 'lucide-vue-next']}],
-            'escore/require-icon-context-menu-label': ['warn', {sources: ['@lucide/vue', 'lucide-vue-next']}]
-        }
+        rules: Object.fromEntries(Object.keys(componentRules).map((name) => [`escore/${name}`, 'error']))
     },
     {
         plugins: {

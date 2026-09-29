@@ -21,7 +21,7 @@ Read and apply only the files relevant to the current task in hand, do not read 
     - Read and apply [ESLint](references/tooling/eslint.md) completely.
 
 - If the current task involves building or editing UI using Escore components:
-    - Read and apply the relevant family's `structure.js` under [Component Families](../../tooling/eslint/rules/components/) when present. This does not require loading the ESLint tooling reference or unrelated families.
+    - Read and apply the relevant `<family>.js` under [Component Families](../../tooling/eslint/rules/components/) when present. This does not require loading the ESLint tooling reference or unrelated families.
 
 - If the current task involves implementing reactive state, Inertia forms, reload actions, or toast feedback in a Vue/Inertia project using
   `escore-packages`:
