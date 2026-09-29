@@ -48,21 +48,30 @@ Within `rules/template/`:
 
 ## Before creating a rule
 
-Discuss new rules with the user before implementing them. Provide:
+Discuss new rules with the user before implementing them. Present each proposal in exactly this format, replacing the example content with the proposed rule:
 
-- A recommendation for or against the rule, with reasoning, useful context, and tradeoffs.
-- The intended behavior and scope, including allowed/flagged examples and relevant exceptions.
-- The proposed filename, prefix and why it fits, and destination folder.
-- Whether it autofixes or only reports, what can be fixed safely, and any inference limits.
-- Relevant shared helpers and interactions with existing rules.
+```markdown
+**`forbid-native-button.js`**
+
+- **Folder:** `tooling/eslint/rules/template/element-native/`
+- **Behavior:** Flag every native `<button>` in Vue templates. Require the UI kit’s `<Button>`.
+- **Prefix:** `forbid` because it bans an element.
+- **Report-only:** Replacing it requires choosing appropriate component props and imports.
+
+Violation message:
+
+> Replace native `<button>` with the UI kit’s `<Button>`. Preserve its behavior, import Button if needed, and specify type, variant, and size.
+```
+
+Render the proposal as Markdown, without the surrounding code fence. Keep the labels and order; replace **Report-only:** with **Autofix:** when applicable, explaining what is safely fixed. Include recommendations, relevant exceptions, tradeoffs, helper reuse, and rule interactions within these bullets when useful. Keep it concise.
 
 Implement after approval. Honor approval already given for the agreed behavior; do not ask for it again.
 
 ## Adding a rule
 
-1. Create one file per atomic rule in the relevant group. Keep attribute existence, order, and layout separate.
+1. Create one file per atomic rule in the relevant group. Keep attribute existence, order, and layout separate. Package rules stay flat inside `rules/packages/<package>/`, without script/template subfolders; shared helpers belong in `helpers/`.
 2. Reuse the corresponding helper. Component-specific files supply targets and conditions; shared behavior belongs in the helper. All one-liner rules use the shared one-liner foundations.
-3. Import the rule in `eslint.config.js`, register it under its filename stem, then enable `escore/<filename-stem>` in the appropriate file scope. Creating or registering a file alone does not enable it. The existing Inertia Plus bundle retains its `inertia-plus-*` IDs.
+3. Import the rule in `eslint.config.js`, register it under its filename stem, then enable `escore/<filename-stem>` in the appropriate file scope. Creating or registering a file alone does not enable it.
 4. Write an actionable violation message: identify what failed, the expected result, and how to repair it. Include actual/expected values when useful; descriptions alone are not enough.
 
 ## Rule boundaries and fixes

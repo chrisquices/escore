@@ -1,4 +1,5 @@
 import { unwrapScriptExpression } from '../../helpers/script-props.js';
+import { createInertiaReceiverResolver, inertiaPackages } from '../../helpers/inertia-request.js';
 
 export default {
   meta: {
@@ -16,152 +17,14 @@ export default {
   create(context) {
     const sourceCode = context.sourceCode;
     const linkNames = new Set(['Link', 'a']);
-    const inertiaPackages = new Set(['@inertiajs/vue3', '@inertiajs/core', '@inertiajs/react', '@inertiajs/svelte']);
     const requestMethods = new Set([
       'get', 'post', 'put', 'patch', 'delete', 'head', 'options',
       'visit', 'submit', 'prefetch', 'push', 'replace',
     ]);
+    const isInertiaReceiver = createInertiaReceiverResolver(sourceCode);
     const propertyName = (node) => !node.computed && node.property.type === 'Identifier'
       ? node.property.name
       : node.property.type === 'Literal' ? node.property.value : undefined;
-    const findVariable = (node) => {
-      // Template expressions live outside the script AST's module scope.
-      // Their references distinguish script bindings from v-for/slot locals
-      // and variables declared inside inline callbacks.
-      for (let parent = node.parent; parent; parent = parent.parent) {
-        if (parent.type !== 'VExpressionContainer') continue;
-        const reference = parent.references?.find((entry) => entry.id === node);
-        if (!reference || reference.variable) return { defs: [{ type: 'TemplateVariable' }] };
-        const moduleScope = sourceCode.scopeManager.scopes.find((scope) => scope.type === 'module');
-        return (moduleScope ?? sourceCode.scopeManager.globalScope).set.get(node.name);
-      }
-
-      let scope = sourceCode.getScope(node);
-
-      while (scope) {
-        const variable = scope.set.get(node.name);
-
-        if (variable) {
-          return variable;
-        }
-
-        scope = scope.upper;
-      }
-
-      return undefined;
-    };
-    const imported = (expression) => {
-      const node = unwrapScriptExpression(expression);
-
-      if (node?.type === 'Identifier') {
-        const definition = findVariable(node)?.defs.find((entry) => entry.type === 'ImportBinding');
-
-        if (definition) {
-          return {
-            source: definition.parent.source.value,
-            name: definition.node.type === 'ImportNamespaceSpecifier'
-              ? '*'
-              : definition.node.imported?.name ?? definition.node.imported?.value ?? 'default',
-          };
-        }
-      }
-
-      if (node?.type === 'MemberExpression') {
-        const namespace = imported(node.object);
-
-        if (namespace?.name === '*') {
-          return { source: namespace.source, name: propertyName(node) };
-        }
-      }
-
-      return undefined;
-    };
-    const isFormFactory = (expression) => {
-      const binding = imported(expression);
-
-      return binding && ((binding.name === 'useForm' && inertiaPackages.has(binding.source))
-        || (binding.name === 'useInertiaPlusForm' && binding.source === 'escore-packages/inertia-plus'));
-    };
-    const hasNativeFormMethod = (call, method) => {
-      if (!isFormFactory(call.callee)) return false;
-      if (method !== 'submit' || imported(call.callee).name === 'useForm') return true;
-
-      const definition = unwrapScriptExpression(call.arguments[1]);
-
-      // Inertia Plus definitions may replace submit with an application method
-      // whose arguments are not URLs. Unknown definitions cannot prove otherwise.
-      return definition?.type === 'ObjectExpression' && definition.properties.every((property) => {
-        if (property.type !== 'Property') return false;
-
-        const name = !property.computed && property.key.type === 'Identifier'
-          ? property.key.name
-          : property.key.type === 'Literal' ? String(property.key.value) : undefined;
-        return name !== undefined && name !== 'submit';
-      });
-    };
-    const isFormMethodThis = (node, method) => {
-      let parent = node.parent;
-
-      while (parent) {
-        // Arrow callbacks retain the surrounding method's this; ordinary functions do not.
-        if (['FunctionExpression', 'FunctionDeclaration'].includes(parent.type)) {
-          const property = parent.parent;
-          const definition = property?.type === 'Property' ? property.parent : undefined;
-          const call = definition?.parent;
-
-          return definition?.type === 'ObjectExpression' && call?.type === 'CallExpression'
-            && call.arguments.includes(definition) && hasNativeFormMethod(call, method);
-        }
-
-        parent = parent.parent;
-      }
-
-      return false;
-    };
-    const isInertiaReceiver = (expression, method, seen = new Set()) => {
-      const node = unwrapScriptExpression(expression);
-
-      if (!node) {
-        return false;
-      }
-
-      const binding = imported(node);
-
-      if (binding?.name === 'router' && inertiaPackages.has(binding.source)) {
-        return true;
-      }
-
-      if (node.type === 'ThisExpression') {
-        return isFormMethodThis(node, method);
-      }
-
-      if (node.type === 'MemberExpression' && node.object.type === 'ThisExpression'
-        && propertyName(node) === '$inertia') {
-        return true;
-      }
-
-      if (node.type === 'CallExpression') {
-        return hasNativeFormMethod(node, method);
-      }
-
-      if (node.type === 'Identifier') {
-        const variable = findVariable(node);
-
-        if (node.name === '$inertia' && !variable?.defs.length) {
-          return true;
-        }
-
-        if (variable && !seen.has(variable)) {
-          seen.add(variable);
-          const definition = variable.defs.find((entry) => entry.type === 'Variable'
-            && entry.parent.kind === 'const');
-
-          return definition ? isInertiaReceiver(definition.node.init, method, seen) : false;
-        }
-      }
-
-      return false;
-    };
     const hasHardcodedUrl = (expression) => {
       const node = unwrapScriptExpression(expression);
 

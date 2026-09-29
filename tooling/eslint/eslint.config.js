@@ -12,9 +12,25 @@ import enforceSingleCallClickHandler from './rules/template/element-event-handle
 import {createRequire} from 'node:module';
 import {join} from 'node:path';
 import {pathToFileURL} from 'node:url';
-import inertiaPlusRules from './rules/packages/inertia-plus.js';
+import requireOptionsInertiaPlusForm from './rules/packages/inertia-plus/require-options-inertia-plus-form.js';
+import requireConstInertiaPlus from './rules/packages/inertia-plus/require-const-inertia-plus.js';
+import requireNameInertiaPlusForm from './rules/packages/inertia-plus/require-name-inertia-plus-form.js';
+import enforceOneLinerInertiaPlusOpening from './rules/packages/inertia-plus/enforce-one-liner-inertia-plus-opening.js';
+import requireDefinitionInertiaPlusForm from './rules/packages/inertia-plus/require-definition-inertia-plus-form.js';
+import requireSubmitInertiaPlusForm from './rules/packages/inertia-plus/require-submit-inertia-plus-form.js';
+import forbidExtraMethodsInertiaPlusForm from './rules/packages/inertia-plus/forbid-extra-methods-inertia-plus-form.js';
+import enforceMethodContextInertiaPlusForm from './rules/packages/inertia-plus/enforce-method-context-inertia-plus-form.js';
+import requireCallInertiaPlusBeforeSubmit from './rules/packages/inertia-plus/require-call-inertia-plus-before-submit.js';
+import requireProcessingGuardInertiaPlusSubmit from './rules/packages/inertia-plus/require-processing-guard-inertia-plus-submit.js';
+import requireOpenableInertiaPlusSurface from './rules/packages/inertia-plus/require-openable-inertia-plus-surface.js';
+import enforceBlankLineAboveInertiaPlusSubmit from './rules/packages/inertia-plus/enforce-blank-line-above-inertia-plus-submit.js';
+import enforceBlankLineAboveInertiaPlusBeforeSubmit from './rules/packages/inertia-plus/enforce-blank-line-above-inertia-plus-before-submit.js';
+import enforceOrderInertiaPlusFormMethods from './rules/packages/inertia-plus/enforce-order-inertia-plus-form-methods.js';
 import enforceConstProps from './rules/script/enforce-const-props.js';
+import forbidArrowFunction from './rules/script/forbid-arrow-function.js';
 import enforceOrderScript from './rules/script/enforce-order-script.js';
+import enforceLayoutInertiaRequestOptions from './rules/script/enforce-layout-inertia-request-options.js';
+import enforceBlankLineAboveInertiaRequest from './rules/script/enforce-blank-line-above-inertia-request.js';
 import requireCodeFoldingRegion from './rules/script/require-code-folding-region.js';
 import requireUsageCodeFoldingRegion from './rules/script/require-usage-code-folding-region.js';
 import forbidHardcodedUrls from './rules/general/forbid-hardcoded-urls.js';
@@ -76,6 +92,7 @@ import enforceAttributeLayoutAlertDialog from './rules/template/element-attribut
 import requireAttributeInputId from './rules/template/element-attributes/require-attribute-input-id.js';
 import requireAttributeInputType from './rules/template/element-attributes/require-attribute-input-type.js';
 import forbidNativeLabel from './rules/template/element-native/forbid-native-label.js';
+import forbidNativeButton from './rules/template/element-native/forbid-native-button.js';
 import requireAttributeLabelFor from './rules/template/element-attributes/require-attribute-label-for.js';
 import requireAttributeDialogProcessing from './rules/template/element-attributes/require-attribute-dialog-processing.js';
 import requireAttributeAlertDialogProcessing from './rules/template/element-attributes/require-attribute-alert-dialog-processing.js';
@@ -98,8 +115,22 @@ const escore = {
         'require-placement-field-label': requirePlacementFieldLabel,
         'require-field-structure-form': requireFieldStructureForm,
         'forbid-label-in-form': forbidLabelInForm,
-        ...inertiaPlusRules,
+        'require-options-inertia-plus-form': requireOptionsInertiaPlusForm,
+        'require-const-inertia-plus': requireConstInertiaPlus,
+        'require-name-inertia-plus-form': requireNameInertiaPlusForm,
+        'enforce-one-liner-inertia-plus-opening': enforceOneLinerInertiaPlusOpening,
+        'require-definition-inertia-plus-form': requireDefinitionInertiaPlusForm,
+        'require-submit-inertia-plus-form': requireSubmitInertiaPlusForm,
+        'forbid-extra-methods-inertia-plus-form': forbidExtraMethodsInertiaPlusForm,
+        'enforce-method-context-inertia-plus-form': enforceMethodContextInertiaPlusForm,
+        'require-call-inertia-plus-before-submit': requireCallInertiaPlusBeforeSubmit,
+        'require-processing-guard-inertia-plus-submit': requireProcessingGuardInertiaPlusSubmit,
+        'require-openable-inertia-plus-surface': requireOpenableInertiaPlusSurface,
+        'enforce-blank-line-above-inertia-plus-submit': enforceBlankLineAboveInertiaPlusSubmit,
+        'enforce-blank-line-above-inertia-plus-before-submit': enforceBlankLineAboveInertiaPlusBeforeSubmit,
+        'enforce-order-inertia-plus-form-methods': enforceOrderInertiaPlusFormMethods,
         'forbid-native-label': forbidNativeLabel,
+        'forbid-native-button': forbidNativeButton,
         'require-attribute-label-for': requireAttributeLabelFor,
         'forbid-attribute-aria': forbidAttributeAria,
         'forbid-attribute-title': forbidAttributeTitle,
@@ -160,7 +191,10 @@ const escore = {
         'enforce-placement-dialog': enforcePlacementDialog,
         'enforce-placement-alert-dialog': enforcePlacementAlertDialog,
         'enforce-order-script': enforceOrderScript,
+        'enforce-layout-inertia-request-options': enforceLayoutInertiaRequestOptions,
+        'enforce-blank-line-above-inertia-request': enforceBlankLineAboveInertiaRequest,
         'enforce-const-props': enforceConstProps,
+        'forbid-arrow-function': forbidArrowFunction,
         'require-code-folding-region': requireCodeFoldingRegion,
         'require-usage-code-folding-region': requireUsageCodeFoldingRegion,
         'forbid-hardcoded-urls': forbidHardcodedUrls,
@@ -265,17 +299,20 @@ export default defineConfigWithVueTs(
             'escore/enforce-blank-line-above-comment': 'error',
             'escore/forbid-consecutive-blank-lines': 'error',
             'escore/forbid-hardcoded-urls': 'error',
-            'escore/inertia-plus-form-options': 'error',
-            'escore/inertia-plus-const': 'error',
-            'escore/inertia-plus-form-name': 'error',
-            'escore/inertia-plus-single-line-opening': 'error',
-            'escore/inertia-plus-form-definition': 'error',
-            'escore/inertia-plus-form-submit': 'error',
-            'escore/inertia-plus-form-methods': 'error',
-            'escore/inertia-plus-form-method-context': 'error',
-            'escore/inertia-plus-before-submit-call': 'error',
-            'escore/inertia-plus-submit-processing-guard': 'error',
-            'escore/inertia-plus-surface-openable': 'error',
+            'escore/require-options-inertia-plus-form': 'error',
+            'escore/require-const-inertia-plus': 'error',
+            'escore/require-name-inertia-plus-form': 'error',
+            'escore/enforce-one-liner-inertia-plus-opening': 'error',
+            'escore/require-definition-inertia-plus-form': 'error',
+            'escore/require-submit-inertia-plus-form': 'error',
+            'escore/forbid-extra-methods-inertia-plus-form': 'error',
+            'escore/enforce-method-context-inertia-plus-form': 'error',
+            'escore/require-call-inertia-plus-before-submit': 'error',
+            'escore/require-processing-guard-inertia-plus-submit': 'error',
+            'escore/require-openable-inertia-plus-surface': 'error',
+            'escore/enforce-blank-line-above-inertia-plus-submit': 'error',
+            'escore/enforce-blank-line-above-inertia-plus-before-submit': 'error',
+            'escore/enforce-order-inertia-plus-form-methods': 'error',
             'vue/multi-word-component-names': 'off',
             '@typescript-eslint/no-explicit-any': 'off',
             '@typescript-eslint/no-unused-expressions': ['error', {allowTernary: true}],
@@ -360,7 +397,10 @@ export default defineConfigWithVueTs(
             'escore/enforce-placement-dialog': 'error',
             'escore/enforce-placement-alert-dialog': 'error',
             'escore/enforce-order-script': 'error',
+            'escore/enforce-layout-inertia-request-options': 'error',
+            'escore/enforce-blank-line-above-inertia-request': 'error',
             'escore/enforce-const-props': 'error',
+            'escore/forbid-arrow-function': 'error',
             'escore/require-code-folding-region': 'warn',
             'escore/require-usage-code-folding-region': 'warn',
             'escore/require-id-for-association-field': 'error',
@@ -387,6 +427,7 @@ export default defineConfigWithVueTs(
             'escore/forbid-attribute-aria': 'error',
             'escore/forbid-attribute-title': 'error',
             'escore/forbid-native-label': 'error',
+            'escore/forbid-native-button': 'error',
             'escore/require-attribute-label-for': 'error',
             'escore/require-icon-context-menu-item': ['warn', {sources: ['@lucide/vue', 'lucide-vue-next']}],
             'escore/require-icon-context-menu-label': ['warn', {sources: ['@lucide/vue', 'lucide-vue-next']}]

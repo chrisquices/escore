@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import test from 'node:test';
-import inertiaPlusRules from '../rules/packages/inertia-plus.js';
+import openingRule from '../rules/packages/inertia-plus/enforce-one-liner-inertia-plus-opening.js';
 import enforceAttributeOrderInput from '../rules/template/element-attributes-order/enforce-attribute-order-input.js';
 import forbidHardcodedUrls from '../rules/general/forbid-hardcoded-urls.js';
 import forbidOneLinerButton from '../rules/template/element-one-liners/forbid-one-liner-button.js';
@@ -20,7 +20,6 @@ const vueParser = projectRequire('vue-eslint-parser');
 const tsParser = projectRequire('@typescript-eslint/parser');
 const { compile } = projectRequire('@vue/compiler-dom');
 const Vue = projectRequire('vue');
-const openingRule = inertiaPlusRules['inertia-plus-single-line-opening'];
 
 const lint = (rule, source, { fix = false, filename = 'regression.vue' } = {}) => {
   const isVue = filename.endsWith('.vue');
