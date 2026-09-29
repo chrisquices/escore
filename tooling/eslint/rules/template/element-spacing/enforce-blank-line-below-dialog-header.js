@@ -1,6 +1,6 @@
-import enforceElementBlankLine from '../../../helpers/enforce-element-blank-line.js';
+import enforceBlankLine from '../../../helpers/enforce-blank-line.js';
 
-export default enforceElementBlankLine({
+export default enforceBlankLine({
   elements: ['DialogHeader', 'dialog-header'],
   position: 'below',
   message: 'Expected a blank line after </DialogHeader>.',
