@@ -1,13 +1,13 @@
 import {meaningfulToken} from './component-comments.js';
 
 export function checkSpacing(context, instance) {
-    if (!instance.entry.children || instance.outOfOrder || instance.unexpected.length) return;
+    if (!instance.entries || instance.outOfOrder || instance.unexpected.length || instance.choices.length) return;
 
     const sourceCode = context.sourceCode;
     const tokenStore = sourceCode.parserServices.getTemplateBodyTokenStore?.();
     if (!tokenStore) return;
 
-    const entries = instance.entry.children;
+    const entries = instance.entries;
     const matched = new Map();
     for (const child of instance.children) {
         const group = matched.get(child.entry);

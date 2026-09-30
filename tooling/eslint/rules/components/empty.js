@@ -30,4 +30,4 @@ export const structure = [
     },
 ];
 
-export default createComponentRules(structure);
+export default createComponentRules(structure, {propsScope: 'family'});

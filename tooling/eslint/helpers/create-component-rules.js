@@ -5,7 +5,8 @@ import {checkLayout} from './component-layout.js';
 import {checkProps} from './component-props.js';
 
 // One definition produces independently configurable rules for each concern.
-export default function createComponentRules(structure, {forbiddenMessage} = {}) {
+export default function createComponentRules(structure, {forbiddenMessage, propsScope = 'all'} = {}) {
+    if (!['all', 'root', 'family'].includes(propsScope)) throw new TypeError('propsScope must be all, root, or family.');
     const root = compileStructure(structure);
     const family = root.name.toLowerCase();
     const analyses = new WeakMap();
@@ -16,6 +17,10 @@ export default function createComponentRules(structure, {forbiddenMessage} = {})
     for (const parent of pending) {
         for (const child of parent.children ?? []) {
             if (child.special) continue;
+            if (child.group) {
+                pending.push({...parent, children: child.children});
+                continue;
+            }
             if (child.forbidden) {
                 forbidden.add(child.name);
                 continue;
@@ -78,7 +83,12 @@ export default function createComponentRules(structure, {forbiddenMessage} = {})
                 propMissing: 'Add the required {{ prop }} prop to <{{ element }}>; its component source requires it.',
                 propValue: 'Set {{ prop }} on <{{ element }}> to {{ expected }}; received {{ actual }}.',
             },
-            checkProps,
+            (context, instance) => {
+                // A nested instance of this root receives its own complete rule pass.
+                if (instance.entry !== root && instance.entry.name === root.name) return;
+                if (propsScope === 'all' || instance.entry === root
+                    || (propsScope === 'family' && instance.entry.name.startsWith(root.name))) checkProps(context, instance);
+            },
         ),
 
         [`${family}-must-have-valid-comments`]: createRule(
@@ -87,6 +97,7 @@ export default function createComponentRules(structure, {forbiddenMessage} = {})
                 commentMissing: 'Add <!-- {{ expected }} --> on its own line immediately above <{{ element }}>.',
                 commentManual: 'No comment source provides usable text. Add a standalone comment immediately above <{{ element }}> describing its purpose from the surrounding template.',
                 commentMismatch: 'Replace the comment above <{{ element }}> with <!-- {{ expected }} --> to match the first usable comment source.',
+                commentFixed: 'Replace the comment above <{{ element }}> with <!-- {{ expected }} -->.',
             },
             checkComment,
             {fixable: 'code'},
@@ -100,19 +111,40 @@ export default function createComponentRules(structure, {forbiddenMessage} = {})
                 lastInTemplate: 'Move <{{ element }}> after all other root <template> children. Order among <{{ root }}> instances is unrestricted. Preserve conditions and bindings.',
                 misplaced: 'Move <{{ element }}> directly inside {{ expected }}; currently inside {{ actual }}. Preserve its content and bindings.',
                 missing: 'Add <{{ child }}> directly inside <{{ parent }}>{{ placement }}. Preserve existing content and bindings.',
+                empty: 'Add content inside <{{ element }}>: text, an interpolation, or a child element.',
+                choiceMissing: 'Add exactly one of {{ expected }} directly inside <{{ parent }}>. Preserve existing content and bindings.',
+                choiceMultiple: 'Keep exactly one of {{ expected }} directly inside <{{ parent }}>; found {{ actual }}. Preserve existing content and behavior.',
                 unexpected: 'Unexpected {{ actual }} directly inside <{{ parent }}>. Move or remove it to match the declared children: {{ expected }}. Preserve existing behavior.',
                 order: 'Reorder the direct children of <{{ parent }}> as: {{ expected }}. Preserve their content and bindings.',
             },
             (context, instance) => {
+                if (instance.entry.nonEmpty && !instance.hasContent) {
+                    context.report({
+                        loc: instance.node.startTag.loc,
+                        messageId: 'empty',
+                        data: {element: instance.node.rawName},
+                    });
+                }
+                for (const choice of instance.choices) {
+                    context.report({
+                        loc: instance.node.startTag.loc,
+                        messageId: choice.members.length ? 'choiceMultiple' : 'choiceMissing',
+                        data: {
+                            parent: instance.node.rawName,
+                            expected: choice.alternatives.map((entry) => `<${entry.name}>`).join(' or '),
+                            actual: choice.members.map((member) => `<${member.node.rawName}>`).join(', '),
+                        },
+                    });
+                }
                 for (const child of instance.missing) {
-                    const siblings = instance.entry.children;
+                    const siblings = instance.entries;
                     const index = siblings.indexOf(child);
                     const before = instance.children.findLast((sibling) => siblings.indexOf(sibling.entry) < index);
                     const after = instance.children.find((sibling) => siblings.indexOf(sibling.entry) > index);
                     const anchor = before ?? after;
                     let placement = '';
 
-                    if (anchor && !instance.outOfOrder) {
+                    if (anchor && !instance.outOfOrder && !instance.entry.unordered) {
                         placement = `, ${before ? 'after' : 'before'} <${anchor.node.rawName}>`;
                         if (instance.children.filter((sibling) => sibling.entry.name === anchor.entry.name).length > 1) {
                             placement += ` at line ${anchor.node.loc.start.line}, column ${anchor.node.loc.start.column + 1}`;
@@ -140,7 +172,7 @@ export default function createComponentRules(structure, {forbiddenMessage} = {})
                             actual: child.type === 'VElement'
                                 ? `<${child.rawName}>`
                                 : 'text or an interpolation',
-                            expected: instance.entry.children
+                            expected: instance.entries
                                 .filter((entry) => !entry.special && !entry.forbidden)
                                 .map((entry) => `<${entry.name}>`)
                                 .join(', ') || 'none',
@@ -154,8 +186,12 @@ export default function createComponentRules(structure, {forbiddenMessage} = {})
                     messageId: 'order',
                     data: {
                         parent: instance.node.rawName,
-                        expected: instance.children
-                            .map((child) => `<${child.entry.name}>`)
+                        expected: instance.entries
+                            .filter((entry) => !entry.special && !entry.forbidden)
+                            .flatMap((entry) => {
+                                const matches = instance.children.filter((child) => child.entry === entry);
+                                return Array(Math.max(matches.length, entry.required ? 1 : 0)).fill(`<${entry.name}>`);
+                            })
                             .join(', '),
                     },
                 });

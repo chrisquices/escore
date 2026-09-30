@@ -42,10 +42,7 @@ import enforcePlacementDialog from './rules/template/element-placement/enforce-p
 import forbidOneLinerButton from './rules/template/element-one-liners/forbid-one-liner-button.js';
 import forbidOneLinerTableCell from './rules/template/element-one-liners/forbid-one-liner-table-cell.js';
 import forbidOneLinerTableHead from './rules/template/element-one-liners/forbid-one-liner-table-head.js';
-import requireCommentButton from './rules/template/element-comments/require-comment-button.js';
 import requireCommentTabsContent from './rules/template/element-comments/require-comment-tabs-content.js';
-import requireCommentBadge from './rules/template/element-comments/require-comment-badge.js';
-import requireCommentCard from './rules/template/element-comments/require-comment-card.js';
 import requireCommentCombobox from './rules/template/element-comments/require-comment-combobox.js';
 import requireCommentContextMenuItem from './rules/template/element-comments/require-comment-context-menu-item.js';
 import requireCommentContextMenuLabel from './rules/template/element-comments/require-comment-context-menu-label.js';
@@ -66,7 +63,6 @@ import requireCommentStatCard from './rules/template/element-comments/require-co
 import requireCommentTableEmpty from './rules/template/element-comments/require-comment-table-empty.js';
 import requireCommentTableHead from './rules/template/element-comments/require-comment-table-head.js';
 import requireCommentToggleGroupItem from './rules/template/element-comments/require-comment-toggle-group-item.js';
-import requireCommentButtonGroup from './rules/template/element-comments/require-comment-button-group.js';
 import requireCommentTableCell from './rules/template/element-comments/require-comment-table-cell.js';
 import requireCommentTableRow from './rules/template/element-comments/require-comment-table-row.js';
 import requireAttributeButtonType from './rules/template/element-attributes/require-attribute-button-type.js';
@@ -123,8 +119,6 @@ const escore = {
         'require-attribute-label-for': requireAttributeLabelFor,
         'forbid-attribute-aria': forbidAttributeAria,
         'require-comment-tabs-content': requireCommentTabsContent,
-        'require-comment-badge': requireCommentBadge,
-        'require-comment-card': requireCommentCard,
         'require-comment-combobox': requireCommentCombobox,
         'require-comment-context-menu-item': requireCommentContextMenuItem,
         'require-comment-context-menu-label': requireCommentContextMenuLabel,
@@ -145,13 +139,11 @@ const escore = {
         'require-comment-table-empty': requireCommentTableEmpty,
         'require-comment-table-head': requireCommentTableHead,
         'require-comment-toggle-group-item': requireCommentToggleGroupItem,
-        'require-comment-button-group': requireCommentButtonGroup,
         'require-comment-table-cell': requireCommentTableCell,
         'require-comment-table-row': requireCommentTableRow,
         'forbid-one-liner-table-cell': forbidOneLinerTableCell,
         'forbid-one-liner-table-head': forbidOneLinerTableHead,
         'forbid-one-liner-button': forbidOneLinerButton,
-        'require-comment-button': requireCommentButton,
         'enforce-layout-element': enforceLayoutElement,
         'enforce-single-call-click-handler': enforceSingleCallClickHandler,
         'enforce-blank-line-above-comment': enforceBlankLineAboveComment,
@@ -321,8 +313,6 @@ export default defineConfigWithVueTs(
         },
         rules: {
             'escore/require-comment-tabs-content': 'error',
-            'escore/require-comment-badge': 'error',
-            'escore/require-comment-card': 'error',
             'escore/require-comment-combobox': 'error',
             'escore/require-comment-context-menu-item': 'error',
             'escore/require-comment-context-menu-label': 'error',
@@ -343,13 +333,11 @@ export default defineConfigWithVueTs(
             'escore/require-comment-table-empty': 'error',
             'escore/require-comment-table-head': 'error',
             'escore/require-comment-toggle-group-item': 'error',
-            'escore/require-comment-button-group': 'error',
             'escore/require-comment-table-cell': 'error',
             'escore/require-comment-table-row': 'error',
             'escore/forbid-one-liner-table-cell': 'error',
             'escore/forbid-one-liner-table-head': 'error',
             'escore/forbid-one-liner-button': 'error',
-            'escore/require-comment-button': 'error',
             'escore/enforce-layout-element': 'error',
             'escore/enforce-single-call-click-handler': 'error',
             'escore/enforce-blank-line-below-dialog-header': 'error',

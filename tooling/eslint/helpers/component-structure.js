@@ -1,4 +1,5 @@
-const supportedFlags = new Set(['required', 'optional', 'forbidden', 'repeatable', 'comment-source', 'one-liner', 'multi-liner', 'top-level', 'last-in-template']);
+const supportedFlags = new Set(['required', 'optional', 'forbidden', 'repeatable', 'one-of', 'comment-source', 'one-liner', 'multi-liner', 'non-empty', 'unordered', 'top-level', 'last-in-template']);
+const attributeCommentSource = /^comment-source:[a-zA-Z_][\w.:-]*$/;
 const specialNames = new Set(['Comment', 'BlankLine']);
 
 export function matchesComponent(node, name) {
@@ -32,31 +33,73 @@ export function compileStructure(structure) {
             if (Object.keys(options).some((key) => !['flags', 'children'].includes(key))) {
                 invalid(position, 'only flags and children are supported.');
             }
-            if (!Array.isArray(options.flags) || options.flags.some((flag) => !supportedFlags.has(flag))
+            if (!Array.isArray(options.flags) || options.flags.some((flag) => typeof flag !== 'string'
+                || (!supportedFlags.has(flag) && !attributeCommentSource.test(flag) && !flag.startsWith('text:')))
                 || new Set(options.flags).size !== options.flags.length) {
-                invalid(position, `flags must contain unique, supported values: ${[...supportedFlags].join(', ')}.`);
+                invalid(position, `flags must contain unique, supported values: ${[...supportedFlags].join(', ')}, comment-source:<attribute>, text:<content>.`);
+            }
+            const textFlags = options.flags.filter((flag) => flag.startsWith('text:'));
+            const text = textFlags[0]?.slice('text:'.length).trim();
+            if (textFlags.length && (name !== 'Comment' || textFlags.length !== 1 || !text || /[\r\n]/.test(textFlags[0]))) {
+                invalid(position, 'text:<content> is only allowed once on Comment, with nonempty, single-line text.');
             }
             const required = options.flags.includes('required');
             const forbidden = options.flags.includes('forbidden');
+            const group = name === 'Group';
+            const oneOf = options.flags.includes('one-of');
             if (options.flags.filter((flag) => ['required', 'optional', 'forbidden'].includes(flag)).length !== 1) {
                 invalid(position, 'choose exactly one of required, optional, or forbidden.');
             }
-            if (forbidden && (specialNames.has(name) || options.flags.length !== 1 || 'children' in options)) {
+            if (forbidden && (specialNames.has(name) || group || options.flags.length !== 1 || 'children' in options)) {
                 invalid(position, 'forbidden components cannot be Comment or BlankLine, declare children, or use other flags.');
             }
             if (options.flags.includes('one-liner') && options.flags.includes('multi-liner')) {
                 invalid(position, 'one-liner and multi-liner cannot be used together.');
             }
             const layout = options.flags.find((flag) => flag === 'one-liner' || flag === 'multi-liner');
+            const nonEmpty = options.flags.includes('non-empty');
+            const unordered = options.flags.includes('unordered');
             const repeatable = options.flags.includes('repeatable');
             const topLevel = options.flags.includes('top-level');
             const lastInTemplate = options.flags.includes('last-in-template');
+            const commentSources = options.flags.filter((flag) => flag === 'comment-source' || flag.startsWith('comment-source:'));
             const special = specialNames.has(name);
+            if (nonEmpty && (special || group)) {
+                invalid(position, 'non-empty can only be declared on a component.');
+            }
+            if (unordered && (special || group)) {
+                invalid(position, 'unordered can only be declared on a component.');
+            }
             if (special && (topLevel || lastInTemplate)) {
                 invalid(position, `${name} cannot use template placement flags.`);
             }
-            if (special && ('children' in options || options.flags.includes('comment-source') || layout || repeatable)) {
+            if (special && ('children' in options || commentSources.length || layout || repeatable)) {
                 invalid(position, `${name} cannot have children, be a comment-source, use layout flags, or be repeatable.`);
+            }
+            if (oneOf && !group) invalid(position, 'one-of can only be declared on Group.');
+            if (group && (layout || commentSources.length || topLevel || lastInTemplate || (oneOf && repeatable))) {
+                invalid(position, 'Group supports required or optional, with either repeatable or one-of.');
+            }
+            const children = 'children' in options ? compile(options.children, `${position}.${name}.children`) : null;
+            if (unordered) {
+                if (!children?.length || children.some((child) => child.group || child.name === 'BlankLine')) {
+                    invalid(position, 'unordered requires declared children without Group or BlankLine entries.');
+                }
+                const names = children.filter((child) => !child.special).map((child) => child.name);
+                if (new Set(names).size !== names.length) {
+                    invalid(position, 'unordered children must use unique component names; use repeatable for multiple occurrences.');
+                }
+            }
+            if (group) {
+                if (!children?.some((child) => !child.special && child.required)) {
+                    invalid(position, 'Group must contain at least one required component.');
+                }
+                if (children.some((child) => child.group || child.forbidden || child.repeatable)) {
+                    invalid(position, 'Group members cannot themselves be Group, forbidden, or repeatable; put nested patterns inside a component.');
+                }
+                if (oneOf && children.some((child) => child.special || !child.required)) {
+                    invalid(position, 'one-of Group children must be required component alternatives.');
+                }
             }
 
             return {
@@ -66,18 +109,23 @@ export function compileStructure(structure) {
                 forbidden,
                 repeatable,
                 special,
+                group,
+                oneOf,
                 layout,
+                nonEmpty,
+                unordered,
                 topLevel,
                 lastInTemplate,
-                commentSource: options.flags.includes('comment-source'),
-                children: 'children' in options ? compile(options.children, `${position}.${name}.children`) : null,
+                commentSources,
+                text,
+                children,
             };
         });
 
         for (const [index, entry] of compiled.entries()) {
             if (entry.name === 'Comment') {
                 const target = compiled[index + 1];
-                if (!target || target.special || target.forbidden) invalid(entry.path, 'Comment must immediately precede an allowed component entry.');
+                if (!target || target.special || target.group || target.forbidden) invalid(entry.path, 'Comment must immediately precede an allowed component entry.');
                 target.comment = entry;
             }
             if (entry.name === 'BlankLine'
@@ -93,6 +141,7 @@ export function compileStructure(structure) {
     const entries = compile(structure, 'structure');
     const roots = entries.filter((entry) => !entry.special);
     if (roots.length !== 1) invalid('structure', 'declare exactly one root component, optionally preceded by Comment.');
+    if (roots[0].group) invalid(roots[0].path, 'Group must be inside a component; it does not create an element.');
     if (roots[0].forbidden) invalid(roots[0].path, 'the root component cannot be forbidden.');
 
     // A forbidden declaration bans the named component throughout the template.
@@ -100,6 +149,10 @@ export function compileStructure(structure) {
     const pending = [...roots];
     for (const entry of pending) {
         if (entry.special) continue;
+        if (entry.group) {
+            pending.push(...entry.children);
+            continue;
+        }
         if (entry !== roots[0] && (entry.topLevel || entry.lastInTemplate)) {
             invalid(entry.path, 'top-level and last-in-template can only be declared on the root component.');
         }
@@ -114,18 +167,84 @@ export function compileStructure(structure) {
 }
 
 function meaningfulChildren(node) {
-    return node.children.filter((child) => child.type !== 'VComment'
+    return node.children.filter((child) => child.type !== 'VComment' && child.type !== 'VHTMLComment'
         && !(child.type === 'VText' && /^\s*$/.test(child.value)));
+}
+
+// Expand transparent sibling patterns per parent, keeping each occurrence distinct.
+function expandGroups(entries, actual) {
+    if (!entries.some((entry) => entry.group)) return {entries, choices: []};
+
+    const remaining = new Map();
+    for (const entry of entries.flatMap((entry) => entry.group ? entry.children : [entry])) {
+        if (!entry.special && !remaining.has(entry.name)) {
+            remaining.set(entry.name, actual.filter((node) => matchesComponent(node, entry.name)).length);
+        }
+    }
+    const minimum = (entries, name, consuming = [name]) => entries.reduce((count, entry) => {
+        if (!entry.required || entry.special) return count;
+        if (!entry.group) return count + Number(entry.name === name);
+        if (!entry.oneOf) return count + minimum(entry.children, name, consuming);
+        const selected = entry.children.find((child) => !consuming.includes(child.name) && (remaining.get(child.name) ?? 0) > 0)
+            ?? entry.children.find((child) => (remaining.get(child.name) ?? 0) > 0) ?? entry.children[0];
+        return count + Number(selected.name === name);
+    }, 0);
+    const expanded = [];
+    const choices = [];
+
+    for (const [index, entry] of entries.entries()) {
+        const later = entries.slice(index + 1);
+        if (!entry.group) {
+            expanded.push(entry);
+            if (!entry.special && !entry.forbidden) {
+                const count = remaining.get(entry.name) ?? 0;
+                const consumed = entry.repeatable ? Math.max(entry.required ? 1 : 0, count - minimum(later, entry.name)) : 1;
+                remaining.set(entry.name, Math.max(0, count - consumed));
+            }
+            continue;
+        }
+
+        if (entry.oneOf) {
+            const selected = entry.required
+                ? entry.children.find((child) => (remaining.get(child.name) ?? 0) > 0) ?? entry.children[0]
+                : undefined;
+            const alternatives = entry.children.map((child) => ({...child, required: child === selected, alternative: true}));
+            expanded.push(...alternatives);
+            choices.push({entry, alternatives});
+            for (const child of alternatives) remaining.set(child.name, Math.max(0, (remaining.get(child.name) ?? 0) - 1));
+            continue;
+        }
+
+        const occurrences = new Map();
+        for (const child of entry.children) {
+            if (!child.special) occurrences.set(child.name, (occurrences.get(child.name) ?? 0) + 1);
+        }
+        let repetitions = entry.required ? 1 : 0;
+        for (const [name, count] of occurrences) {
+            repetitions = Math.max(repetitions, Math.ceil(((remaining.get(name) ?? 0) - minimum(later, name, [...occurrences.keys()])) / count));
+        }
+        if (!entry.repeatable) repetitions = Math.min(1, repetitions);
+        for (let repetition = 0; repetition < repetitions; repetition++) {
+            for (const child of entry.children) {
+                expanded.push({...child});
+                if (!child.special) remaining.set(child.name, Math.max(0, (remaining.get(child.name) ?? 0) - 1));
+            }
+        }
+    }
+
+    return {entries: expanded, choices};
 }
 
 // Match sibling occurrences, not a global map keyed by component name.
 // Matching independently of order allows order errors without false missing errors.
 export function matchStructure(entry, node) {
-    const instance = {entry, node, children: [], missing: [], unexpected: [], outOfOrder: false};
+    const actual = meaningfulChildren(node);
+    const instance = {entry, node, hasContent: actual.length > 0, entries: entry.children, children: [], missing: [], choices: [], unexpected: [], outOfOrder: false};
     if (entry.children === null) return instance;
 
-    const expected = entry.children.filter((child) => !child.special && !child.forbidden);
-    const actual = meaningfulChildren(node);
+    const expanded = expandGroups(entry.children, actual);
+    instance.entries = expanded.entries;
+    const expected = instance.entries.filter((child) => !child.special && !child.forbidden);
     const available = new Set(actual);
 
     for (const [index, child] of expected.entries()) {
@@ -133,7 +252,7 @@ export function matchStructure(entry, node) {
         const requiredLater = expected.slice(index + 1).filter((later) => later.required && later.name === child.name).length;
 
         if (!candidates.length) {
-            if (child.required) instance.missing.push(child);
+            if (child.required && !child.alternative) instance.missing.push(child);
             continue;
         }
 
@@ -161,7 +280,11 @@ export function matchStructure(entry, node) {
     }
 
     instance.unexpected = [...available];
-    instance.outOfOrder = instance.children.some((child, index, siblings) => index > 0
+    for (const choice of expanded.choices) {
+        const members = instance.children.filter((child) => choice.alternatives.includes(child.entry));
+        if (members.length > 1 || (choice.entry.required && !members.length)) instance.choices.push({...choice, members});
+    }
+    instance.outOfOrder = !entry.unordered && instance.children.some((child, index, siblings) => index > 0
         && siblings[index - 1].node.range[0] > child.node.range[0]);
 
     return instance;

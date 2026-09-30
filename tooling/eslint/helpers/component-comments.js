@@ -1,17 +1,17 @@
-import {walkStructure} from './component-structure.js';
-
 const nativeTextElements = new Set([
     'a', 'abbr', 'b', 'bdi', 'bdo', 'br', 'cite', 'code', 'data', 'del', 'div', 'em',
     'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'i', 'ins', 'kbd', 'label', 'mark', 'p', 'q',
     's', 'samp', 'small', 'span', 'strong', 'sub', 'sup', 'time', 'u', 'var',
 ]);
 
-function literalText(node) {
+function literalText(node, boundaries, owner) {
     const fragments = [];
 
     function collect(element) {
+        if (boundaries.has(element)) return false;
         if (element.startTag.attributes.some((attribute) => attribute.directive
-            && ['text', 'html', 'if', 'else-if', 'else', 'for', 'show'].includes(attribute.key.name.name))) return false;
+            && (['text', 'html'].includes(attribute.key.name.name)
+                || (element !== owner && ['if', 'else-if', 'else', 'for', 'show'].includes(attribute.key.name.name))))) return false;
 
         for (const child of element.children) {
             if (child.type === 'VText') fragments.push(child.value);
@@ -30,13 +30,56 @@ function literalText(node) {
     return fragments.join('').replace(/\s+/g, ' ').trim() || undefined;
 }
 
+function attributeText(node, name, owner) {
+    const camelize = (value) => value.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
+    const literalString = (expression) => expression?.type === 'Literal' && typeof expression.value === 'string'
+        ? expression.value
+        : expression?.type === 'TemplateLiteral' && !expression.expressions.length ? expression.quasis[0].value.cooked : undefined;
+    const target = camelize(name);
+    let text;
+
+    for (const attribute of node.startTag.attributes) {
+        if (!attribute.directive) {
+            if (camelize(attribute.key.rawName) === target) text = attribute.value?.value;
+            continue;
+        }
+
+        const directive = attribute.key.name.name;
+        if (node !== owner && ['if', 'else-if', 'else', 'for', 'show'].includes(directive)) return undefined;
+        if (!['bind', 'model'].includes(directive)) continue;
+
+        const argument = attribute.key.argument;
+        const key = !argument && directive === 'model' ? 'modelValue'
+            : argument?.type === 'VIdentifier' ? argument.rawName : literalString(argument?.expression);
+        // A spread or unknown key can replace an earlier attribute. Later explicit values remain usable.
+        if (key === undefined) text = undefined;
+        else if (camelize(key) === target) text = directive === 'bind' ? literalString(attribute.value?.expression) : undefined;
+    }
+
+    return text?.replace(/\s+/g, ' ').trim() || undefined;
+}
+
 function sourceText(instance) {
-    for (const candidate of walkStructure(instance)) {
-        if (!candidate.entry.commentSource) continue;
-        const text = literalText(candidate.node);
-        if (text) return text.replace(/--|[<>]/g, (part) => (
-            part === '--' ? '&#45;&#45;' : part === '<' ? '&lt;' : '&gt;'
-        ));
+    const candidates = [];
+    const boundaries = new Set();
+    const pending = [instance];
+    while (pending.length) {
+        const candidate = pending.pop();
+        // A declared comment owns its whole subtree, even when the comment is missing or optional.
+        if (candidate !== instance && candidate.entry.comment) {
+            boundaries.add(candidate.node);
+            continue;
+        }
+        candidates.push(candidate);
+        pending.push(...[...candidate.children].reverse());
+    }
+
+    for (const candidate of candidates) {
+        for (const source of candidate.entry.commentSources) {
+            const text = source === 'comment-source' ? literalText(candidate.node, boundaries, instance.node)
+                : attributeText(candidate.node, source.slice('comment-source:'.length), instance.node);
+            if (text) return text;
+        }
     }
 
     return undefined;
@@ -64,15 +107,19 @@ export function checkComment(context, instance) {
     const node = instance.node;
     const comment = standaloneComment(sourceCode, tokenStore, node);
     if (!comment && !instance.entry.comment.required) return;
-    const expected = sourceText(instance);
+    const fixedText = instance.entry.comment.text;
+    const expected = (fixedText ?? sourceText(instance))?.replace(/--|[<>]/g, (part) => (
+        part === '--' ? '&#45;&#45;' : part === '<' ? '&lt;' : '&gt;'
+    ));
 
     // Authored comments are sufficient when no source can provide reliable text.
     if (comment?.value.trim()) {
         if (expected && comment.value.trim() !== expected) {
             context.report({
                 loc: comment.loc,
-                messageId: 'commentMismatch',
+                messageId: fixedText === undefined ? 'commentMismatch' : 'commentFixed',
                 data: {element: node.rawName, expected},
+                fix: fixedText === undefined ? undefined : (fixer) => fixer.replaceText(comment, `<!-- ${expected} -->`),
             });
         }
         return;

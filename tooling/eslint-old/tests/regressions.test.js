@@ -8,7 +8,6 @@ import forbidHardcodedUrls from '../rules/general/forbid-hardcoded-urls.js';
 import forbidOneLinerButton from '../rules/template/element-one-liners/forbid-one-liner-button.js';
 import forbidOneLinerTableHead from '../rules/template/element-one-liners/forbid-one-liner-table-head.js';
 import forbidOneLinerTableCell from '../rules/template/element-one-liners/forbid-one-liner-table-cell.js';
-import requireCommentButton from '../rules/template/element-comments/require-comment-button.js';
 import requireCommentTableHead from '../rules/template/element-comments/require-comment-table-head.js';
 import requireCommentDialog from '../rules/template/element-comments/require-comment-dialog.js';
 
@@ -270,58 +269,10 @@ test('ordinary buttons and table cells still receive multiline formatting', () =
   }
 });
 
-test('literal comments use the complete label and preserve inline boundaries and repeated words', () => {
-  for (const [body, label] of [
-    ['Save <strong>changes</strong>', 'Save changes'],
-    ['Log<span>in</span>', 'Login'],
-    ['<span>Go</span> <strong>Go</strong>', 'Go Go'],
-    ['Save\n  <strong>changes</strong>', 'Save changes'],
-  ]) {
-    const expected = template(`<!-- ${label} -->\n<Button>${body}</Button>`);
-    assert.deepEqual(lint(requireCommentButton, expected).messages, []);
-    const result = lint(requireCommentButton, template(`<Button>${body}</Button>`), { fix: true });
-    assert.equal(result.output, expected);
-    assert.deepEqual(result.messages, []);
-  }
-});
-
 test('replacement comments use the whole static label', () => {
   const result = lint(requireCommentTableHead, template('<!-- Save -->\n<TableHead>Save <strong>changes</strong></TableHead>'), { fix: true });
   assert.equal(result.output, template('<!-- Save changes -->\n<TableHead>Save <strong>changes</strong></TableHead>'));
   assert.deepEqual(result.messages, []);
-});
-
-test('conditional roots retain their known literal label', () => {
-  for (const directive of ['v-if="visible"', 'v-for="item in items"', 'v-show="visible"']) {
-    const markup = `<Button ${directive}>Save</Button>`;
-    const result = lint(requireCommentButton, template(markup), { fix: true });
-    assert.equal(result.output, template(`<!-- Save -->\n${markup}`));
-    assert.deepEqual(result.messages, []);
-  }
-});
-
-test('comments are not inferred from dynamic text or combined conditional and repeated branches', () => {
-  for (const body of [
-    'Save {{ label }}',
-    '<span v-if="ready">Save</span><span v-else>Cancel</span>',
-    '<span v-for="item in items">Go</span>',
-    'Save <span v-show="details">changes</span>',
-    '<span v-text="label" />',
-    '<span v-html="label" />',
-    '<slot />',
-  ]) {
-    const source = template(`<Button>${body}</Button>`);
-    const result = lint(requireCommentButton, source, { fix: true });
-    assert.equal(result.output, source, body);
-    assert.equal(result.fixed, false, body);
-    assert.equal(result.messages.length, 1, body);
-    assert.deepEqual(lint(requireCommentButton, template(`<!-- Descriptive label -->\n<Button>${body}</Button>`)).messages, []);
-  }
-
-  for (const directive of ['v-text="label"', 'v-html="label"']) {
-    const source = template(`<Button ${directive}>Fallback</Button>`);
-    assert.equal(lint(requireCommentButton, source, { fix: true }).output, source);
-  }
 });
 
 test('dialog title casing respects Unicode words, combining marks, separators, and suffixes', () => {
