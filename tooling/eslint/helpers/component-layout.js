@@ -104,7 +104,65 @@ function checkMultiLine(context, node) {
     });
 }
 
+function checkAttributeLayout(context, instance) {
+    const {node, entry} = instance;
+    const {startTag} = node;
+    const attributes = startTag.attributes;
+    const oneLine = entry.attributeLayout === 'one-liner-attributes';
+    if (oneLine && startTag.loc.start.line === startTag.loc.end.line) return;
+    if (!oneLine && !attributes.length) return;
+
+    const sourceCode = context.sourceCode;
+    const closing = sourceCode.parserServices.getTemplateBodyTokenStore?.().getLastToken(startTag);
+    if (!closing || !['>', '/>'].includes(sourceCode.getText(closing))) return;
+    const newline = sourceCode.text.includes('\r\n') ? '\r\n' : '\n';
+    const indent = sourceCode.lines[node.loc.start.line - 1].match(/^[\t ]*/)[0];
+    const parentIndent = node.parent?.type === 'VElement'
+        ? sourceCode.lines[node.parent.loc.start.line - 1].match(/^[\t ]*/)[0]
+        : '';
+    const indentUnit = indent.startsWith(parentIndent) && indent.length > parentIndent.length
+        ? indent.slice(parentIndent.length)
+        : indent.includes('\t') ? '\t' : '    ';
+    const gaps = [];
+    let end = startTag.range[0] + node.rawName.length + 1;
+
+    for (const attribute of attributes) {
+        gaps.push({range: [end, attribute.range[0]], text: oneLine ? ' ' : newline + indent + indentUnit});
+        end = attribute.range[1];
+    }
+    gaps.push({range: [end, closing.range[0]], text: oneLine ? (startTag.selfClosing ? ' ' : '') : newline + indent});
+    const edits = gaps.filter(({range, text}) => sourceCode.text.slice(...range) !== text);
+    if (!oneLine && !edits.length) return;
+
+    const safe = !preservesWhitespace(node)
+        && gaps.every(({range}) => /^[\t \r\n\f]*$/.test(sourceCode.text.slice(...range)))
+        && (!oneLine || attributes.every((attribute) => !/[\r\n]/.test(sourceCode.getText(attribute))));
+
+    context.report({
+        loc: startTag.loc,
+        messageId: oneLine ? 'oneLineAttributes' : 'multiLineAttributes',
+        data: {element: node.rawName},
+        fix: safe && edits.length ? (fixer) => edits.map(({range, text}) => fixer.replaceTextRange(range, text)) : undefined,
+    });
+}
+
 export function checkLayout(context, instance) {
+    if (instance.entry.attributeLayout) checkAttributeLayout(context, instance);
+    if (instance.entry.selfClosing && !instance.node.startTag.selfClosing) {
+        const {node} = instance;
+        const sourceCode = context.sourceCode;
+        const empty = node.endTag && /^[\t \r\n\f]*$/.test(sourceCode.text.slice(node.startTag.range[1], node.endTag.range[0]));
+        context.report({
+            loc: node.startTag.loc,
+            messageId: empty ? 'selfClosing' : 'selfClosingContent',
+            data: {element: node.rawName},
+            fix: empty && !preservesWhitespace(node) ? (fixer) => {
+                const closing = node.startTag.range[1] - 1;
+                const space = /\s/.test(sourceCode.text[closing - 1]) ? '' : ' ';
+                return fixer.replaceTextRange([closing, node.endTag.range[1]], `${space}/>`);
+            } : undefined,
+        });
+    }
     if (instance.entry.layout === 'multi-liner') {
         checkMultiLine(context, instance.node);
     } else if (instance.entry.layout === 'one-liner' && instance.node.loc.start.line !== instance.node.loc.end.line) {

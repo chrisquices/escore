@@ -4,7 +4,7 @@ export const structure = [
     {Comment: {flags: ['required']}},
     {
         Collapsible: {
-            flags: ['required'],
+            flags: ['required', 'one-liner-attributes'],
             children: [
                 {CollapsibleTrigger: {flags: ['optional', 'comment-source', 'non-empty']}},
                 {BlankLine: {flags: ['required']}},

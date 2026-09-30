@@ -19,6 +19,7 @@ import calendarRules from '../rules/components/calendar.js';
 import captionRules from '../rules/components/caption.js';
 import cardRules from '../rules/components/card.js';
 import checkboxRules from '../rules/components/checkbox.js';
+import contextMenuRules from '../rules/components/context-menu.js';
 import emptyRules from '../rules/components/empty.js';
 
 // Dependencies belong to the consuming project, as they do in eslint.config.js.
@@ -714,7 +715,10 @@ test('unordered rejects special entries and ambiguous ordered patterns', () => {
         [entry('Panel', [entry('Group', [entry('Item')], ['required', 'unordered'])])],
         [entry('Panel', undefined, ['required', 'unordered'])],
         [entry('Panel', [], ['required', 'unordered'])],
-        [entry('Panel', [entry('Header'), blank(), entry('Footer')], ['required', 'unordered'])],
+        [entry('Panel', [blank(), entry('Footer')])],
+        [entry('Panel', [entry('Header'), blank()], ['required', 'unordered'])],
+        [entry('Panel', [blank(), blank(), entry('Header')], ['required', 'unordered'])],
+        [entry('Panel', [blank(), entry('Header', undefined, ['forbidden'])], ['required', 'unordered'])],
         [entry('Panel', [entry('Group', [entry('Item')])], ['required', 'unordered'])],
         [entry('Panel', [entry('Item'), entry('Item')], ['required', 'unordered'])],
     ]) assert.throws(() => createComponentRules(structure), /Invalid component structure/);
@@ -1105,6 +1109,164 @@ test('spacing does not rewrite invalid structure or incorrectly ordered children
     assert.equal(lint(sourceCode, {fix: true}).output, sourceCode);
 });
 
+test('blank-line-between-children works without declared children and only separates direct elements', () => {
+    const rules = createComponentRules([entry('Panel', undefined, ['required', 'blank-line-between-children'])]);
+    const first = '<First><Nested /><Nested /></First>';
+    const markup = template(`<Panel>\n    ${first}\n    <Second />\n\n\n    <Third />\n</Panel>`);
+    const expected = template(`<Panel>\n    ${first}\n\n    <Second />\n\n    <Third />\n</Panel>`);
+    assert.equal(fixed(markup, {rules}), expected);
+    for (const body of ['', '\n', '\n<Only />\n', '\n<!-- Keep -->\n<Only />\n']) {
+        const unchanged = template(`<Panel>${body}</Panel>`);
+        assert.equal(fixed(unchanged, {rules}), unchanged);
+    }
+});
+
+test('blank-line-between-children handles optional repeated unordered children and explicit BlankLine entries', () => {
+    const rules = createComponentRules([entry('Panel', [
+        entry('Item', undefined, ['optional', 'repeatable']), blank(), entry('Footer', undefined, ['optional']),
+    ], ['required', 'unordered', 'blank-line-between-children'])]);
+    const markup = template('<Panel>\n<Item />\n<Footer />\n<Item />\n</Panel>');
+    assert.equal(lint(markup, {rules}).messages.length, 2, 'explicit and parent spacing must not duplicate reports');
+    assert.equal(fixed(markup, {rules}), template('<Panel>\n<Item />\n\n<Footer />\n\n<Item />\n</Panel>'));
+    assert.equal(fixed(template('<Panel>\n<Item />\n<Item />\n</Panel>'), {rules}), template('<Panel>\n<Item />\n\n<Item />\n</Panel>'));
+    assert.equal(fixed(template('<Panel>\n<Item />\n</Panel>'), {rules}), template('<Panel>\n<Item />\n</Panel>'));
+});
+
+test('blank-line-between-children keeps leading comments attached and settles with comment autofixes', () => {
+    const rules = createComponentRules([entry('Panel', [
+        comment(), source('Item', ['required', 'repeatable']),
+    ], ['required', 'blank-line-between-children'])]);
+    const markup = template('<Panel>\n\t<!-- First -->\n\t<Item>First</Item><!-- trailing -->\n\t<Item>Second</Item>\n</Panel>');
+    const expected = template('<Panel>\n\t<!-- First -->\n\t<Item>First</Item><!-- trailing -->\n\n\t<!-- Second -->\n\t<Item>Second</Item>\n</Panel>');
+    assert.equal(fixed(markup.replaceAll('\n', '\r\n'), {rules}), expected.replaceAll('\n', '\r\n'));
+});
+
+test('blank-line-between-children spaces actual occurrences of transparent groups', () => {
+    const rules = createComponentRules([entry('Panel', [
+        entry('Group', [entry('Item'), entry('Separator')], ['optional', 'repeatable']), entry('Page'),
+    ], ['required', 'blank-line-between-children'])]);
+    const markup = template('<Panel><Item /><Separator /><Item /><Separator /><Page /></Panel>');
+    assert.equal(fixed(markup, {rules}), template('<Panel><Item />\n\n<Separator />\n\n<Item />\n\n<Separator />\n\n<Page /></Panel>'));
+    assert.equal(fixed(template('<Panel><Page /></Panel>'), {rules}), template('<Panel><Page /></Panel>'));
+});
+
+test('blank-line-between-children avoids unsafe whitespace fixes and invalid structure', () => {
+    const rules = createComponentRules([entry('Panel', undefined, ['required', 'blank-line-between-children'])]);
+    for (const body of [
+        '<pre><Panel><First /><Second /></Panel></pre>',
+        '<Panel v-pre><First /><Second /></Panel>',
+        '<Panel><First /> Text <Second /></Panel>',
+        '<Panel><First />{{ label }}<Second /></Panel>',
+    ]) {
+        const markup = template(body);
+        const result = lint(markup, {rules, fix: true});
+        assert.equal(result.output, markup);
+        assert.deepEqual(result.messages.map((message) => message.messageId), ['spacing']);
+    }
+    const ordered = createComponentRules([entry('Panel', [entry('First'), entry('Second')], ['required', 'blank-line-between-children'])]);
+    for (const body of ['<Second /><First />', '<First /><Wrong /><Second />']) {
+        const markup = template(`<Panel>${body}</Panel>`);
+        assert.equal(lint(markup, {rules: ordered, fix: true}).output, markup);
+    }
+});
+
+test('blank-line-between-children rejects incompatible flags and special entries', () => {
+    for (const name of ['Comment', 'BlankLine', 'Group']) {
+        assert.throws(() => createComponentRules([entry('Panel', [entry(name, undefined, ['required', 'blank-line-between-children'])])]), /can only be declared on a component/);
+    }
+    for (const flag of ['one-liner', 'self-closing']) {
+        assert.throws(() => createComponentRules([entry('Panel', undefined, ['required', 'blank-line-between-children', flag])]), /cannot be combined/);
+    }
+});
+
+test('DrawerFooter adds a blank line between Button and DrawerClose while preserving nested content', async () => {
+    const {default: rules} = await import('../rules/components/drawer.js');
+    const options = {rules, only: ['drawer-must-have-required-blank-lines']};
+    const markup = template(`<Drawer>
+    <DrawerContent>
+        <DrawerHeader><DrawerTitle>Edit project</DrawerTitle></DrawerHeader>
+
+        <DrawerFooter>
+            <!-- Save changes -->
+            <Button>Save changes</Button>
+            <DrawerClose as-child>
+                <!-- Cancel -->
+                <Button variant="outline">Cancel</Button>
+            </DrawerClose>
+        </DrawerFooter>
+    </DrawerContent>
+</Drawer>`);
+    assert.equal(fixed(markup, options), markup.replace('</Button>\n            <DrawerClose', '</Button>\n\n            <DrawerClose'));
+});
+
+test('unordered blank lines follow every target occurrence in source order, including the first child', () => {
+    const rules = createComponentRules([entry('Panel', [
+        entry('Header'), blank(), entry('Item', undefined, ['optional', 'repeatable']), entry('Footer'),
+    ], ['required', 'unordered'])]);
+    const markup = template('<Panel>\n  <Item />\n  <Footer />\n  <Item />\n  <Item />\n  <Header />\n</Panel>');
+    assert.deepEqual(lint(markup, {rules}).messages.map((message) => message.message), Array(3).fill(
+        'Keep exactly one blank line above <Item>, before any leading comments attached to it.',
+    ));
+    assert.equal(fixed(markup, {rules}), markup.replaceAll('\n  <Item />', '\n\n  <Item />'));
+    assert.equal(fixed(template('<Panel><Header /><Item /><Footer /></Panel>'), {rules}), template('<Panel><Header />\n\n<Item /><Footer /></Panel>'));
+});
+
+test('unordered blank lines require only their own target and do not move to another optional child', () => {
+    const rules = createComponentRules([entry('Panel', [
+        blank(), entry('Item', undefined, ['optional', 'repeatable']),
+        entry('BlankLine', undefined, ['optional']), entry('Footer', undefined, ['optional']),
+    ], ['required', 'unordered'])]);
+    for (const body of ['', '\n<Footer />\n']) {
+        const markup = template(`<Panel>${body}</Panel>`);
+        assert.equal(fixed(markup, {rules}), markup);
+    }
+    assert.equal(fixed(template('<Panel>\n<Item />\n</Panel>'), {rules}), template('<Panel>\n\n<Item />\n</Panel>'));
+    assert.equal(fixed(template('<Panel>\n<Item />\n<Footer />\n</Panel>'), {rules}), template('<Panel>\n\n<Item />\n<Footer />\n</Panel>'));
+});
+
+test('unordered blank lines preserve attached comments, CRLF, indentation, and comment autofixes', () => {
+    const rules = createComponentRules([entry('Panel', [
+        blank(), comment(), source('Item', ['optional', 'repeatable']), entry('Header'),
+    ], ['required', 'unordered'])]);
+    const markup = template('<Panel>\n\t<!-- First -->\n\t<Item>First</Item>\n\t<Header /><!-- trailing -->\n\t<Item>Second</Item>\n</Panel>');
+    const expected = template('<Panel>\n\n\t<!-- First -->\n\t<Item>First</Item>\n\t<Header /><!-- trailing -->\n\n\t<!-- Second -->\n\t<Item>Second</Item>\n</Panel>');
+    assert.equal(fixed(markup.replaceAll('\n', '\r\n'), {rules}), expected.replaceAll('\n', '\r\n'));
+    assert.equal(fixed(expected.replace('\n\n', '\n\n\n\n'), {rules}), expected);
+});
+
+test('unordered blank lines do not rewrite invalid children', () => {
+    const rules = createComponentRules([entry('Panel', [
+        blank(), entry('Item', undefined, ['optional', 'repeatable']),
+    ], ['required', 'unordered'])]);
+    const markup = template('<Panel>\n<Wrong />\n<Item />\n</Panel>');
+    const result = lint(markup, {rules, fix: true});
+    assert.deepEqual(result.messages.map((message) => message.messageId), ['unexpected']);
+    assert.equal(result.output, markup);
+});
+
+test('ContextMenu groups receive blank lines in content and submenu content', () => {
+    const options = {rules: contextMenuRules, only: ['contextmenu-must-follow-structure', 'contextmenu-must-have-required-blank-lines']};
+    const group = '<ContextMenuGroup><ContextMenuItem>Open</ContextMenuItem></ContextMenuGroup>';
+    const markup = template(`<ContextMenu>
+    <ContextMenuTrigger>Actions</ContextMenuTrigger>
+
+    <ContextMenuContent>
+        ${group}
+        <ContextMenuItem>Save</ContextMenuItem>
+        ${group}
+        <ContextMenuSub>
+            <ContextMenuSubTrigger>More</ContextMenuSubTrigger>
+            <ContextMenuSubContent>
+                ${group}
+                ${group}
+            </ContextMenuSubContent>
+        </ContextMenuSub>
+    </ContextMenuContent>
+</ContextMenu>`);
+    assert.equal(lint(markup, options).messages.length, 4);
+    assert.equal(fixed(markup, options), markup.replace(/\n( +<ContextMenuGroup>)/g, '\n\n$1'));
+});
+
 test('missing comments use the first valid source and preserve literal word boundaries', () => {
     const sourceCode = empty().replace('<!-- No results -->\n', '');
     assert.equal(fixed(sourceCode), empty());
@@ -1392,6 +1554,184 @@ test('generated rules safely ignore files without a Vue template parser', () => 
 });
 
 const layoutRules = (name, layout) => createComponentRules([entry(name, undefined, ['required', layout])]);
+
+test('self-closing fixes empty pairs while preserving attributes and surrounding content', () => {
+    const rules = layoutRules('CustomPanel', 'self-closing');
+    for (const [markup, expected] of [
+        ['<CustomPanel></CustomPanel>', '<CustomPanel />'],
+        ['<CustomPanel>\n  \t\n</CustomPanel>', '<CustomPanel />'],
+        ['<custom-panel id=test></custom-panel>', '<custom-panel id=test />'],
+        ['<CustomPanel :value="a > b" v-bind="attrs" @change="save" ></CustomPanel>', '<CustomPanel :value="a > b" v-bind="attrs" @change="save" />'],
+        ['<p>Before <CustomPanel></CustomPanel> after</p>', '<p>Before <CustomPanel /> after</p>'],
+        ['<CustomPanel\r\n\tlabel="first\r\nsecond"\r\n>\r\n</CustomPanel>', '<CustomPanel\r\n\tlabel="first\r\nsecond"\r\n/>'],
+    ]) {
+        assert.deepEqual(lint(template(markup), {rules}).messages.map((message) => message.messageId), ['selfClosing']);
+        assert.equal(fixed(template(markup), {rules}), template(expected));
+    }
+    for (const markup of ['<CustomPanel />', '<CustomPanel\n    id="one"\n/>']) {
+        assert.equal(lint(template(markup), {rules, fix: true}).fixed, false);
+        assert.deepEqual(lint(template(markup), {rules}).messages, []);
+    }
+});
+
+test('self-closing reports content and comments without deleting or moving them', () => {
+    const rules = layoutRules('Panel', 'self-closing');
+    for (const content of ['Text', '{{ label }}', '<Child />', '<!-- Keep -->', '\n<!-- Keep -->\n', '&#32;', '&nbsp;', '\u00a0']) {
+        const markup = template(`<Panel>${content}</Panel>`);
+        const result = lint(markup, {rules, fix: true});
+        assert.deepEqual(result.messages.map((message) => message.messageId), ['selfClosingContent']);
+        assert.equal(result.output, markup);
+        assert.equal(result.fixed, false);
+    }
+    for (const markup of ['<pre><Panel>\n  \n</Panel></pre>', '<Panel v-pre>\n  \n</Panel>']) {
+        const result = lint(template(markup), {rules, fix: true});
+        assert.deepEqual(result.messages.map((message) => message.messageId), ['selfClosing']);
+        assert.equal(result.output, template(markup));
+    }
+});
+
+test('self-closing settles with both attribute layouts and whole-element one-liner', () => {
+    const markup = template('<Panel\n  v-model="value" disabled>\n</Panel>');
+    for (const attributeLayout of ['one-liner-attributes', 'multi-liner-attributes']) {
+        const rules = createComponentRules([entry('Panel', undefined, ['required', 'self-closing', attributeLayout])]);
+        const expected = attributeLayout === 'one-liner-attributes'
+            ? '<Panel v-model="value" disabled />'
+            : '<Panel\n    v-model="value"\n    disabled\n/>';
+        assert.equal(fixed(markup, {rules}), template(expected));
+    }
+    const rules = createComponentRules([entry('Panel', undefined, ['required', 'self-closing', 'one-liner'])]);
+    assert.equal(fixed(markup, {rules}), template('<Panel v-model="value" disabled />'));
+});
+
+test('self-closing applies to repeated optional children and leaves unflagged entries alone', () => {
+    const rules = createComponentRules([entry('Panel', [
+        entry('Item', undefined, ['optional', 'repeatable', 'self-closing']), entry('Other'),
+    ])]);
+    const markup = template('<Panel><Item></Item><Item>\n</Item><Other></Other></Panel>');
+    assert.equal(fixed(markup, {rules}), template('<Panel><Item /><Item /><Other></Other></Panel>'));
+    assert.equal(fixed(template('<Panel><Other></Other></Panel>'), {rules}), template('<Panel><Other></Other></Panel>'));
+});
+
+test('self-closing validation rejects incompatible content requirements and special entries', () => {
+    for (const flag of ['non-empty', 'multi-liner']) {
+        assert.throws(() => createComponentRules([entry('Panel', undefined, ['required', 'self-closing', flag])]), /self-closing cannot be combined/);
+    }
+    for (const name of ['Comment', 'BlankLine', 'Group']) {
+        assert.throws(() => createComponentRules([entry('Panel', [entry(name, undefined, ['required', 'self-closing'])])]), /self-closing can only be declared on a component/);
+    }
+    for (const flags of [['required'], ['optional']]) {
+        assert.throws(() => createComponentRules([entry('Panel', [entry('Item', undefined, flags)], ['required', 'self-closing'])]), /self-closing cannot declare child entries/);
+    }
+    const rules = createComponentRules([entry('Panel', [], ['required', 'self-closing'])]);
+    assert.equal(fixed(template('<Panel></Panel>'), {rules}), template('<Panel />'));
+});
+
+test('Collapsible fixes only its opening tag and preserves nested children and blank lines', async () => {
+    const {default: rules} = await import('../rules/components/collapsible.js');
+    const opening = `<Collapsible
+    :open="controlledOpen"
+    defualt-open="true"
+    class="w-full max-w-xl space-y-2">`;
+    const body = `
+    <CollapsibleTrigger :disabled="'true'" class="rounded-md border px-4 py-2" type="button">
+        Misspelled and incorrectly typed props
+    </CollapsibleTrigger>
+
+    <!-- Keep this comment and the blank line -->
+    <CollapsibleContent class="p-4 text-sm">
+        <span>{{ content }}</span>
+    </CollapsibleContent>
+</Collapsible>`;
+    const sourceCode = template(opening + body);
+    const options = {rules, only: ['collapsible-must-follow-line-layout']};
+    assert.deepEqual(lint(sourceCode, options).messages.map((message) => message.messageId), ['oneLineAttributes']);
+    assert.equal(fixed(sourceCode, options), template('<Collapsible :open="controlledOpen" defualt-open="true" class="w-full max-w-xl space-y-2">' + body));
+});
+
+test('one-liner-attributes handles self-closing tags and leaves already single-line openings alone', () => {
+    const rules = layoutRules('Panel', 'one-liner-attributes');
+    assert.equal(fixed(template('<Panel\n    id="one"\n    :data-value="value"\n/>'), {rules}), template('<Panel id="one" :data-value="value" />'));
+    assert.equal(fixed(template('<Panel\n/>'), {rules}), template('<Panel />'));
+    assert.equal(fixed(template('<Panel\n>\n  <Child />\n</Panel>'), {rules}), template('<Panel>\n  <Child />\n</Panel>'));
+    const existing = template('<Panel id="one">\n    <Child />\n\n    More content\n</Panel>');
+    assert.equal(lint(existing, {rules, fix: true}).fixed, false);
+    const kebab = layoutRules('CustomPanel', 'one-liner-attributes');
+    assert.equal(fixed(template('<custom-panel\n    disabled\n/>'), {rules: kebab}), template('<custom-panel disabled />'));
+});
+
+test('multi-liner-attributes puts attributes and the closing marker on separate lines without changing content', () => {
+    const rules = layoutRules('Panel', 'multi-liner-attributes');
+    const attributes = ['@update:model-value="record(value)"', 'v-model="value"', 'v-bind="attrs"', ':class="{ active }"'];
+    const body = '\n    <Child />\n\n    <!-- Keep -->\n    Text\n</Panel>';
+    assert.equal(fixed(template(`<Panel ${attributes.join(' ')}>${body}`), {rules}), template(`<Panel\n    ${attributes.join('\n    ')}\n>${body}`));
+    assert.equal(fixed(template('<Panel id="one" />'), {rules}), template('<Panel\n    id="one"\n/>'));
+    assert.equal(fixed(template('<Panel id="one"> Text </Panel>'), {rules}), template('<Panel\n    id="one"\n> Text </Panel>'));
+    assert.deepEqual(lint(template('<Panel />'), {rules}).messages, [], 'no attributes require no extra lines');
+});
+
+test('attribute layouts preserve multiline values and expressions, reporting unsafe one-line requests', () => {
+    const attributes = ['title="first\nsecond"', ':label="`first\nsecond`"', ':value="(() => { return\nvalue })()"'];
+    const markup = template(`<Panel ${attributes.join(' ')}>Body</Panel>`);
+    const oneLine = lint(markup, {rules: layoutRules('Panel', 'one-liner-attributes'), fix: true});
+    assert.equal(oneLine.output, markup);
+    assert.equal(oneLine.fixed, false);
+    assert.deepEqual(oneLine.messages.map((message) => message.messageId), ['oneLineAttributes']);
+    assert.equal(fixed(markup, {rules: layoutRules('Panel', 'multi-liner-attributes')}), template(`<Panel\n    ${attributes.join('\n    ')}\n>Body</Panel>`));
+});
+
+test('attribute layouts preserve tabs, CRLF, and inline text boundaries', () => {
+    const multiline = layoutRules('Panel', 'multi-liner-attributes');
+    const input = template('\t<Panel id="one" disabled />').replaceAll('\n', '\r\n');
+    const expected = template('\t<Panel\n\t\tid="one"\n\t\tdisabled\n\t/>').replaceAll('\n', '\r\n');
+    assert.equal(fixed(input, {rules: multiline}), expected);
+    assert.equal(fixed(expected, {rules: layoutRules('Panel', 'one-liner-attributes')}), input);
+    const inline = template('<div>before<Panel id="one"> middle </Panel>after</div>');
+    assert.equal(fixed(inline, {rules: multiline}), template('<div>before<Panel\n    id="one"\n> middle </Panel>after</div>'));
+});
+
+test('attribute flags combine with multiline content layout and apply to repeated occurrences', () => {
+    for (const attributeLayout of ['one-liner-attributes', 'multi-liner-attributes']) {
+        const rules = createComponentRules([entry('Panel', undefined, ['required', 'multi-liner', attributeLayout])]);
+        const opening = attributeLayout === 'one-liner-attributes' ? '<Panel id="one">' : '<Panel\n    id="one"\n>';
+        assert.equal(fixed(template('<Panel id="one">Text</Panel>'), {rules}), template(`${opening}\n    Text\n</Panel>`));
+        assert.equal(fixed(template('<Panel id="one" />'), {rules}), template(`${opening}\n</Panel>`));
+    }
+    const rules = createComponentRules([entry('Panel', [
+        entry('Label', undefined, ['optional', 'repeatable', 'one-liner-attributes']),
+        entry('Divider'),
+        entry('Label', undefined, ['optional', 'repeatable', 'multi-liner-attributes']),
+    ])]);
+    const input = template('<Panel>\n    <Label\n        id="first" />\n    <Label\n        id="second" />\n    <Divider />\n    <Label id="third" />\n</Panel>');
+    assert.equal(fixed(input, {rules}), template('<Panel>\n    <Label id="first" />\n    <Label id="second" />\n    <Divider />\n    <Label\n        id="third"\n    />\n</Panel>'));
+    assert.deepEqual(lint(template('<Panel><Divider /></Panel>'), {rules}).messages, []);
+});
+
+test('attribute layout flags leave preformatted and v-pre markup for manual repair', () => {
+    for (const layout of ['one-liner-attributes', 'multi-liner-attributes']) {
+        const rules = layoutRules('Panel', layout);
+        const content = layout === 'one-liner-attributes' ? '<Panel\n    id="one" />' : '<Panel id="one" />';
+        for (const markup of [`<pre>${content}</pre>`, `<div v-pre>${content}</div>`]) {
+            const sourceCode = template(markup);
+            const result = lint(sourceCode, {rules, fix: true});
+            assert.equal(result.output, sourceCode);
+            assert.equal(result.messages.length, 1);
+        }
+    }
+});
+
+test('attribute layout definitions reject opposing flags and whole-element conflicts', () => {
+    for (const flags of [
+        ['one-liner-attributes', 'multi-liner-attributes'],
+        ['one-liner', 'multi-liner-attributes'],
+    ]) assert.throws(() => createComponentRules([entry('Panel', undefined, ['required', ...flags])]), /cannot be used together/);
+    for (const layout of ['one-liner-attributes', 'multi-liner-attributes']) {
+        assert.throws(() => createComponentRules([entry('Comment', undefined, ['required', layout]), entry('Panel')]), /cannot.*use layout flags/);
+        assert.throws(() => createComponentRules([entry('Panel', [entry('Header'), entry('BlankLine', undefined, ['required', layout]), entry('Footer')])]), /cannot.*use layout flags/);
+        assert.throws(() => createComponentRules([entry('Panel', [entry('Group', [entry('Item')], ['required', layout])])]), /Group supports/);
+    }
+    const rules = createComponentRules([entry('Panel', undefined, ['required', 'one-liner', 'one-liner-attributes'])]);
+    assert.equal(fixed(template('<Panel\n    id="one">\n    Text\n</Panel>'), {rules}), template('<Panel id="one">Text</Panel>'));
+});
 
 test('one-liner fixes the complete EmptyDescription from the supplied example', () => {
     const sourceCode = empty('', header('No results', '\n    Create a project to collect your work in one place.\n'));

@@ -1,30 +1,57 @@
 import {meaningfulToken} from './component-comments.js';
 
 export function checkSpacing(context, instance) {
-    if (!instance.entries || instance.outOfOrder || instance.unexpected.length || instance.choices.length) return;
+    if ((!instance.entries && !instance.entry.blankLineBetweenChildren)
+        || instance.outOfOrder || instance.unexpected.length || instance.choices.length) return;
 
     const sourceCode = context.sourceCode;
     const tokenStore = sourceCode.parserServices.getTemplateBodyTokenStore?.();
     if (!tokenStore) return;
 
-    const entries = instance.entries;
-    const matched = new Map();
-    for (const child of instance.children) {
-        const group = matched.get(child.entry);
-        if (group) group.last = child.node;
-        else matched.set(child.entry, {first: child.node, last: child.node});
+    const boundaries = [];
+    let preservesWhitespace = false;
+    if (instance.entry.blankLineBetweenChildren) {
+        for (let node = instance.node; node?.type === 'VElement'; node = node.parent) {
+            if (['pre', 'textarea', 'script', 'style'].includes(node.rawName)
+                || node.startTag.attributes.some((attribute) => attribute.directive && attribute.key.name.name === 'pre')) {
+                preservesWhitespace = true;
+                break;
+            }
+        }
+        const children = instance.node.children.filter((child) => child.type === 'VElement');
+        for (let index = 1; index < children.length; index++) {
+            boundaries.push({left: children[index - 1], right: children[index], betweenChildren: true});
+        }
     }
+    if (instance.entry.unordered) {
+        const children = [...instance.children].sort((a, b) => a.node.range[0] - b.node.range[0]);
+        for (const [index, child] of children.entries()) {
+            if (child.entry.blankLine?.required) {
+                boundaries.push({left: children[index - 1]?.node ?? instance.node.startTag, right: child.node});
+            }
+        }
+    } else if (instance.entries) {
+        const entries = instance.entries;
+        const matched = new Map();
+        for (const child of instance.children) {
+            const group = matched.get(child.entry);
+            if (group) group.last = child.node;
+            else matched.set(child.entry, {first: child.node, last: child.node});
+        }
+
+        for (const [index, entry] of entries.entries()) {
+            if (entry.name !== 'BlankLine' || !entry.required) continue;
+            const before = entries.slice(0, index).reverse().find((candidate) => matched.has(candidate));
+            const after = entries.slice(index + 1).find((candidate) => matched.has(candidate));
+            // No trailing gap when all following optional components are absent.
+            if (!before || !after) continue;
+
+            boundaries.push({left: matched.get(before).last, right: matched.get(after).first});
+        }
+    }
+
     const checked = new Set();
-
-    for (const [index, entry] of entries.entries()) {
-        if (entry.name !== 'BlankLine' || !entry.required) continue;
-        const before = entries.slice(0, index).reverse().find((candidate) => matched.has(candidate));
-        const after = entries.slice(index + 1).find((candidate) => matched.has(candidate));
-        // No trailing gap when all following optional components are absent.
-        if (!before || !after) continue;
-
-        const left = matched.get(before).last;
-        const right = matched.get(after).first;
+    for (const {left, right, betweenChildren} of boundaries) {
         if (checked.has(right)) continue;
         checked.add(right);
 
@@ -45,11 +72,14 @@ export function checkSpacing(context, instance) {
 
         const newline = sourceCode.text.includes('\r\n') ? '\r\n' : '\n';
         const indentation = gap.split(/\r\n|\n|\r/).at(-1);
+        const safe = !betweenChildren || (!preservesWhitespace
+            && tokenStore.getTokensBetween(left, right, {includeComments: true})
+                .every((token) => ['HTMLWhitespace', 'HTMLComment'].includes(token.type)));
         context.report({
             loc: right.startTag.loc,
-            messageId: 'spacing',
+            messageId: instance.entry.unordered && !betweenChildren ? 'spacingAbove' : 'spacing',
             data: {before: left.rawName, after: right.rawName},
-            fix: (fixer) => fixer.replaceTextRange([end - gap.length, end], newline + newline + indentation),
+            fix: safe ? (fixer) => fixer.replaceTextRange([end - gap.length, end], newline + newline + indentation) : undefined,
         });
     }
 }

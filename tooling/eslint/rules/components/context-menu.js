@@ -16,7 +16,9 @@ export const structure = [
                             {ContextMenuLabel: {flags: ['optional', 'repeatable', 'one-liner', 'non-empty']}},
                             {Comment: {flags: ['required']}},
                             {ContextMenuItem: {flags: ['optional', 'repeatable', 'comment-source', 'non-empty']}},
-                            {ContextMenuCheckboxItem: {flags: ['optional', 'repeatable', 'non-empty']}},
+                            {Comment: {flags: ['required']}},
+                            {ContextMenuCheckboxItem: {flags: ['optional', 'repeatable', 'comment-source', 'non-empty']}},
+                            {Comment: {flags: ['required']}},
                             {
                                 ContextMenuRadioGroup: {
                                     flags: ['optional', 'repeatable'],
@@ -27,6 +29,7 @@ export const structure = [
                             },
                             {Comment: {flags: ['required', 'text:Separator']}},
                             {ContextMenuSeparator: {flags: ['optional', 'repeatable', 'one-liner']}},
+                            {BlankLine: {flags: ['required']}},
                             {
                                 ContextMenuGroup: {
                                     flags: ['optional', 'repeatable', 'unordered', 'non-empty'],
@@ -35,7 +38,9 @@ export const structure = [
                                         {ContextMenuLabel: {flags: ['optional', 'repeatable', 'one-liner', 'non-empty']}},
                                         {Comment: {flags: ['required']}},
                                         {ContextMenuItem: {flags: ['optional', 'repeatable', 'comment-source', 'non-empty']}},
-                                        {ContextMenuCheckboxItem: {flags: ['optional', 'repeatable', 'non-empty']}},
+                                        {Comment: {flags: ['required']}},
+                                        {ContextMenuCheckboxItem: {flags: ['optional', 'repeatable', 'comment-source', 'non-empty']}},
+                                        {Comment: {flags: ['required']}},
                                         {
                                             ContextMenuRadioGroup: {
                                                 flags: ['optional', 'repeatable'],
@@ -49,11 +54,12 @@ export const structure = [
                                     ],
                                 },
                             },
+                            {Comment: {flags: ['required']}},
                             {
                                 ContextMenuSub: {
                                     flags: ['optional', 'repeatable'],
                                     children: [
-                                        {ContextMenuSubTrigger: {flags: ['required', 'non-empty']}},
+                                        {ContextMenuSubTrigger: {flags: ['required', 'comment-source', 'non-empty']}},
                                         {
                                             ContextMenuSubContent: {
                                                 flags: ['required', 'unordered', 'non-empty'],
@@ -62,7 +68,9 @@ export const structure = [
                                                     {ContextMenuLabel: {flags: ['optional', 'repeatable', 'one-liner', 'non-empty']}},
                                                     {Comment: {flags: ['required']}},
                                                     {ContextMenuItem: {flags: ['optional', 'repeatable', 'comment-source', 'non-empty']}},
-                                                    {ContextMenuCheckboxItem: {flags: ['optional', 'repeatable', 'non-empty']}},
+                                                    {Comment: {flags: ['required']}},
+                                                    {ContextMenuCheckboxItem: {flags: ['optional', 'repeatable', 'comment-source', 'non-empty']}},
+                                                    {Comment: {flags: ['required']}},
                                                     {
                                                         ContextMenuRadioGroup: {
                                                             flags: ['optional', 'repeatable'],
@@ -73,6 +81,7 @@ export const structure = [
                                                     },
                                                     {Comment: {flags: ['required', 'text:Separator']}},
                                                     {ContextMenuSeparator: {flags: ['optional', 'repeatable', 'one-liner']}},
+                                                    {BlankLine: {flags: ['required']}},
                                                     {
                                                         ContextMenuGroup: {
                                                             flags: ['optional', 'repeatable', 'unordered', 'non-empty'],
@@ -81,7 +90,9 @@ export const structure = [
                                                                 {ContextMenuLabel: {flags: ['optional', 'repeatable', 'one-liner', 'non-empty']}},
                                                                 {Comment: {flags: ['required']}},
                                                                 {ContextMenuItem: {flags: ['optional', 'repeatable', 'comment-source', 'non-empty']}},
-                                                                {ContextMenuCheckboxItem: {flags: ['optional', 'repeatable', 'non-empty']}},
+                                                                {Comment: {flags: ['required']}},
+                                                                {ContextMenuCheckboxItem: {flags: ['optional', 'repeatable', 'comment-source', 'non-empty']}},
+                                                                {Comment: {flags: ['required']}},
                                                                 {
                                                                     ContextMenuRadioGroup: {
                                                                         flags: ['optional', 'repeatable'],
@@ -95,7 +106,16 @@ export const structure = [
                                                             ],
                                                         },
                                                     },
-                                                    {ContextMenuSub: {flags: ['optional', 'repeatable']}},
+                                                    {Comment: {flags: ['required']}},
+                                                    {
+                                                        ContextMenuSub: {
+                                                            flags: ['optional', 'repeatable'],
+                                                            children: [
+                                                                {ContextMenuSubTrigger: {flags: ['required', 'comment-source', 'non-empty']}},
+                                                                {ContextMenuSubContent: {flags: ['required', 'non-empty']}},
+                                                            ],
+                                                        },
+                                                    },
                                                 ],
                                             },
                                         },

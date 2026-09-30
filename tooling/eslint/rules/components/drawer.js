@@ -7,7 +7,7 @@ export const structure = [
             flags: ['required'],
             children: [
                 {DrawerTrigger: {flags: ['optional', 'non-empty']}},
-                {DrawerOverlay: {flags: ['optional', 'one-liner']}},
+                {BlankLine: {flags: ['required']}},
                 {
                     DrawerContent: {
                         flags: ['required'],
@@ -27,7 +27,7 @@ export const structure = [
                             {BlankLine: {flags: ['required']}},
                             {
                                 DrawerFooter: {
-                                    flags: ['optional', 'unordered'],
+                                    flags: ['optional', 'unordered', 'blank-line-between-children'],
                                     children: [
                                         {Comment: {flags: ['required']}},
                                         {DrawerClose: {flags: ['optional', 'repeatable', 'comment-source', 'non-empty']}},

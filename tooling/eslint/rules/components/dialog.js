@@ -7,7 +7,7 @@ export const structure = [
             flags: ['required'],
             children: [
                 {DialogTrigger: {flags: ['optional', 'non-empty']}},
-                {DialogOverlay: {flags: ['optional', 'one-liner']}},
+                {BlankLine: {flags: ['required']}},
                 {
                     Group: {
                         flags: ['required', 'one-of'],

@@ -4,7 +4,7 @@ export const structure = [
     {Comment: {flags: ['required']}},
     {
         Combobox: {
-            flags: ['required'],
+            flags: ['required', 'multi-liner-attributes'],
             children: [
                 {
                     ComboboxAnchor: {

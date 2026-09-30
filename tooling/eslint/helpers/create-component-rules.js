@@ -254,16 +254,21 @@ export default function createComponentRules(structure, {forbiddenMessage, props
             `Enforce declared blank lines within ${root.name}.`,
             {
                 spacing: 'Keep exactly one blank line between <{{ before }}> and <{{ after }}>, before any leading comments attached to <{{ after }}>.',
+                spacingAbove: 'Keep exactly one blank line above <{{ after }}>, before any leading comments attached to it.',
             },
             checkSpacing,
             {fixable: 'whitespace'},
         ),
 
         [`${family}-must-follow-line-layout`]: createRule(
-            `Enforce one-liner and multi-liner flags within ${root.name}.`,
+            `Enforce declared element and attribute line layouts within ${root.name}.`,
             {
                 oneLine: 'Write the entire <{{ element }}> on one line, including attributes and content. Preserve text and bindings.',
                 multiLine: 'Put the opening tag, content, and closing tag of <{{ element }}> on separate lines. Preserve text and bindings.',
+                oneLineAttributes: 'Write the opening tag and attributes of <{{ element }}> on one line. Preserve values and child content.',
+                multiLineAttributes: 'Put each attribute of <{{ element }}> on its own indented line below the tag name, with > or /> on a separate line. Preserve values and child content.',
+                selfClosing: 'Write <{{ element }} /> as a self-closing tag. Preserve its attributes.',
+                selfClosingContent: '<{{ element }}> must be self-closing. Resolve its child content or comments before converting it to <{{ element }} />.',
             },
             checkLayout,
             {fixable: 'code', type: 'layout'},

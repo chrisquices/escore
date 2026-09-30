@@ -1,4 +1,4 @@
-const supportedFlags = new Set(['required', 'optional', 'forbidden', 'repeatable', 'one-of', 'comment-source', 'one-liner', 'multi-liner', 'non-empty', 'unordered', 'top-level', 'last-in-template']);
+const supportedFlags = new Set(['required', 'optional', 'forbidden', 'repeatable', 'one-of', 'comment-source', 'one-liner', 'multi-liner', 'one-liner-attributes', 'multi-liner-attributes', 'self-closing', 'blank-line-between-children', 'non-empty', 'unordered', 'top-level', 'last-in-template']);
 const attributeCommentSource = /^comment-source:[a-zA-Z_][\w.:-]*$/;
 const specialNames = new Set(['Comment', 'BlankLine']);
 
@@ -16,7 +16,7 @@ export function compileStructure(structure) {
         throw new TypeError(`Invalid component structure at ${path}: ${message}`);
     }
 
-    function compile(entries, path) {
+    function compile(entries, path, unorderedChildren = false) {
         if (!Array.isArray(entries)) invalid(path, 'expected an array.');
 
         const compiled = entries.map((entry, index) => {
@@ -57,13 +57,34 @@ export function compileStructure(structure) {
                 invalid(position, 'one-liner and multi-liner cannot be used together.');
             }
             const layout = options.flags.find((flag) => flag === 'one-liner' || flag === 'multi-liner');
+            const attributeLayout = options.flags.find((flag) => flag === 'one-liner-attributes' || flag === 'multi-liner-attributes');
+            if (options.flags.includes('one-liner-attributes') && options.flags.includes('multi-liner-attributes')) {
+                invalid(position, 'one-liner-attributes and multi-liner-attributes cannot be used together.');
+            }
+            if (layout === 'one-liner' && attributeLayout === 'multi-liner-attributes') {
+                invalid(position, 'one-liner and multi-liner-attributes cannot be used together.');
+            }
             const nonEmpty = options.flags.includes('non-empty');
+            const selfClosing = options.flags.includes('self-closing');
+            const blankLineBetweenChildren = options.flags.includes('blank-line-between-children');
             const unordered = options.flags.includes('unordered');
             const repeatable = options.flags.includes('repeatable');
             const topLevel = options.flags.includes('top-level');
             const lastInTemplate = options.flags.includes('last-in-template');
             const commentSources = options.flags.filter((flag) => flag === 'comment-source' || flag.startsWith('comment-source:'));
             const special = specialNames.has(name);
+            if (blankLineBetweenChildren && (special || group)) {
+                invalid(position, 'blank-line-between-children can only be declared on a component.');
+            }
+            if (blankLineBetweenChildren && (selfClosing || layout === 'one-liner')) {
+                invalid(position, 'blank-line-between-children cannot be combined with self-closing or one-liner.');
+            }
+            if (selfClosing && (special || group)) {
+                invalid(position, 'self-closing can only be declared on a component.');
+            }
+            if (selfClosing && (nonEmpty || layout === 'multi-liner')) {
+                invalid(position, 'self-closing cannot be combined with non-empty or multi-liner.');
+            }
             if (nonEmpty && (special || group)) {
                 invalid(position, 'non-empty can only be declared on a component.');
             }
@@ -73,17 +94,20 @@ export function compileStructure(structure) {
             if (special && (topLevel || lastInTemplate)) {
                 invalid(position, `${name} cannot use template placement flags.`);
             }
-            if (special && ('children' in options || commentSources.length || layout || repeatable)) {
+            if (special && ('children' in options || commentSources.length || layout || attributeLayout || repeatable)) {
                 invalid(position, `${name} cannot have children, be a comment-source, use layout flags, or be repeatable.`);
             }
             if (oneOf && !group) invalid(position, 'one-of can only be declared on Group.');
-            if (group && (layout || commentSources.length || topLevel || lastInTemplate || (oneOf && repeatable))) {
+            if (group && (layout || attributeLayout || commentSources.length || topLevel || lastInTemplate || (oneOf && repeatable))) {
                 invalid(position, 'Group supports required or optional, with either repeatable or one-of.');
             }
-            const children = 'children' in options ? compile(options.children, `${position}.${name}.children`) : null;
+            const children = 'children' in options ? compile(options.children, `${position}.${name}.children`, unordered) : null;
+            if (selfClosing && children?.length) {
+                invalid(position, 'self-closing cannot declare child entries; omit children or use an empty array.');
+            }
             if (unordered) {
-                if (!children?.length || children.some((child) => child.group || child.name === 'BlankLine')) {
-                    invalid(position, 'unordered requires declared children without Group or BlankLine entries.');
+                if (!children?.length || children.some((child) => child.group)) {
+                    invalid(position, 'unordered requires declared children without Group entries.');
                 }
                 const names = children.filter((child) => !child.special).map((child) => child.name);
                 if (new Set(names).size !== names.length) {
@@ -112,6 +136,9 @@ export function compileStructure(structure) {
                 group,
                 oneOf,
                 layout,
+                attributeLayout,
+                selfClosing,
+                blankLineBetweenChildren,
                 nonEmpty,
                 unordered,
                 topLevel,
@@ -128,9 +155,16 @@ export function compileStructure(structure) {
                 if (!target || target.special || target.group || target.forbidden) invalid(entry.path, 'Comment must immediately precede an allowed component entry.');
                 target.comment = entry;
             }
-            if (entry.name === 'BlankLine'
-                && (!compiled.slice(0, index).some((item) => !item.special && !item.forbidden)
-                    || !compiled.slice(index + 1).some((item) => !item.special && !item.forbidden))) {
+            if (entry.name !== 'BlankLine') continue;
+            if (unorderedChildren) {
+                // Like Comment, spacing belongs to each occurrence of the following component.
+                const target = compiled[index + (compiled[index + 1]?.name === 'Comment' ? 2 : 1)];
+                if (!target || target.special || target.group || target.forbidden) {
+                    invalid(entry.path, 'BlankLine in unordered children must precede an allowed component, optionally with Comment between them.');
+                }
+                target.blankLine = entry;
+            } else if (!compiled.slice(0, index).some((item) => !item.special && !item.forbidden)
+                || !compiled.slice(index + 1).some((item) => !item.special && !item.forbidden)) {
                 invalid(entry.path, 'BlankLine must have a component before and after it.');
             }
         }
