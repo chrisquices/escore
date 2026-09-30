@@ -4,7 +4,7 @@ export const structure = [
     {Comment: {flags: ['required']}},
     {
         InputOTP: {
-            flags: ['required'],
+            flags: ['required', 'blank-line-between-children'],
             children: [
                 {
                     InputOTPGroup: {
@@ -18,6 +18,7 @@ export const structure = [
                     Group: {
                         flags: ['optional', 'repeatable'],
                         children: [
+                            {Comment: {flags: ['required', 'text:Separator']}},
                             {InputOTPSeparator: {flags: ['required', 'one-liner']}},
                             {
                                 InputOTPGroup: {

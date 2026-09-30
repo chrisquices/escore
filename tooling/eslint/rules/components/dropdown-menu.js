@@ -6,17 +6,19 @@ export const structure = [
         DropdownMenu: {
             flags: ['required'],
             children: [
-                {DropdownMenuTrigger: {flags: ['optional', 'comment-source', 'non-empty']}},
+                {DropdownMenuTrigger: {flags: ['required', 'comment-source', 'non-empty']}},
                 {BlankLine: {flags: ['required']}},
                 {
                     DropdownMenuContent: {
-                        flags: ['required', 'unordered', 'non-empty'],
+                        flags: ['required', 'unordered', 'non-empty', 'blank-line-between-children'],
                         children: [
                             {Comment: {flags: ['required', 'text:Label']}},
                             {DropdownMenuLabel: {flags: ['optional', 'repeatable', 'one-liner', 'non-empty']}},
                             {Comment: {flags: ['required']}},
                             {DropdownMenuItem: {flags: ['optional', 'repeatable', 'comment-source', 'non-empty']}},
-                            {DropdownMenuCheckboxItem: {flags: ['optional', 'repeatable', 'non-empty']}},
+                            {Comment: {flags: ['required']}},
+                            {DropdownMenuCheckboxItem: {flags: ['optional', 'repeatable', 'comment-source', 'non-empty']}},
+                            {Comment: {flags: ['required']}},
                             {
                                 DropdownMenuRadioGroup: {
                                     flags: ['optional', 'repeatable'],
@@ -27,6 +29,7 @@ export const structure = [
                             },
                             {Comment: {flags: ['required', 'text:Separator']}},
                             {DropdownMenuSeparator: {flags: ['optional', 'repeatable', 'one-liner']}},
+                            {BlankLine: {flags: ['required']}},
                             {
                                 DropdownMenuGroup: {
                                     flags: ['optional', 'repeatable', 'unordered', 'non-empty'],
@@ -35,7 +38,9 @@ export const structure = [
                                         {DropdownMenuLabel: {flags: ['optional', 'repeatable', 'one-liner', 'non-empty']}},
                                         {Comment: {flags: ['required']}},
                                         {DropdownMenuItem: {flags: ['optional', 'repeatable', 'comment-source', 'non-empty']}},
-                                        {DropdownMenuCheckboxItem: {flags: ['optional', 'repeatable', 'non-empty']}},
+                                        {Comment: {flags: ['required']}},
+                                        {DropdownMenuCheckboxItem: {flags: ['optional', 'repeatable', 'comment-source', 'non-empty']}},
+                                        {Comment: {flags: ['required']}},
                                         {
                                             DropdownMenuRadioGroup: {
                                                 flags: ['optional', 'repeatable'],
@@ -49,11 +54,12 @@ export const structure = [
                                     ],
                                 },
                             },
+                            {Comment: {flags: ['required']}},
                             {
                                 DropdownMenuSub: {
                                     flags: ['optional', 'repeatable'],
                                     children: [
-                                        {DropdownMenuSubTrigger: {flags: ['required', 'non-empty']}},
+                                        {DropdownMenuSubTrigger: {flags: ['required', 'comment-source', 'non-empty']}},
                                         {
                                             DropdownMenuSubContent: {
                                                 flags: ['required', 'unordered', 'non-empty'],
@@ -62,7 +68,9 @@ export const structure = [
                                                     {DropdownMenuLabel: {flags: ['optional', 'repeatable', 'one-liner', 'non-empty']}},
                                                     {Comment: {flags: ['required']}},
                                                     {DropdownMenuItem: {flags: ['optional', 'repeatable', 'comment-source', 'non-empty']}},
-                                                    {DropdownMenuCheckboxItem: {flags: ['optional', 'repeatable', 'non-empty']}},
+                                                    {Comment: {flags: ['required']}},
+                                                    {DropdownMenuCheckboxItem: {flags: ['optional', 'repeatable', 'comment-source', 'non-empty']}},
+                                                    {Comment: {flags: ['required']}},
                                                     {
                                                         DropdownMenuRadioGroup: {
                                                             flags: ['optional', 'repeatable'],
@@ -73,6 +81,7 @@ export const structure = [
                                                     },
                                                     {Comment: {flags: ['required', 'text:Separator']}},
                                                     {DropdownMenuSeparator: {flags: ['optional', 'repeatable', 'one-liner']}},
+                                                    {BlankLine: {flags: ['required']}},
                                                     {
                                                         DropdownMenuGroup: {
                                                             flags: ['optional', 'repeatable', 'unordered', 'non-empty'],
@@ -81,7 +90,9 @@ export const structure = [
                                                                 {DropdownMenuLabel: {flags: ['optional', 'repeatable', 'one-liner', 'non-empty']}},
                                                                 {Comment: {flags: ['required']}},
                                                                 {DropdownMenuItem: {flags: ['optional', 'repeatable', 'comment-source', 'non-empty']}},
-                                                                {DropdownMenuCheckboxItem: {flags: ['optional', 'repeatable', 'non-empty']}},
+                                                                {Comment: {flags: ['required']}},
+                                                                {DropdownMenuCheckboxItem: {flags: ['optional', 'repeatable', 'comment-source', 'non-empty']}},
+                                                                {Comment: {flags: ['required']}},
                                                                 {
                                                                     DropdownMenuRadioGroup: {
                                                                         flags: ['optional', 'repeatable'],
@@ -95,7 +106,16 @@ export const structure = [
                                                             ],
                                                         },
                                                     },
-                                                    {DropdownMenuSub: {flags: ['optional', 'repeatable']}},
+                                                    {Comment: {flags: ['required']}},
+                                                    {
+                                                        DropdownMenuSub: {
+                                                            flags: ['optional', 'repeatable'],
+                                                            children: [
+                                                                {DropdownMenuSubTrigger: {flags: ['required', 'comment-source', 'non-empty']}},
+                                                                {DropdownMenuSubContent: {flags: ['required', 'non-empty']}},
+                                                            ],
+                                                        },
+                                                    },
                                                 ],
                                             },
                                         },

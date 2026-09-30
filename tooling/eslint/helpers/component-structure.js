@@ -34,14 +34,21 @@ export function compileStructure(structure) {
                 invalid(position, 'only flags and children are supported.');
             }
             if (!Array.isArray(options.flags) || options.flags.some((flag) => typeof flag !== 'string'
-                || (!supportedFlags.has(flag) && !attributeCommentSource.test(flag) && !flag.startsWith('text:')))
+                || (!supportedFlags.has(flag) && !attributeCommentSource.test(flag) && !flag.startsWith('text:') && !flag.startsWith('not-within:')))
                 || new Set(options.flags).size !== options.flags.length) {
-                invalid(position, `flags must contain unique, supported values: ${[...supportedFlags].join(', ')}, comment-source:<attribute>, text:<content>.`);
+                invalid(position, `flags must contain unique, supported values: ${[...supportedFlags].join(', ')}, comment-source:<attribute>, text:<content>, not-within:<component,...>.`);
             }
             const textFlags = options.flags.filter((flag) => flag.startsWith('text:'));
             const text = textFlags[0]?.slice('text:'.length).trim();
             if (textFlags.length && (name !== 'Comment' || textFlags.length !== 1 || !text || /[\r\n]/.test(textFlags[0]))) {
                 invalid(position, 'text:<content> is only allowed once on Comment, with nonempty, single-line text.');
+            }
+            const notWithinFlags = options.flags.filter((flag) => flag.startsWith('not-within:'));
+            const notWithin = notWithinFlags[0]?.slice('not-within:'.length).split(',').map((name) => name.trim()) ?? [];
+            if (notWithinFlags.length && (name !== 'Comment' || notWithinFlags.length !== 1
+                || /[\r\n]/.test(notWithinFlags[0]) || notWithin.some((name) => !/^[a-zA-Z_][\w.-]*$/.test(name))
+                || new Set(notWithin).size !== notWithin.length)) {
+                invalid(position, 'not-within:<component,...> is only allowed once on Comment, with unique comma-separated component names.');
             }
             const required = options.flags.includes('required');
             const forbidden = options.flags.includes('forbidden');
@@ -145,6 +152,7 @@ export function compileStructure(structure) {
                 lastInTemplate,
                 commentSources,
                 text,
+                notWithin,
                 children,
             };
         });

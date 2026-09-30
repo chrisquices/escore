@@ -6,8 +6,7 @@ export const structure = [
         Drawer: {
             flags: ['required'],
             children: [
-                {DrawerTrigger: {flags: ['optional', 'non-empty']}},
-                {BlankLine: {flags: ['required']}},
+                {DrawerTrigger: {flags: ['forbidden']}},
                 {
                     DrawerContent: {
                         flags: ['required'],
@@ -43,4 +42,7 @@ export const structure = [
     },
 ];
 
-export default createComponentRules(structure, {propsScope: 'family'});
+export default createComponentRules(structure, {
+    propsScope: 'family',
+    forbiddenMessage: 'Do not use <{{ element }}>. Control <{{ root }}> with v-model:open or :open and @update:open; keep the opener outside <{{ root }}> and preserve its behavior.',
+});

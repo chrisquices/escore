@@ -10,7 +10,7 @@ export const structure = [
                     EmptyHeader: {
                         flags: ['required'],
                         children: [
-                            {EmptyMedia: {flags: ['optional']}},
+                            {EmptyMedia: {flags: ['optional', 'multi-liner']}},
                             {EmptyTitle: {flags: ['required', 'comment-source', 'one-liner']}},
                             {EmptyDescription: {flags: ['required', 'comment-source', 'one-liner']}},
                         ],

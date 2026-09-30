@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import type { HTMLAttributes } from "vue"
-import { MinusIcon } from "@lucide/vue"
-import { useForwardProps } from "reka-ui"
+import type {HTMLAttributes} from "vue"
+import {MinusIcon} from "@lucide/vue"
+import {useForwardProps} from "reka-ui"
 
 const props = defineProps<{ class?: HTMLAttributes["class"] }>()
 
@@ -10,12 +10,12 @@ const forwarded = useForwardProps(props)
 
 <template>
   <div
-    data-slot="input-otp-separator"
-    role="separator"
-    v-bind="forwarded"
+      data-slot="input-otp-separator"
+      role="separator"
+      v-bind="forwarded"
   >
     <slot>
-      <MinusIcon />
+      <MinusIcon/>
     </slot>
   </div>
 </template>

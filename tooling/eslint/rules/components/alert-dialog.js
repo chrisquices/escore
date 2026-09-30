@@ -6,7 +6,6 @@ export const structure = [
         AlertDialog: {
             flags: ['required', 'top-level', 'last-in-template'],
             children: [
-                {AlertDialogTrigger: {flags: ['forbidden']}},
                 {
                     AlertDialogContent: {
                         flags: ['required'],
@@ -42,5 +41,5 @@ export const structure = [
 ];
 
 export default createComponentRules(structure, {
-    forbiddenMessage: 'Do not use <{{ element }}>. Control <{{ root }}> with :open and @update:open; keep the opener outside the dialog and preserve its behavior.',
+    forbiddenMessage: 'Do not use <{{ element }}>. Control <{{ root }}> with v-model:open or :open and @update:open; keep the opener outside <{{ root }}> and preserve its behavior.',
 });

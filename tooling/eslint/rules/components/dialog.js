@@ -6,8 +6,7 @@ export const structure = [
         Dialog: {
             flags: ['required'],
             children: [
-                {DialogTrigger: {flags: ['optional', 'non-empty']}},
-                {BlankLine: {flags: ['required']}},
+                {DialogTrigger: {flags: ['forbidden']}},
                 {
                     Group: {
                         flags: ['required', 'one-of'],
@@ -80,4 +79,7 @@ export const structure = [
     },
 ];
 
-export default createComponentRules(structure, {propsScope: 'family'});
+export default createComponentRules(structure, {
+    propsScope: 'family',
+    forbiddenMessage: 'Do not use <{{ element }}>. Control <{{ root }}> with v-model:open or :open and @update:open; keep the opener outside <{{ root }}> and preserve its behavior.',
+});

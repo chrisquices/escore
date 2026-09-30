@@ -4,7 +4,7 @@ export const structure = [
     {Comment: {flags: ['required']}},
     {
         InputGroup: {
-            flags: ['required'],
+            flags: ['required', 'blank-line-between-children'],
             children: [
                 {InputGroupAddon: {flags: ['optional', 'repeatable']}},
                 {

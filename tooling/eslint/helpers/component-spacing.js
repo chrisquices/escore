@@ -1,8 +1,8 @@
 import {meaningfulToken} from './component-comments.js';
 
 export function checkSpacing(context, instance) {
-    if ((!instance.entries && !instance.entry.blankLineBetweenChildren)
-        || instance.outOfOrder || instance.unexpected.length || instance.choices.length) return;
+    const checkEntries = instance.entries && !instance.outOfOrder && !instance.unexpected.length && !instance.choices.length;
+    if (!checkEntries && !instance.entry.blankLineBetweenChildren) return;
 
     const sourceCode = context.sourceCode;
     const tokenStore = sourceCode.parserServices.getTemplateBodyTokenStore?.();
@@ -23,14 +23,15 @@ export function checkSpacing(context, instance) {
             boundaries.push({left: children[index - 1], right: children[index], betweenChildren: true});
         }
     }
-    if (instance.entry.unordered) {
+    // Explicit BlankLine entries depend on a valid match; the parent flag uses actual children.
+    if (checkEntries && instance.entry.unordered) {
         const children = [...instance.children].sort((a, b) => a.node.range[0] - b.node.range[0]);
         for (const [index, child] of children.entries()) {
             if (child.entry.blankLine?.required) {
                 boundaries.push({left: children[index - 1]?.node ?? instance.node.startTag, right: child.node});
             }
         }
-    } else if (instance.entries) {
+    } else if (checkEntries) {
         const entries = instance.entries;
         const matched = new Map();
         for (const child of instance.children) {

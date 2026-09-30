@@ -1,3 +1,5 @@
+import {matchesComponent} from './component-structure.js';
+
 const nativeTextElements = new Set([
     'a', 'abbr', 'b', 'bdi', 'bdo', 'br', 'cite', 'code', 'data', 'del', 'div', 'em',
     'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'i', 'ins', 'kbd', 'label', 'mark', 'p', 'q',
@@ -59,14 +61,25 @@ function attributeText(node, name, owner) {
     return text?.replace(/\s+/g, ' ').trim() || undefined;
 }
 
+function hasActiveComment(instance) {
+    const comment = instance.entry.comment;
+    if (!comment) return false;
+    if (!comment.notWithin.length) return true;
+
+    for (let parent = instance.node.parent; parent; parent = parent.parent) {
+        if (comment.notWithin.some((name) => matchesComponent(parent, name))) return false;
+    }
+    return true;
+}
+
 function sourceText(instance) {
     const candidates = [];
     const boundaries = new Set();
     const pending = [instance];
     while (pending.length) {
         const candidate = pending.pop();
-        // A declared comment owns its whole subtree, even when the comment is missing or optional.
-        if (candidate !== instance && candidate.entry.comment) {
+        // An active declaration owns its subtree even when its comment is missing or optional.
+        if (candidate !== instance && hasActiveComment(candidate)) {
             boundaries.add(candidate.node);
             continue;
         }
@@ -98,7 +111,7 @@ export function standaloneComment(sourceCode, tokenStore, node) {
 }
 
 export function checkComment(context, instance) {
-    if (!instance.entry.comment) return;
+    if (!hasActiveComment(instance)) return;
 
     const sourceCode = context.sourceCode;
     const tokenStore = sourceCode.parserServices.getTemplateBodyTokenStore?.();

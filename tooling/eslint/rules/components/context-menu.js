@@ -10,7 +10,7 @@ export const structure = [
                 {BlankLine: {flags: ['required']}},
                 {
                     ContextMenuContent: {
-                        flags: ['required', 'unordered', 'non-empty'],
+                        flags: ['required', 'unordered', 'non-empty', 'blank-line-between-children'],
                         children: [
                             {Comment: {flags: ['required', 'text:Label']}},
                             {ContextMenuLabel: {flags: ['optional', 'repeatable', 'one-liner', 'non-empty']}},

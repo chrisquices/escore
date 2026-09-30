@@ -990,20 +990,50 @@ test('controlled AlertDialog comments, header spacing, and one-liners settle wit
             assert.equal(result.output, banned, 'the agent must preserve opener behavior when replacing the trigger');
             assert.equal(result.fixed, false);
             assert.deepEqual(result.messages.map((message) => message.messageId), ['forbidden']);
-            assert.match(result.messages[0].message, /Control <AlertDialog> with :open and @update:open/);
+            assert.match(result.messages[0].message, /Control <AlertDialog> with v-model:open or :open and @update:open/);
         }
     }
 });
 
-test('AlertDialogTrigger is forbidden outside the dialog too, with any as-child value or spelling', () => {
-    for (const name of ['AlertDialogTrigger', 'alert-dialog-trigger']) {
-        for (const attribute of ['', ' as-child', ' :as-child="false"']) {
-            const markup = template(`<section><${name}${attribute}><button type="button">Open</button></${name}></section>`);
-            const result = lint(markup, {rules: alertDialogRules, fix: true});
-            assert.equal(result.output, markup);
-            assert.deepEqual(result.messages.map((message) => message.ruleId), ['escore/alertdialog-must-follow-structure']);
-            assert.equal(result.messages[0].messageId, 'forbidden');
-            assert.equal(result.messages[0].message, `Do not use <${name}>. Control <AlertDialog> with :open and @update:open; keep the opener outside the dialog and preserve its behavior.`);
+test('removed Dialog, Drawer, and AlertDialog triggers are forbidden template-wide with any as-child value or spelling', async () => {
+    for (const [root, file, kebab] of [
+        ['Dialog', 'dialog', 'dialog-trigger'],
+        ['Drawer', 'drawer', 'drawer-trigger'],
+        ['AlertDialog', 'alert-dialog', 'alert-dialog-trigger'],
+    ]) {
+        const {default: rules} = await import(`../rules/components/${file}.js`);
+        for (const name of [`${root}Trigger`, kebab]) {
+            for (const attribute of ['', ' as-child', ' :as-child="false"']) {
+                const markup = template(`<section><${name}${attribute}><button type="button">Open</button></${name}></section>`);
+                const result = lint(markup, {rules, fix: true});
+                assert.equal(result.output, markup);
+                assert.deepEqual(result.messages.map((message) => message.ruleId), [`escore/${root.toLowerCase()}-must-follow-structure`]);
+                assert.equal(result.messages[0].messageId, 'forbidden');
+                assert.equal(result.messages[0].message, `Do not use <${name}>. Control <${root}> with v-model:open or :open and @update:open; keep the opener outside <${root}> and preserve its behavior.`);
+            }
+        }
+    }
+});
+
+test('controlled Dialog and Drawer accept content without triggers or leading blank lines', async () => {
+    for (const [root, file, content] of [
+        ['Dialog', 'dialog', 'DialogContent'],
+        ['Dialog', 'dialog', 'DialogScrollContent'],
+        ['Drawer', 'drawer', 'DrawerContent'],
+    ]) {
+        const {default: rules} = await import(`../rules/components/${file}.js`);
+        for (const binding of ['v-model:open="isOpen"', ':open="isOpen" @update:open="isOpen = $event"']) {
+            const markup = template(`<!-- Edit article -->
+<${root} ${binding}>
+    <${content}>
+        <${root}Header><${root}Title>Edit article</${root}Title></${root}Header>
+    </${content}>
+</${root}>`);
+            assert.equal(fixed(markup, {rules}), markup);
+            const banned = markup.replace(`    <${content}>`, `    <${root}Trigger as-child><Button>Open</Button></${root}Trigger>\n    <${content}>`);
+            const result = lint(banned, {rules, fix: true});
+            assert.equal(result.output, banned);
+            assert.deepEqual(result.messages.map((message) => message.messageId), ['forbidden']);
         }
     }
 });
@@ -1150,7 +1180,7 @@ test('blank-line-between-children spaces actual occurrences of transparent group
     assert.equal(fixed(template('<Panel><Page /></Panel>'), {rules}), template('<Panel><Page /></Panel>'));
 });
 
-test('blank-line-between-children avoids unsafe whitespace fixes and invalid structure', () => {
+test('blank-line-between-children avoids unsafe whitespace fixes', () => {
     const rules = createComponentRules([entry('Panel', undefined, ['required', 'blank-line-between-children'])]);
     for (const body of [
         '<pre><Panel><First /><Second /></Panel></pre>',
@@ -1163,10 +1193,45 @@ test('blank-line-between-children avoids unsafe whitespace fixes and invalid str
         assert.equal(result.output, markup);
         assert.deepEqual(result.messages.map((message) => message.messageId), ['spacing']);
     }
-    const ordered = createComponentRules([entry('Panel', [entry('First'), entry('Second')], ['required', 'blank-line-between-children'])]);
-    for (const body of ['<Second /><First />', '<First /><Wrong /><Second />']) {
+});
+
+test('blank-line-between-children works independently of order, unexpected children, and one-of errors', () => {
+    for (const [children, flags, body, expected, errors] of [
+        [[entry('First'), blank(), entry('Second')], [], '<Second /><First />', '<Second />\n\n<First />', ['order']],
+        [[entry('First'), blank(), entry('Second')], [], '<First /><Wrong /><Second />', '<First />\n\n<Wrong />\n\n<Second />', ['unexpected']],
+        [[entry('First'), blank(), entry('Second')], ['unordered'], '<Second /><Wrong /><First />', '<Second />\n\n<Wrong />\n\n<First />', ['unexpected']],
+        [[entry('Group', [entry('First'), entry('Second')], ['required', 'one-of'])], [], '<First /><Second />', '<First />\n\n<Second />', ['choiceMultiple']],
+    ]) {
+        const rules = createComponentRules([entry('Panel', children, ['required', 'blank-line-between-children', ...flags])]);
         const markup = template(`<Panel>${body}</Panel>`);
-        assert.equal(lint(markup, {rules: ordered, fix: true}).output, markup);
+        const result = lint(markup, {rules, fix: true});
+        assert.equal(result.output, template(`<Panel>${expected}</Panel>`));
+        assert.deepEqual(result.messages.map((message) => message.messageId), errors);
+        assert.equal(lint(result.output, {rules, fix: true}).fixed, false);
+    }
+});
+
+test('Editable spaces EditableArea and an undeclared div without spacing descendants or hiding structure errors', async () => {
+    const {default: rules} = await import('../rules/components/editable.js');
+    const options = {rules, only: ['editable-must-have-required-blank-lines', 'editable-must-follow-structure']};
+    const markup = template(`<Editable default-value="Project overview" class="max-w-md">
+    <EditableArea>
+        <EditablePreview />
+        <EditableInput />
+    </EditableArea>
+    <!-- Edit controls -->
+    <div class="flex shrink-0 gap-2">
+        <EditableEditTrigger class="rounded-md border px-3 py-1 text-sm">Edit</EditableEditTrigger>
+        <EditableSubmitTrigger class="rounded-md border px-3 py-1 text-sm">Save</EditableSubmitTrigger>
+        <EditableCancelTrigger class="rounded-md border px-3 py-1 text-sm">Cancel</EditableCancelTrigger>
+    </div>
+</Editable>`);
+    for (const source of [markup, markup.replace('    <!-- Edit controls -->\n', '')]) {
+        const result = lint(source, {...options, fix: true});
+        assert.equal(result.output, source.replace('</EditableArea>\n', '</EditableArea>\n\n'));
+        assert.deepEqual(result.messages.map((message) => message.messageId), ['unexpected', 'misplaced', 'misplaced', 'misplaced']);
+        assert.match(result.messages[0].message, /Unexpected <div>/);
+        assert.equal(lint(result.output, {...options, fix: true}).fixed, false);
     }
 });
 
@@ -1265,6 +1330,114 @@ test('ContextMenu groups receive blank lines in content and submenu content', ()
 </ContextMenu>`);
     assert.equal(lint(markup, options).messages.length, 4);
     assert.equal(fixed(markup, options), markup.replace(/\n( +<ContextMenuGroup>)/g, '\n\n$1'));
+});
+
+test('not-within skips comments under any listed ancestor, including through wrappers and kebab-case tags', () => {
+    const rules = createComponentRules([
+        entry('Comment', undefined, ['required', 'not-within:Field, OtherComponent']), entry('Input'),
+    ]);
+    for (const body of [
+        '<Field><Input /></Field>',
+        '<Field><FieldContent><div><Input /></div></FieldContent></Field>',
+        '<OtherComponent><Input /></OtherComponent>',
+        '<other-component><div><Input /></div></other-component>',
+        '<Field><template #default><Input /><Input /></template></Field>',
+    ]) {
+        const markup = template(body);
+        assert.equal(fixed(markup, {rules}), markup);
+    }
+    for (const body of [
+        '<Input />', '<Unrelated><Input /></Unrelated>', '<Field /><Input />', '<field><Input /></field>',
+    ]) {
+        assert.deepEqual(lint(template(body), {rules}).messages.map((message) => message.messageId), ['commentManual']);
+    }
+    const self = createComponentRules([entry('Comment', undefined, ['required', 'not-within:Input']), entry('Input')]);
+    assert.deepEqual(lint(template('<Input />'), {rules: self}).messages.map((message) => message.messageId), ['commentManual']);
+});
+
+test('not-within preserves existing comments and suppresses both inferred and fixed comment edits', () => {
+    for (const presence of ['required', 'optional']) {
+        for (const textFlags of [[], ['text:Fixed']]) {
+            const rules = createComponentRules([
+                entry('Comment', undefined, [presence, 'not-within:Field', ...textFlags]), source('Panel'),
+            ]);
+            for (const authored of ['', '<!-- -->\n', '<!-- Custom -->\n']) {
+                const markup = template(`<Field>\n${authored}<Panel>Source</Panel>\n</Field>`);
+                assert.equal(fixed(markup, {rules}), markup);
+            }
+            const outside = template('<Panel>Source</Panel>');
+            assert.equal(fixed(outside, {rules}), presence === 'optional' ? outside
+                : template(`<!-- ${textFlags.length ? 'Fixed' : 'Source'} -->\n<Panel>Source</Panel>`));
+            assert.deepEqual(lint(template('<!-- Custom -->\n<Panel>Source</Panel>'), {rules}).messages.map((message) => message.messageId), [textFlags.length ? 'commentFixed' : 'commentMismatch']);
+        }
+    }
+});
+
+test('not-within leaves props, layout, content, and structure validation active', () => {
+    const rules = createComponentRules([
+        entry('Comment', undefined, ['required', 'not-within:Field']),
+        entry('AspectRatio', undefined, ['required', 'one-liner']),
+    ]);
+    const markup = template('<Field><AspectRatio\n ratio="wide"\n/></Field>');
+    assert.deepEqual(lint(markup, {rules}).messages.map((message) => message.messageId).sort(), ['oneLine', 'propValue']);
+    const result = lint(markup, {rules, fix: true});
+    assert.equal(result.output, template('<Field><AspectRatio ratio="wide" /></Field>'));
+    assert.deepEqual(result.messages.map((message) => message.messageId), ['propValue']);
+
+    const structured = createComponentRules([
+        entry('Comment', undefined, ['required', 'not-within:Field']),
+        entry('Panel', [entry('Label')], ['required', 'non-empty']),
+    ]);
+    assert.deepEqual(lint(template('<Field><Panel /></Field>'), {rules: structured}).messages.map((message) => message.messageId).sort(), ['empty', 'missing']);
+});
+
+test('not-within applies per repeated occurrence without suppressing other comment declarations', () => {
+    const rules = createComponentRules([entry('Panel', [
+        entry('Comment', undefined, ['required', 'not-within:Field']), source('Item', ['required', 'repeatable']),
+        comment(), source('Footer'),
+    ])]);
+    const content = '<Panel>\n<Item>First</Item>\n<Item>Second</Item>\n<Footer>Actions</Footer>\n</Panel>';
+    const output = fixed(template(`<Field>\n${content}\n</Field>\n${content}`), {rules});
+    assert.equal((output.match(/<!-- First -->/g) ?? []).length, 1);
+    assert.equal((output.match(/<!-- Second -->/g) ?? []).length, 1);
+    assert.equal((output.match(/<!-- Actions -->/g) ?? []).length, 2);
+});
+
+test('not-within lets sources feed the nearest active comment while retaining other comment boundaries', () => {
+    for (const presence of ['required', 'optional']) {
+        const rules = createComponentRules([comment(), entry('Panel', [
+            entry('Comment', undefined, [presence, 'not-within:Field']), source('Heading'),
+            comment(), entry('Section', [source('Label')]), source('Footer'),
+        ])]);
+        const content = '<Panel>\n<Heading>Panel heading</Heading>\n<Section><Label>Section label</Label></Section>\n<Footer>Fallback</Footer>\n</Panel>';
+        const inside = fixed(template(`<Field>\n${content}\n</Field>`), {rules});
+        assert.ok(inside.includes('<!-- Panel heading -->\n<Panel>'));
+        assert.ok(inside.includes('<!-- Section label -->\n<Section>'));
+        assert.equal((inside.match(/<!--/g) ?? []).length, 2);
+        const outside = fixed(template(content), {rules});
+        assert.ok(outside.includes('<!-- Fallback -->\n<Panel>'));
+        assert.ok(outside.includes('<!-- Section label -->\n<Section>'));
+        assert.equal(outside.includes('<!-- Panel heading -->\n<Heading>'), presence === 'required');
+    }
+    const nativeSource = createComponentRules([comment(), entry('Panel', [
+        entry('div', [entry('Comment', undefined, ['required', 'not-within:Field']), source('span')], ['required', 'comment-source']),
+    ])]);
+    const markup = template('<Field>\n<Panel>\n<div><span>Field text</span></div>\n</Panel>\n</Field>');
+    assert.equal(fixed(markup, {rules: nativeSource}), markup.replace('<Panel>', '<!-- Field text -->\n<Panel>'));
+});
+
+test('not-within validates its placement and comma-separated names', () => {
+    for (const value of ['', ' ', 'Field,', ',Field', 'Field,,OtherComponent', 'Field OtherComponent', 'Field,Field', 'Field,*', 'Field,>div', 'Field,\nOtherComponent']) {
+        assert.throws(() => createComponentRules([
+            entry('Comment', undefined, ['required', `not-within:${value}`]), entry('Panel'),
+        ]), /not-within:<component,\.\.\.> is only allowed once on Comment/);
+    }
+    assert.throws(() => createComponentRules([
+        entry('Comment', undefined, ['required', 'not-within:Field', 'not-within:OtherComponent']), entry('Panel'),
+    ]), /not-within:<component,\.\.\.> is only allowed once on Comment/);
+    for (const name of ['Panel', 'BlankLine', 'Group']) {
+        assert.throws(() => createComponentRules([entry(name, undefined, ['required', 'not-within:Field'])]), /not-within:<component,\.\.\.> is only allowed once on Comment/);
+    }
 });
 
 test('missing comments use the first valid source and preserve literal word boundaries', () => {
