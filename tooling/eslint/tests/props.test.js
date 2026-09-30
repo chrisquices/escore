@@ -13,7 +13,7 @@ const {Linter} = projectRequire('eslint');
 const parser = projectRequire('vue-eslint-parser');
 const tsParser = projectRequire('@typescript-eslint/parser');
 
-function lint(content, {name = 'Accordion', componentTsconfig, rules, fix = false} = {}) {
+function lint(content, {name = 'Accordion', componentTsconfig, rules, fix = false, script = ''} = {}) {
     rules ??= createComponentRules([{[name]: {flags: ['required']}}]);
     const ruleId = `${name.toLowerCase()}-must-have-valid-props`;
     const config = [{
@@ -23,7 +23,7 @@ function lint(content, {name = 'Accordion', componentTsconfig, rules, fix = fals
         plugins: {escore: {rules}},
         rules: {[`escore/${ruleId}`]: 'error'},
     }];
-    const input = `<template>\n${content}\n</template>`;
+    const input = `${script ? `<script setup lang="ts">${script}</script>\n` : ''}<template>\n${content}\n</template>`;
     const linter = new Linter();
     const result = fix ? linter.verifyAndFix(input, config, {filename: 'props.vue'})
         : {messages: linter.verify(input, config, {filename: 'props.vue'}), output: input};
@@ -90,6 +90,47 @@ test('unknown object bindings and computed names do not produce false missing-pr
     assert.deepEqual(lint('<Accordion type="bad" v-bind="attrs" />').messages, []);
     assert.equal(lint('<Accordion v-bind="attrs" type="bad" />').messages.length, 1);
     assert.equal(lint('<AccordionItem v-bind="null" />', {name: 'AccordionItem'}).messages[0].messageId, 'propMissing');
+});
+
+test('explicit undefined is checked against source prop types, including nested literals', () => {
+    const options = {name: 'CodeBlock', fix: true};
+    for (const expression of ['undefined', '(undefined as string)', 'void 0', 'void dynamicValue']) {
+        const markup = `<CodeBlock :code="${expression}" />`;
+        const result = lint(markup, options);
+        assert.deepEqual(result.messages.map((message) => message.message), ['Set code on <CodeBlock> to string; received undefined.']);
+        assert.equal(result.fixed, false);
+        assert.equal(result.output, `<template>\n${markup}\n</template>`);
+    }
+    assert.deepEqual(lint('<CodeBlock code="valid" :file-name="undefined" :language="undefined" />', options).messages, []);
+    assert.equal(lint('<AccordionItem :value="undefined" />', {name: 'AccordionItem'}).messages[0].messageId, 'propValue');
+    assert.equal(lint('<Accordion :model-value="[undefined]" />').messages[0].messageId, 'propValue');
+});
+
+test('undefined object bindings supply no props and preserve binding precedence', () => {
+    const options = {name: 'CodeBlock'};
+    for (const binding of ['undefined', '{ ...undefined }', 'void unknownValue']) {
+        assert.deepEqual(lint(`<CodeBlock v-bind="${binding}" />`, options).messages.map((message) => message.messageId), ['propMissing']);
+        assert.deepEqual(lint(`<CodeBlock code="valid" v-bind="${binding}" />`, options).messages, []);
+    }
+    assert.deepEqual(lint('<CodeBlock v-bind="{ code: undefined }" />', options).messages.map((message) => message.messageId), ['propValue']);
+    assert.deepEqual(lint('<CodeBlock v-bind="{ code: undefined, ...attrs }" />', options).messages, []);
+    assert.deepEqual(lint('<CodeBlock v-bind="{ ...attrs, code: undefined }" />', options).messages.map((message) => message.messageId), ['propValue']);
+    assert.deepEqual(lint('<CodeBlock v-bind="{ code: undefined }" code="valid" />', options).messages, []);
+    assert.deepEqual(lint('<CodeBlock v-bind="{ ...attrs, ...undefined }" />', options).messages, []);
+});
+
+test('local bindings named undefined remain unknown to literal prop validation', () => {
+    const options = {name: 'CodeBlock'};
+    for (const markup of [
+        '<CodeBlock v-for="undefined in values" :code="undefined" />',
+        '<Wrapper v-slot="{ undefined }"><CodeBlock :code="undefined" /></Wrapper>',
+        '<Wrapper v-slot="{ undefined }"><CodeBlock v-bind="undefined" /></Wrapper>',
+    ]) assert.deepEqual(lint(markup, options).messages, []);
+    for (const markup of ['<CodeBlock :code="undefined" />', '<CodeBlock v-bind="{ code: undefined }" />', '<CodeBlock v-bind="undefined" />']) {
+        assert.deepEqual(lint(markup, {...options, script: 'const undefined = "source";'}).messages, []);
+    }
+    assert.deepEqual(lint('<CodeBlock :code="nullableCode" />', {...options, script: 'const nullableCode = null;'}).messages, [], 'variable types are checked by vue-tsc');
+    assert.deepEqual(lint('<CodeBlock v-bind="emptyProps" />', {...options, script: 'const emptyProps = {};'}).messages, [], 'variable bindings are checked by vue-tsc');
 });
 
 test('prop violations have no guessed fixes', () => {

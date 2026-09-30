@@ -104,40 +104,41 @@ function unwrap(expression) {
     return expression;
 }
 
-function literal(expression) {
+function literal(expression, undefinedReferences) {
     expression = unwrap(expression);
+    if (undefinedReferences.has(expression)) return undefined;
     if (expression?.type === 'Literal') return expression.regex ? unknown : expression.value;
     if (expression?.type === 'TemplateLiteral' && !expression.expressions.length) return expression.quasis[0].value.cooked;
     if (expression?.type === 'ArrayExpression') {
         if (expression.elements.some((element) => element?.type === 'SpreadElement')) return unknown;
-        return expression.elements.map((element) => element ? literal(element) : undefined);
+        return expression.elements.map((element) => element ? literal(element, undefinedReferences) : undefined);
     }
     if (expression?.type === 'ObjectExpression') {
         const value = Object.create(null);
         for (const property of expression.properties) {
             if (property.type === 'SpreadElement') {
-                const spread = literal(property.argument);
+                const spread = literal(property.argument, undefinedReferences);
                 if (spread === unknown) return unknown;
                 if (spread && typeof spread === 'object') Object.assign(value, spread);
                 continue;
             }
-            const name = !property.computed && property.key.type === 'Identifier' ? property.key.name : literal(property.key);
+            const name = !property.computed && property.key.type === 'Identifier' ? property.key.name : literal(property.key, undefinedReferences);
             if (typeof name !== 'string' || property.kind !== 'init') return unknown;
-            value[name] = literal(property.value);
+            value[name] = literal(property.value, undefinedReferences);
         }
         return value;
     }
     if (expression?.type === 'UnaryExpression') {
-        const value = literal(expression.argument);
+        if (expression.operator === 'void') return undefined;
+        const value = literal(expression.argument, undefinedReferences);
         if (value === unknown) return unknown;
         if (expression.operator === '-' && typeof value === 'number') return -value;
         if (expression.operator === '+' && typeof value === 'number') return value;
         if (expression.operator === '!') return !value;
-        if (expression.operator === 'void') return undefined;
     }
     if (expression?.type === 'BinaryExpression' && expression.operator === '+') {
-        const left = literal(expression.left);
-        const right = literal(expression.right);
+        const left = literal(expression.left, undefinedReferences);
+        const right = literal(expression.right, undefinedReferences);
         if (['string', 'number'].includes(typeof left) && ['string', 'number'].includes(typeof right)) return left + right;
     }
     return unknown;
@@ -211,6 +212,14 @@ export function checkProps(context, instance) {
     if (!props) return;
     const attributes = new Map();
     let uncertain = false;
+    // Template references identify v-for/slot bindings; module scopes identify script bindings.
+    const shadowsUndefined = sourceCode.scopeManager.scopes.some((scope) => (
+        ['global', 'module'].includes(scope.type) && scope.set.get('undefined')?.defs.length
+    ));
+    const undefinedReferences = new Set(shadowsUndefined ? [] : instance.node.startTag.attributes
+        .flatMap((attribute) => attribute.value?.references ?? [])
+        .filter((reference) => reference.id.name === 'undefined' && !reference.variable)
+        .map((reference) => reference.id));
 
     function forgetBindings() {
         // Unknown spreads/computed keys can supply required props or replace earlier values.
@@ -221,7 +230,8 @@ export function checkProps(context, instance) {
     function bindObject(expression) {
         expression = unwrap(expression);
         if (expression?.type !== 'ObjectExpression') {
-            if (expression?.type !== 'Literal' || expression.value !== null) forgetBindings();
+            const value = literal(expression, undefinedReferences);
+            if (value !== null && value !== undefined) forgetBindings();
             return;
         }
         for (const property of expression.properties) {
@@ -229,9 +239,9 @@ export function checkProps(context, instance) {
                 bindObject(property.argument);
                 continue;
             }
-            const name = !property.computed && property.key.type === 'Identifier' ? property.key.name : literal(property.key);
+            const name = !property.computed && property.key.type === 'Identifier' ? property.key.name : literal(property.key, undefinedReferences);
             if (typeof name !== 'string') forgetBindings();
-            else attributes.set(camelize(name), {value: property.kind === 'init' ? literal(property.value) : unknown, node: property});
+            else attributes.set(camelize(name), {value: property.kind === 'init' ? literal(property.value, undefinedReferences) : unknown, node: property});
         }
     }
 
@@ -247,9 +257,9 @@ export function checkProps(context, instance) {
             bindObject(attribute.value?.expression);
             continue;
         }
-        const name = !argument ? 'modelValue' : argument.type === 'VIdentifier' ? argument.rawName : literal(argument.expression);
+        const name = !argument ? 'modelValue' : argument.type === 'VIdentifier' ? argument.rawName : literal(argument.expression, undefinedReferences);
         if (typeof name !== 'string') forgetBindings();
-        else attributes.set(camelize(name), {value: literal(attribute.value?.expression), node: attribute});
+        else attributes.set(camelize(name), {value: literal(attribute.value?.expression, undefinedReferences), node: attribute});
     }
 
     for (const [name, prop] of props) {
