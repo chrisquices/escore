@@ -42,9 +42,12 @@ import {
   SheetContent,
   SheetHeader,
   SheetTitle,
-  SheetTrigger,
 } from "escore-packages/ui/sheet"
 import {Card, CardContent} from "escore-packages/ui/card"
+
+defineOptions({
+  inheritAttrs: false,
+})
 
 const props = withDefaults(defineProps<{
   playerId: string
@@ -571,6 +574,7 @@ function clearSeekPreview() {
     ref="playerContainer"
     tabindex="0"
     :class="cn('group/video-player relative aspect-video w-full touch-none overflow-hidden rounded-lg bg-surface select-none outline-hidden focus:outline-hidden focus-visible:outline-hidden', props.class)"
+    v-bind="$attrs"
   >
     <video ref="videoElement" class="size-full" preload="metadata" playsinline/>
 
@@ -777,70 +781,15 @@ function clearSeekPreview() {
           </Button>
 
           <!-- Captions -->
-          <Sheet v-model:open="captionsSheetOpen" :portal-to="playerContainer">
-            <SheetTrigger as-child>
-              <Button variant="ghost" size="sm" aria-label="Captions" title="Captions (C)" class="gap-1.5 px-2">
-                <Captions/>
-                <span
-                  class="text-sm font-medium tabular-nums"
-                  :class="captionsTrack === 'off' ? 'text-foreground-muted' : 'text-foreground'"
-                >
-                {{ captionsStatus }}
-              </span>
-              </Button>
-            </SheetTrigger>
-
-            <SheetContent class="w-80 overflow-hidden sm:max-w-88" @open-auto-focus="onCaptionsOpenAutoFocus">
-              <SheetHeader>
-                <SheetTitle>Captions</SheetTitle>
-              </SheetHeader>
-
-              <div
-                ref="captionsPanel"
-                tabindex="-1"
-                class="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain p-4 focus:outline-hidden gap-2"
-              >
-                <Card class="p-0">
-                  <CardContent class="p-0 gap-4">
-                    <RadioGroup v-model="captionsTrack" class="gap-4">
-                      <Field orientation="horizontal" class="pt-4 px-4"
-                             :class="{
-                              'pb-4': captionTracks.length === 0,
-                            }"
-                      >
-                        <div>
-                          <Label :for="playerDomId('captions-off')">Off</Label>
-                          <p class="text-foreground-muted text-sm mt-1">Disable subtitles.</p>
-                        </div>
-                        <RadioGroupItem :id="playerDomId('captions-off')" value="off" class="ml-auto"/>
-                      </Field>
-
-                      <Separator v-if="captionTracks.length > 0"/>
-
-                      <!-- Shortcuts -->
-                      <template v-for="(track, index) in captionTracks" :key="`video-player-caption-${track.src}`">
-                        <Field
-                          orientation="horizontal"
-                          class="px-4"
-                          :class="{
-                          'pb-4': index === keyboardShortcuts.length - 1,
-                        }"
-                        >
-                          <div>
-                            <Label :for="playerDomId(`captions-track-${index}`)">({{ captionDisplayCode(track) }}) {{ track.label }}</Label>
-                            <p class="text-foreground-muted text-sm mt-1">{{ track.label }}</p>
-                          </div>
-                          <RadioGroupItem :id="playerDomId(`captions-track-${index}`)" :value="track.src" class="ml-auto"/>
-                        </Field>
-
-                        <Separator v-if="index < captionTracks.length - 1"/>
-                      </template>
-                    </RadioGroup>
-                  </CardContent>
-                </Card>
-              </div>
-            </SheetContent>
-          </Sheet>
+          <Button @click="captionsSheetOpen = true" variant="ghost" size="sm" aria-label="Captions" title="Captions (C)" class="gap-1.5 px-2">
+            <Captions/>
+            <span
+              class="text-sm font-medium tabular-nums"
+              :class="captionsTrack === 'off' ? 'text-foreground-muted' : 'text-foreground'"
+            >
+              {{ captionsStatus }}
+            </span>
+          </Button>
 
           <!-- Picture-in-Picture -->
           <Button
@@ -869,146 +818,198 @@ function clearSeekPreview() {
           </Button>
 
           <!-- Keyboard Shortcuts -->
-          <Sheet v-model:open="shortcutsSheetOpen" :portal-to="playerContainer">
-            <SheetTrigger as-child>
-              <Button variant="ghost" size="icon" aria-label="Keyboard shortcuts" title="Keyboard shortcuts">
-                <Keyboard/>
-              </Button>
-            </SheetTrigger>
-
-            <SheetContent class="w-80 overflow-hidden sm:max-w-88" @open-auto-focus="onShortcutsOpenAutoFocus">
-              <SheetHeader>
-                <SheetTitle>Keyboard Shortcuts</SheetTitle>
-              </SheetHeader>
-
-              <div
-                ref="shortcutsPanel"
-                tabindex="-1"
-                class="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain p-4 focus:outline-hidden gap-2"
-              >
-                <Card class="p-0">
-                  <CardContent class="p-0 gap-4">
-
-                    <!-- Shortcuts -->
-                    <template v-for="(shortcut, index) in keyboardShortcuts" :key="`video-player-shortcut-${shortcut.id}`">
-                      <Field
-                        orientation="horizontal"
-                        class="px-4"
-                        :class="{
-                          'pt-4': index === 0,
-                          'pb-4': index === keyboardShortcuts.length - 1,
-                        }"
-                      >
-                        <div>
-                          <Label :for="playerDomId('autoplay')">{{ shortcut.message }}</Label>
-                        </div>
-                        <KbdGroup class="ml-auto flex flex-wrap">
-                          <Kbd v-for="key in shortcut.keys" :key="key">
-                            {{ formatShortcutKey(key) }}
-                          </Kbd>
-                        </KbdGroup>
-                      </Field>
-
-                      <Separator v-if="index < keyboardShortcuts.length - 1"/>
-                    </template>
-                  </CardContent>
-                </Card>
-              </div>
-            </SheetContent>
-          </Sheet>
+          <Button @click="shortcutsSheetOpen = true" variant="ghost" size="icon" aria-label="Keyboard shortcuts" title="Keyboard shortcuts">
+            <Keyboard/>
+          </Button>
 
           <!-- Settings -->
-          <Sheet v-model:open="settingsSheetOpen" :portal-to="playerContainer">
-            <SheetTrigger as-child>
-              <Button variant="ghost" size="icon" aria-label="Settings" title="Settings">
-                <Settings/>
-              </Button>
-            </SheetTrigger>
-
-            <SheetContent class="w-full overflow-hidden max-w-80 sm:max-w-96" @open-auto-focus="onSettingsOpenAutoFocus">
-              <SheetHeader>
-                <SheetTitle>Playback Settings</SheetTitle>
-              </SheetHeader>
-
-              <div
-                ref="settingsPanel"
-                tabindex="-1"
-                class="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain p-4 focus:outline-hidden gap-2"
-              >
-                <Caption variant="muted">Behavior</Caption>
-
-                <Card class="p-0">
-                  <CardContent class="p-0 gap-4">
-
-                    <!-- Autoplay -->
-                    <Field orientation="horizontal" class="pt-4 px-4">
-                      <div>
-                        <Label :for="playerDomId('autoplay')">Autoplay</Label>
-                        <p class="text-foreground-muted text-sm mt-1">Start playback automatically.</p>
-                      </div>
-                      <Switch :id="playerDomId('autoplay')" v-model="autoplayEnabled" class="ml-auto"/>
-                    </Field>
-
-                    <Separator/>
-
-                    <!-- Repeat -->
-                    <Field orientation="horizontal" class="px-4">
-                      <div>
-                        <Label :for="playerDomId('loop')">Repeat</Label>
-                        <p class="text-foreground-muted text-sm mt-1">Replay when the video ends.</p>
-                      </div>
-                      <Switch :id="playerDomId('loop')" v-model="loopEnabled" class="ml-auto"/>
-                    </Field>
-
-                    <Separator/>
-
-                    <!-- Playback Speed -->
-                    <Field class="px-4 pb-4">
-                      <div class="flex items-center justify-between gap-4">
-                        <div>
-                          <Label :for="playerDomId('playbackSpeed')">
-                            Playback Speed
-                            <b class="font-mono">({{ playbackRate[0].toFixed(2).replace(/\.00$/, "") }}x)</b>
-                          </Label>
-                          <p class="text-foreground-muted text-sm mt-1">Fine-tune the pace of playback.</p>
-                        </div>
-                        <Button
-                          variant="secondary"
-                          size="icon"
-                          :disabled="playbackRate[0] === 1"
-                          aria-label="Reset playback speed"
-                          title="Reset playback speed"
-                          @click="resetPlaybackRate"
-                        >
-                          <RotateCcw/>
-                        </Button>
-                      </div>
-
-                      <Slider
-                        :id="playerDomId('playbackSpeed')"
-                        v-model="playbackRate"
-                        size="sm"
-                        :min="0.5"
-                        :max="2"
-                        :step="0.05"
-                        class="cursor-pointer mt-1"
-                        aria-label="Playback rate"
-                      />
-
-                      <div class="text-foreground-muted flex justify-between text-xs tabular-nums font-mono">
-                        <span>0.5x</span>
-                        <span>1x</span>
-                        <span>1.5x</span>
-                        <span>2x</span>
-                      </div>
-                    </Field>
-                  </CardContent>
-                </Card>
-              </div>
-            </SheetContent>
-          </Sheet>
+          <Button @click="settingsSheetOpen = true" variant="ghost" size="icon" aria-label="Settings" title="Settings">
+            <Settings/>
+          </Button>
         </div>
       </div>
     </div>
   </div>
+
+  <!-- Captions -->
+  <Sheet v-model:open="captionsSheetOpen" :portal-to="playerContainer">
+    <SheetContent class="w-80 overflow-hidden sm:max-w-88" @open-auto-focus="onCaptionsOpenAutoFocus">
+      <SheetHeader>
+        <SheetTitle>Captions</SheetTitle>
+      </SheetHeader>
+
+      <div
+        ref="captionsPanel"
+        tabindex="-1"
+        class="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain p-4 focus:outline-hidden gap-2"
+      >
+        <Card class="p-0">
+          <CardContent class="p-0 gap-4">
+            <RadioGroup v-model="captionsTrack" class="gap-4">
+              <Field orientation="horizontal" class="pt-4 px-4"
+                     :class="{
+                      'pb-4': captionTracks.length === 0,
+                    }"
+              >
+                <div>
+                  <Label :for="playerDomId('captions-off')">Off</Label>
+                  <p class="text-foreground-muted text-sm mt-1">Disable subtitles.</p>
+                </div>
+                <RadioGroupItem :id="playerDomId('captions-off')" value="off" class="ml-auto"/>
+              </Field>
+
+              <Separator v-if="captionTracks.length > 0"/>
+
+              <!-- Shortcuts -->
+              <template v-for="(track, index) in captionTracks" :key="`video-player-caption-${track.src}`">
+                <Field
+                  orientation="horizontal"
+                  class="px-4"
+                  :class="{
+                  'pb-4': index === keyboardShortcuts.length - 1,
+                }"
+                >
+                  <div>
+                    <Label :for="playerDomId(`captions-track-${index}`)">({{ captionDisplayCode(track) }}) {{ track.label }}</Label>
+                    <p class="text-foreground-muted text-sm mt-1">{{ track.label }}</p>
+                  </div>
+                  <RadioGroupItem :id="playerDomId(`captions-track-${index}`)" :value="track.src" class="ml-auto"/>
+                </Field>
+
+                <Separator v-if="index < captionTracks.length - 1"/>
+              </template>
+            </RadioGroup>
+          </CardContent>
+        </Card>
+      </div>
+    </SheetContent>
+  </Sheet>
+
+  <!-- Keyboard Shortcuts -->
+  <Sheet v-model:open="shortcutsSheetOpen" :portal-to="playerContainer">
+    <SheetContent class="w-80 overflow-hidden sm:max-w-88" @open-auto-focus="onShortcutsOpenAutoFocus">
+      <SheetHeader>
+        <SheetTitle>Keyboard Shortcuts</SheetTitle>
+      </SheetHeader>
+
+      <div
+        ref="shortcutsPanel"
+        tabindex="-1"
+        class="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain p-4 focus:outline-hidden gap-2"
+      >
+        <Card class="p-0">
+          <CardContent class="p-0 gap-4">
+
+            <!-- Shortcuts -->
+            <template v-for="(shortcut, index) in keyboardShortcuts" :key="`video-player-shortcut-${shortcut.id}`">
+              <Field
+                orientation="horizontal"
+                class="px-4"
+                :class="{
+                  'pt-4': index === 0,
+                  'pb-4': index === keyboardShortcuts.length - 1,
+                }"
+              >
+                <div>
+                  <Label :for="playerDomId('autoplay')">{{ shortcut.message }}</Label>
+                </div>
+                <KbdGroup class="ml-auto flex flex-wrap">
+                  <Kbd v-for="key in shortcut.keys" :key="key">
+                    {{ formatShortcutKey(key) }}
+                  </Kbd>
+                </KbdGroup>
+              </Field>
+
+              <Separator v-if="index < keyboardShortcuts.length - 1"/>
+            </template>
+          </CardContent>
+        </Card>
+      </div>
+    </SheetContent>
+  </Sheet>
+
+  <!-- Playback Settings -->
+  <Sheet v-model:open="settingsSheetOpen" :portal-to="playerContainer">
+    <SheetContent class="w-full overflow-hidden max-w-80 sm:max-w-96" @open-auto-focus="onSettingsOpenAutoFocus">
+      <SheetHeader>
+        <SheetTitle>Playback Settings</SheetTitle>
+      </SheetHeader>
+
+      <div
+        ref="settingsPanel"
+        tabindex="-1"
+        class="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain p-4 focus:outline-hidden gap-2"
+      >
+        <Caption variant="muted">Behavior</Caption>
+
+        <Card class="p-0">
+          <CardContent class="p-0 gap-4">
+
+            <!-- Autoplay -->
+            <Field orientation="horizontal" class="pt-4 px-4">
+              <div>
+                <Label :for="playerDomId('autoplay')">Autoplay</Label>
+                <p class="text-foreground-muted text-sm mt-1">Start playback automatically.</p>
+              </div>
+              <Switch :id="playerDomId('autoplay')" v-model="autoplayEnabled" class="ml-auto"/>
+            </Field>
+
+            <Separator/>
+
+            <!-- Repeat -->
+            <Field orientation="horizontal" class="px-4">
+              <div>
+                <Label :for="playerDomId('loop')">Repeat</Label>
+                <p class="text-foreground-muted text-sm mt-1">Replay when the video ends.</p>
+              </div>
+              <Switch :id="playerDomId('loop')" v-model="loopEnabled" class="ml-auto"/>
+            </Field>
+
+            <Separator/>
+
+            <!-- Playback Speed -->
+            <Field class="px-4 pb-4">
+              <div class="flex items-center justify-between gap-4">
+                <div>
+                  <Label :for="playerDomId('playbackSpeed')">
+                    Playback Speed
+                    <b class="font-mono">({{ playbackRate[0].toFixed(2).replace(/\.00$/, "") }}x)</b>
+                  </Label>
+                  <p class="text-foreground-muted text-sm mt-1">Fine-tune the pace of playback.</p>
+                </div>
+                <Button
+                  variant="secondary"
+                  size="icon"
+                  :disabled="playbackRate[0] === 1"
+                  aria-label="Reset playback speed"
+                  title="Reset playback speed"
+                  @click="resetPlaybackRate"
+                >
+                  <RotateCcw/>
+                </Button>
+              </div>
+
+              <Slider
+                :id="playerDomId('playbackSpeed')"
+                v-model="playbackRate"
+                size="sm"
+                :min="0.5"
+                :max="2"
+                :step="0.05"
+                class="cursor-pointer mt-1"
+                aria-label="Playback rate"
+              />
+
+              <div class="text-foreground-muted flex justify-between text-xs tabular-nums font-mono">
+                <span>0.5x</span>
+                <span>1x</span>
+                <span>1.5x</span>
+                <span>2x</span>
+              </div>
+            </Field>
+          </CardContent>
+        </Card>
+      </div>
+    </SheetContent>
+  </Sheet>
 </template>

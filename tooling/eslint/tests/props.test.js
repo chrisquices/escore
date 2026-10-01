@@ -6,6 +6,7 @@ import {dirname, join} from 'node:path';
 import {after, test} from 'node:test';
 import createComponentRules from '../helpers/create-component-rules.js';
 import accordionRules from '../rules/components/accordion.js';
+import sheetRules from '../rules/components/sheet.js';
 
 const projectRequire = createRequire(join(process.env.ESCORE_TEST_PROJECT ?? process.cwd(), 'package.json'));
 const libraryRequire = createRequire(new URL('../../../packages/js/package.json', import.meta.url));
@@ -36,6 +37,21 @@ test('required inherited props are read from AccordionItem source for every repe
     assert.equal(result.messages.length, 2);
     assert.ok(result.messages.every((message) => message.messageId === 'propMissing' && message.message.includes('value')));
     assert.deepEqual(lint('<AccordionItem value="" />', {name: 'AccordionItem'}).messages, [], 'source string types do not imply a nonempty-string policy');
+});
+
+test('Sheet requires a boolean open prop from its source and accepts controlled bindings', () => {
+    const options = {name: 'Sheet', rules: sheetRules};
+    for (const content of ['<Sheet />', '<Sheet default-open />']) {
+        const result = lint(content, options);
+        assert.deepEqual(result.messages.map((message) => message.messageId), ['propMissing']);
+        assert.equal(result.messages[0].message, 'Add the required open prop to <Sheet>; its component source requires it.');
+    }
+    for (const binding of ['v-model:open="isOpen"', ':open="isOpen" @update:open="isOpen = $event"', ':open="false"', ':open="true"']) {
+        assert.deepEqual(lint(`<Sheet ${binding} />`, options).messages, []);
+    }
+    for (const value of ['null', 'undefined', "'false'", '1']) {
+        assert.deepEqual(lint(`<Sheet :open="${value}" />`, options).messages.map((message) => message.messageId), ['propValue']);
+    }
 });
 
 test('literal unions and booleans are validated without copying the prop list', () => {

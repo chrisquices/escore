@@ -21,6 +21,7 @@ import cardRules from '../rules/components/card.js';
 import checkboxRules from '../rules/components/checkbox.js';
 import contextMenuRules from '../rules/components/context-menu.js';
 import emptyRules from '../rules/components/empty.js';
+import sheetRules from '../rules/components/sheet.js';
 
 // Dependencies belong to the consuming project, as they do in eslint.config.js.
 const projectDirectory = process.env.ESCORE_TEST_PROJECT ?? process.cwd();
@@ -1036,6 +1037,44 @@ test('controlled Dialog and Drawer accept content without triggers or leading bl
             assert.deepEqual(result.messages.map((message) => message.messageId), ['forbidden']);
         }
     }
+});
+
+test('Sheet uses controlled state and accepts multiple instances at the root template tail', () => {
+    for (const binding of ['v-model:open="isOpen"', ':open="isOpen" @update:open="isOpen = $event"']) {
+        const sheet = `<!-- Settings -->
+<Sheet ${binding}>
+    <SheetContent>
+        <SheetHeader><SheetTitle>Settings</SheetTitle></SheetHeader>
+    </SheetContent>
+</Sheet>`;
+        const markup = template(`<main><button @click="isOpen = true">Open</button></main>\n${sheet}\n${sheet}`);
+        assert.equal(fixed(markup, {rules: sheetRules}), markup);
+        const nested = template(`<section>\n${sheet}\n</section>`);
+        assert.deepEqual(lint(nested, {rules: sheetRules}).messages.map((message) => message.messageId), ['topLevel']);
+        const early = template(`${sheet}\n<main />`);
+        assert.deepEqual(lint(early, {rules: sheetRules}).messages.map((message) => message.messageId), ['lastInTemplate']);
+    }
+});
+
+test('SheetTrigger is forbidden even outside Sheet and never removed automatically', () => {
+    for (const name of ['SheetTrigger', 'sheet-trigger']) {
+        for (const attribute of ['', ' as-child', ' :as-child="false"']) {
+            const markup = template(`<section><${name}${attribute}><button>Open</button></${name}></section>`);
+            const result = lint(markup, {rules: sheetRules, fix: true});
+            assert.equal(result.output, markup);
+            assert.equal(result.fixed, false);
+            assert.deepEqual(result.messages.map((message) => message.messageId), ['forbidden']);
+            assert.match(result.messages[0].message, /Control <Sheet> with v-model:open or :open and @update:open/);
+        }
+    }
+    const markup = template(`<!-- Settings -->
+<Sheet :open="false">
+    <SheetTrigger>Open</SheetTrigger>
+    <SheetContent><SheetHeader><SheetTitle>Settings</SheetTitle></SheetHeader></SheetContent>
+</Sheet>`);
+    const result = lint(markup, {rules: sheetRules, fix: true});
+    assert.equal(result.output, markup);
+    assert.deepEqual(result.messages.map((message) => message.messageId), ['forbidden']);
 });
 
 test('forbidden declarations are reusable template-wide bans and are never suggested as allowed children', () => {

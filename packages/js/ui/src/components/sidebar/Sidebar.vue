@@ -43,27 +43,8 @@ const { isMobile, state, openMobile, setOpenMobile } = useSidebar(props.collapsi
     <slot />
   </div>
 
-  <Sheet v-else-if="isMobile" :open="openMobile" v-bind="$attrs" @update:open="setOpenMobile">
-    <SheetContent
-      data-sidebar="sidebar"
-      data-slot="sidebar"
-      data-mobile="true"
-      :side="side"
-      :style="sidebarStyle"
-      class="border-sidebar-border bg-sidebar text-sidebar-foreground w-(--sidebar-instance-width) p-0 [&>button]:hidden"
-    >
-      <SheetHeader class="sr-only">
-        <SheetTitle>Sidebar</SheetTitle>
-        <SheetDescription>Displays the mobile sidebar.</SheetDescription>
-      </SheetHeader>
-      <div class="flex h-full w-full flex-col">
-        <slot />
-      </div>
-    </SheetContent>
-  </Sheet>
-
   <div
-    v-else
+    v-else-if="!isMobile"
     class="group peer text-sidebar-foreground hidden md:block"
     data-slot="sidebar"
     :data-state="state"
@@ -112,4 +93,25 @@ const { isMobile, state, openMobile, setOpenMobile } = useSidebar(props.collapsi
       </div>
     </div>
   </div>
+
+  <!-- Sidebar -->
+  <Sheet v-else :open="openMobile ?? false" v-bind="$attrs" @update:open="setOpenMobile">
+    <SheetContent
+      data-sidebar="sidebar"
+      data-slot="sidebar"
+      data-mobile="true"
+      :side="side"
+      :style="sidebarStyle"
+      class="border-sidebar-border bg-sidebar text-sidebar-foreground w-(--sidebar-instance-width) p-0 [&>button]:hidden"
+    >
+      <SheetHeader class="sr-only">
+        <SheetTitle>Sidebar</SheetTitle>
+        <SheetDescription>Displays the mobile sidebar.</SheetDescription>
+      </SheetHeader>
+
+      <div class="flex h-full w-full flex-col">
+        <slot />
+      </div>
+    </SheetContent>
+  </Sheet>
 </template>

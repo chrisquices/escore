@@ -5,7 +5,8 @@ import { DialogRoot, useForwardPropsEmits } from "reka-ui"
 import { provide, toRef } from "vue"
 import { sheetPortalToKey } from "./context"
 
-const props = defineProps<DialogRootProps & {
+const props = defineProps<Omit<DialogRootProps, "open" | "defaultOpen"> & {
+  open: boolean
   portalTo?: string | HTMLElement | null
 }>()
 const emits = defineEmits<DialogRootEmits>()
