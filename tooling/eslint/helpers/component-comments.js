@@ -1,4 +1,5 @@
 import {matchesComponent, matchStructure, walkStructure} from './component-structure.js';
+import {readAttributes} from './component-props.js';
 
 const commentBans = new WeakMap();
 
@@ -131,7 +132,90 @@ export function standaloneComment(sourceCode, tokenStore, node) {
     return comment;
 }
 
-export function checkComment(context, instance) {
+function referencedComment(sourceCode, tokenStore, instance, matchers) {
+    const reference = instance.entry.comment.from;
+    const group = instance.groups.get(reference.scopePath);
+    let scope = instance;
+    if (reference.group) {
+        while (scope.parent && scope.groups.get(reference.scopePath) === group) scope = scope.parent;
+    } else {
+        while (scope.parent && scope.entry.path !== reference.scopePath) scope = scope.parent;
+    }
+    const candidates = [...walkStructure(scope)].filter((candidate) => reference.paths.has(candidate.entry.path)
+        && (!reference.group || candidate.groups.get(reference.scopePath) === group));
+    const matcher = Object.hasOwn(matchers, reference.name) ? matchers[reference.name] : undefined;
+    const matching = matcher ? matcher({sourceCode, instance, candidates, scope})
+        : candidates.length === 1 ? candidates[0] : undefined;
+    if (!matching || !candidates.includes(matching) || commentBans.get(sourceCode)?.has(matching.node.parent)) return undefined;
+    const text = standaloneComment(sourceCode, tokenStore, matching.node)?.value.trim();
+    // Copy authored text, but never propagate tooling directives into another component.
+    return text && !/^(?:eslint(?:\b|-)|@(?:vue|ts)-)/.test(text) ? text : undefined;
+}
+
+// Families opt into column matching; ordinary comment references do not use table layout.
+export function matchCommentByColumn({sourceCode, instance, candidates, scope}) {
+    const reference = instance.entry.comment.from;
+
+    function span(node, name) {
+        const bindings = readAttributes(sourceCode, node);
+        if (!bindings) return undefined;
+        const attribute = [...bindings.attributes]
+            .filter(([key]) => key.toLowerCase() === name)
+            .map(([, value]) => value)
+            .sort((left, right) => left.node.range[0] - right.node.range[0]).at(-1);
+        if (!attribute) return bindings.uncertain ? undefined : 1;
+        if (attribute.value == null) return 1;
+        const value = typeof attribute.value === 'number' ? attribute.value
+            : typeof attribute.value === 'string' && /^\d+$/.test(attribute.value) ? Number(attribute.value) : undefined;
+        return Number.isSafeInteger(value) && value > 0 ? value : undefined;
+    }
+
+    function columns(cell) {
+        const row = cell.parent;
+        if (!row) return undefined;
+        // Rowspans can shift later rows. Leave that layout for the agent instead of guessing.
+        for (const previous of row.node.parent?.children ?? []) {
+            if (previous === row.node) break;
+            if (previous.type !== 'VElement') continue;
+            if (!matchesComponent(previous, row.entry.name)
+                || previous.children.some((child) => child.type === 'VElement' && span(child, 'rowspan') !== 1)) return undefined;
+        }
+        let start = 0;
+        for (const sibling of row.node.children) {
+            if (sibling.type === 'VText' && !sibling.value.trim()) continue;
+            if (sibling.type === 'VComment' || sibling.type === 'VHTMLComment') continue;
+            if (![instance.entry.name, reference.name].some((name) => matchesComponent(sibling, name))
+                || sibling.startTag.attributes.some((attribute) => attribute.directive
+                    && ['if', 'else-if', 'else', 'for', 'show'].includes(attribute.key.name.name))
+                || span(sibling, 'rowspan') !== 1) return undefined;
+            const width = span(sibling, 'colspan');
+            if (!width || !Number.isSafeInteger(start + width)) return undefined;
+            if (sibling === cell.node) return {start, end: start + width};
+            start += width;
+        }
+        return undefined;
+    }
+
+    const target = columns(instance);
+    if (!target) return undefined;
+    const matching = [];
+    for (const candidate of candidates) {
+        // Conditional/repeated header cells or rows do not define a stable column map.
+        for (let node = candidate.node; node && node !== scope.node; node = node.parent) {
+            if (node.startTag?.attributes.some((attribute) => attribute.directive
+                && ['if', 'else-if', 'else', 'for', 'show'].includes(attribute.key.name.name))) return undefined;
+        }
+        const source = columns(candidate);
+        if (!source) return undefined;
+        if (source.start < target.end && target.start < source.end) {
+            if (source.start > target.start || source.end < target.end) return undefined;
+            matching.push(candidate);
+        }
+    }
+    return matching.length === 1 ? matching[0] : undefined;
+}
+
+export function checkComment(context, instance, matchers = {}) {
     const activeComment = hasActiveComment(context.sourceCode, instance);
     if (!activeComment && !instance.entry.noDirectChildComments) return;
 
@@ -176,18 +260,28 @@ export function checkComment(context, instance) {
     const comment = standaloneComment(sourceCode, tokenStore, node);
     if (!comment && !instance.entry.comment.required) return;
     const fixedText = instance.entry.comment.text;
-    const expected = (fixedText ?? sourceText(sourceCode, instance))?.replace(/--|[<>]/g, (part) => (
+    const from = instance.entry.comment.from;
+    const expected = from ? referencedComment(sourceCode, tokenStore, instance, matchers)
+        : (fixedText ?? sourceText(sourceCode, instance))?.replace(/--|[<>]/g, (part) => (
         part === '--' ? '&#45;&#45;' : part === '<' ? '&lt;' : '&gt;'
     ));
+    if (from && !expected) {
+        context.report({
+            loc: node.startTag.loc,
+            messageId: 'commentReferenceUnavailable',
+            data: {element: node.rawName, source: from.name},
+        });
+        return;
+    }
 
     // Authored comments are sufficient when no source can provide reliable text.
     if (comment?.value.trim()) {
         if (expected && comment.value.trim() !== expected) {
             context.report({
                 loc: comment.loc,
-                messageId: fixedText === undefined ? 'commentMismatch' : 'commentFixed',
-                data: {element: node.rawName, expected},
-                fix: fixedText === undefined ? undefined : (fixer) => fixer.replaceText(comment, `<!-- ${expected} -->`),
+                messageId: from ? 'commentReferenceMismatch' : fixedText === undefined ? 'commentMismatch' : 'commentFixed',
+                data: {element: node.rawName, expected, source: from?.name},
+                fix: fixedText !== undefined || from ? (fixer) => fixer.replaceText(comment, `<!-- ${expected} -->`) : undefined,
             });
         }
         return;

@@ -7,7 +7,7 @@ export const structure = [
             flags: ['required'],
             children: [
                 {Comment: {flags: ['required']}},
-                {ToggleGroupItem: {flags: ['required', 'repeatable', 'comment-source', 'non-empty']}},
+                {ToggleGroupItem: {flags: ['required', 'repeatable', 'comment-source', 'non-empty', 'multi-liner']}},
             ],
         },
     },

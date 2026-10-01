@@ -4,11 +4,11 @@ export const structure = [
     {Comment: {flags: ['required']}},
     {
         TagsInput: {
-            flags: ['required'],
+            flags: ['required', 'blank-line-between-children'],
             children: [
                 {
                     TagsInputItem: {
-                        flags: ['optional', 'repeatable'],
+                        flags: ['optional', 'repeatable', 'multi-liner'],
                         children: [
                             {TagsInputItemText: {flags: ['required', 'one-liner']}},
                             {TagsInputItemDelete: {flags: ['optional', 'one-liner']}},

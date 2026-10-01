@@ -1,4 +1,4 @@
-const supportedFlags = new Set(['required', 'optional', 'forbidden', 'repeatable', 'one-of', 'comment-source', 'one-liner', 'multi-liner', 'one-liner-attributes', 'multi-liner-attributes', 'self-closing', 'blank-line-between-children', 'no-blank-line-between-children', 'no-direct-child-comments', 'non-empty', 'unordered', 'top-level', 'last-in-template']);
+const supportedFlags = new Set(['required', 'optional', 'forbidden', 'repeatable', 'one-of', 'comment-source', 'one-liner', 'multi-liner', 'one-liner-attributes', 'multi-liner-attributes', 'self-closing', 'blank-line-between-children', 'no-blank-line-between-children', 'no-direct-child-comments', 'non-empty', 'unordered', 'top-level', 'last-in-template', 'once-per-file']);
 const attributeCommentSource = /^comment-source:[a-zA-Z_][\w.:-]*$/;
 const specialNames = new Set(['Comment', 'BlankLine']);
 const attributeName = /^[a-zA-Z_][\w:-]*$/;
@@ -36,15 +36,22 @@ export function compileStructure(structure) {
                 invalid(position, 'only flags, children, and attributes are supported.');
             }
             if (!Array.isArray(options.flags) || options.flags.some((flag) => typeof flag !== 'string'
-                || (!supportedFlags.has(flag) && !attributeCommentSource.test(flag) && !flag.startsWith('text:') && !flag.startsWith('not-within:')))
+                || (!supportedFlags.has(flag) && !attributeCommentSource.test(flag) && !flag.startsWith('text:') && !flag.startsWith('not-within:') && !flag.startsWith('comment-from:')))
                 || new Set(options.flags).size !== options.flags.length) {
-                invalid(position, `flags must contain unique, supported values: ${[...supportedFlags].join(', ')}, comment-source:<attribute>, text:<content>, not-within:<component,...>.`);
+                invalid(position, `flags must contain unique, supported values: ${[...supportedFlags].join(', ')}, comment-source:<attribute>, text:<content>, not-within:<component,...>, comment-from:<component>.`);
             }
             const textFlags = options.flags.filter((flag) => flag.startsWith('text:'));
             const text = textFlags[0]?.slice('text:'.length).trim();
             if (textFlags.length && (name !== 'Comment' || textFlags.length !== 1 || !text || /[\r\n]/.test(textFlags[0]))) {
                 invalid(position, 'text:<content> is only allowed once on Comment, with nonempty, single-line text.');
             }
+            const referenceFlags = options.flags.filter((flag) => flag.startsWith('comment-from:'));
+            const referenceName = referenceFlags[0]?.slice('comment-from:'.length);
+            if (referenceFlags.length && (name !== 'Comment' || referenceFlags.length !== 1 || !/^[a-zA-Z_][\w.-]*$/.test(referenceName))) {
+                invalid(position, 'comment-from:<component> is only allowed once on Comment, with a single component name.');
+            }
+            if (referenceFlags.length && textFlags.length) invalid(position, 'comment-from and text cannot be used together.');
+            const from = referenceName ? {name: referenceName} : undefined;
             const notWithinFlags = options.flags.filter((flag) => flag.startsWith('not-within:'));
             const notWithin = notWithinFlags[0]?.slice('not-within:'.length).split(',').map((name) => name.trim()) ?? [];
             if (notWithinFlags.length && (name !== 'Comment' || notWithinFlags.length !== 1
@@ -82,8 +89,12 @@ export function compileStructure(structure) {
             const repeatable = options.flags.includes('repeatable');
             const topLevel = options.flags.includes('top-level');
             const lastInTemplate = options.flags.includes('last-in-template');
+            const oncePerFile = options.flags.includes('once-per-file');
             const commentSources = options.flags.filter((flag) => flag === 'comment-source' || flag.startsWith('comment-source:'));
             const special = specialNames.has(name);
+            if (oncePerFile && (special || group)) {
+                invalid(position, 'once-per-file can only be declared on a component.');
+            }
             const attributes = [];
             if ('attributes' in options) {
                 if (special || group || forbidden) invalid(position, 'attributes can only be declared on an allowed component.');
@@ -196,8 +207,10 @@ export function compileStructure(structure) {
                 unordered,
                 topLevel,
                 lastInTemplate,
+                oncePerFile,
                 commentSources,
                 text,
+                from,
                 notWithin,
                 attributes,
                 children,
@@ -256,7 +269,7 @@ export function compileStructure(structure) {
     function descendants(entry) {
         return [entry, ...(entry.children ?? []).flatMap(descendants)];
     }
-    function resolveAttributes(entry, ancestors = []) {
+    function resolveReferences(entry, ancestors = []) {
         for (const attribute of entry.attributes) {
             if (!attribute.match) continue;
             const target = attribute.match;
@@ -268,9 +281,23 @@ export function compileStructure(structure) {
             }
             if (!target.scopePath) invalid(entry.path, `matches:${target.name}.${target.attribute} has no allowed target in this structure.`);
         }
-        for (const child of entry.children ?? []) resolveAttributes(child, [entry, ...ancestors]);
+        const reference = entry.comment?.from;
+        if (reference) {
+            for (const scope of [entry, ...ancestors]) {
+                const targets = descendants(scope).filter((candidate) => candidate !== entry
+                    && !candidate.special && !candidate.group && !candidate.forbidden && candidate.name === reference.name);
+                if (!targets.length) continue;
+                if (targets.some((target) => target.comment?.from)) {
+                    invalid(entry.comment.path, 'comment-from cannot copy from another comment-from declaration.');
+                }
+                Object.assign(reference, {scopePath: scope.path, group: scope.group, paths: new Set(targets.map((target) => target.path))});
+                break;
+            }
+            if (!reference.scopePath) invalid(entry.comment.path, `comment-from:${reference.name} has no allowed source in this structure.`);
+        }
+        for (const child of entry.children ?? []) resolveReferences(child, [entry, ...ancestors]);
     }
-    resolveAttributes(roots[0]);
+    resolveReferences(roots[0]);
     return roots[0];
 }
 

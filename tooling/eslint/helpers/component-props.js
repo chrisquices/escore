@@ -200,7 +200,7 @@ function accepts(project, type, value) {
     return !actual || checker.isTypeAssignableTo(actual, type);
 }
 
-function readAttributes(sourceCode, node) {
+export function readAttributes(sourceCode, node) {
     for (let ancestor = node; ancestor?.type === 'VElement'; ancestor = ancestor.parent) {
         if (ancestor.startTag.attributes.some((attribute) => attribute.directive && attribute.key.name.name === 'pre')) return null;
     }

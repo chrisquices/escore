@@ -22,6 +22,8 @@ export const structure = [
                             },
                             {StepperTitle: {flags: ['optional', 'comment-source', 'one-liner', 'non-empty']}},
                             {StepperDescription: {flags: ['optional', 'comment-source', 'one-liner', 'non-empty']}},
+                            {BlankLine: {flags: ['required']}},
+                            {Comment: {flags: ['required', 'text:Separator']}},
                             {StepperSeparator: {flags: ['optional', 'one-liner']}},
                         ],
                     },

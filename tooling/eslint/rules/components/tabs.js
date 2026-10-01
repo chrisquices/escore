@@ -4,7 +4,7 @@ export const structure = [
     {Comment: {flags: ['required']}},
     {
         Tabs: {
-            flags: ['required'],
+            flags: ['required', 'blank-line-between-children'],
             children: [
                 {
                     TabsList: {

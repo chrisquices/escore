@@ -15,10 +15,12 @@ export const structure = [
 ];
 
 export const providerStructure = [
-    {TooltipProvider: {flags: ['required', 'non-empty']}},
+    {TooltipProvider: {flags: ['required', 'non-empty', 'once-per-file']}},
 ];
 
 export default {
     ...createComponentRules(structure),
-    ...createComponentRules(providerStructure),
+    ...createComponentRules(providerStructure, {
+        oncePerFileMessage: 'Use <{{ element }}> only once per file. Multiple providers create separate tooltip contexts. Consolidate them into one provider, ideally in a top-level shell or layout.',
+    }),
 };

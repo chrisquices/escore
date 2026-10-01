@@ -11,7 +11,11 @@ const props = defineProps<{
   <li
     data-slot="sidebar-menu-item"
     data-sidebar="menu-item"
-    :class="cn('group/menu-item relative h-control-height flex items-center gap-1', props.class)"
+    :class="cn(
+      'group/menu-item relative min-h-control-height flex items-center gap-1',
+      'has-[>[data-slot=sidebar-menu-sub]]:flex-col has-[>[data-slot=sidebar-menu-sub]]:items-stretch',
+      props.class,
+    )"
   >
     <slot />
   </li>

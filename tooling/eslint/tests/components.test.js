@@ -4,6 +4,7 @@ import {createRequire} from 'node:module';
 import {join} from 'node:path';
 import test from 'node:test';
 import createComponentRules from '../helpers/create-component-rules.js';
+import {matchCommentByColumn} from '../helpers/component-comments.js';
 import accordionRules from '../rules/components/accordion.js';
 import alertRules from '../rules/components/alert.js';
 import alertDialogRules from '../rules/components/alert-dialog.js';
@@ -22,6 +23,8 @@ import checkboxRules from '../rules/components/checkbox.js';
 import contextMenuRules from '../rules/components/context-menu.js';
 import emptyRules from '../rules/components/empty.js';
 import sheetRules from '../rules/components/sheet.js';
+import tableRules from '../rules/components/table.js';
+import tooltipRules from '../rules/components/tooltip.js';
 
 // Dependencies belong to the consuming project, as they do in eslint.config.js.
 const projectDirectory = process.env.ESCORE_TEST_PROJECT ?? process.cwd();
@@ -183,6 +186,87 @@ test('placement keeps shared components and family roots usable elsewhere', () =
     assert.deepEqual(lint(template('<Button /><section><Button /></section>')).messages, []);
     const rules = createComponentRules([entry('Panel', [entry('Panel', undefined, ['optional'])])]);
     assert.deepEqual(lint(template('<Panel /><section><Panel><Panel /></Panel></section>'), {rules}).messages, []);
+});
+
+test('once-per-file allows zero or one occurrence and reports each duplicate without fixing', () => {
+    const rules = createComponentRules([entry('SharedScope', undefined, ['required', 'once-per-file'])]);
+    for (const markup of ['', '<Other /><Other />', '<SharedScope />', '<main><shared-scope /></main>']) {
+        assert.deepEqual(lint(template(markup), {rules}).messages, []);
+    }
+    for (const markup of [
+        '<SharedScope /><shared-scope />',
+        '<SharedScope><shared-scope /></SharedScope>',
+        '<section><SharedScope /></section><footer><SharedScope /></footer>',
+        '<SharedScope v-if="first" /><SharedScope v-else />',
+    ]) {
+        const input = template(markup);
+        const result = lint(input, {rules, fix: true});
+        assert.deepEqual(result.messages.map((message) => message.messageId), ['oncePerFile']);
+        assert.equal(result.output, input);
+        assert.equal(result.fixed, false);
+        assert.equal(result.messages[0].fix, undefined);
+    }
+    const result = lint(template('<SharedScope />\n<SharedScope />\n<SharedScope />'), {rules});
+    assert.deepEqual(result.messages.map((message) => message.line), [3, 4]);
+});
+
+test('once-per-file counts definitions, not the runtime iterations of a single v-for', () => {
+    const rules = createComponentRules([entry('SharedScope', undefined, ['required', 'once-per-file'])]);
+    assert.deepEqual(lint(template('<SharedScope v-for="item in items" :key="item.id" />'), {rules}).messages, []);
+    const markup = '<SharedScope v-for="item in items" :key="item.id" /><SharedScope />';
+    assert.deepEqual(lint(template(markup), {rules}).messages.map((message) => message.messageId), ['oncePerFile']);
+});
+
+test('once-per-file counts across all parents and supports declarations inside Group', () => {
+    const rules = createComponentRules([entry('Panel', [
+        entry('Group', [entry('SharedScope', undefined, ['required', 'once-per-file'])], ['optional', 'repeatable']),
+    ])]);
+    for (const markup of [
+        '<Panel><SharedScope /><SharedScope /></Panel>',
+        '<Panel><SharedScope /></Panel><Panel><SharedScope /></Panel>',
+        '<section><SharedScope /></section><SharedScope />',
+    ]) {
+        assert.deepEqual(lint(template(markup), {rules}).messages.map((message) => message.messageId), ['oncePerFile']);
+    }
+});
+
+test('once-per-file state is isolated between files, lint runs, and component names', () => {
+    const rules = createComponentRules([entry('Panel', [
+        entry('FirstScope', undefined, ['optional', 'once-per-file']),
+        entry('SecondScope', undefined, ['optional', 'once-per-file']),
+    ])]);
+    const config = [{
+        files: ['**/*.vue'], languageOptions: {parser}, plugins: {escore: {rules}},
+        rules: {'escore/panel-must-follow-structure': 'error'},
+    }];
+    const linter = new Linter();
+    for (const filename of ['Layout.vue', 'Guest.vue', 'Anything.vue', 'Layout.vue']) {
+        assert.deepEqual(linter.verify(template('<FirstScope /><SecondScope />'), config, {filename}), []);
+        const result = linter.verify(template('<FirstScope /><SecondScope /><FirstScope />'), config, {filename});
+        assert.deepEqual(result.map((message) => message.messageId), ['oncePerFile']);
+        assert.match(result[0].message, /Use <FirstScope> only once per file/);
+    }
+});
+
+test('TooltipProvider once-per-file explains shared context and a generic shell without naming a file', () => {
+    const only = ['tooltipprovider-must-follow-structure'];
+    assert.deepEqual(lint(template('<p>No provider</p>'), {rules: tooltipRules, only}).messages, []);
+    assert.deepEqual(lint(template('<TooltipProvider><p>Content</p></TooltipProvider>'), {rules: tooltipRules, only}).messages, []);
+    const markup = template('<TooltipProvider><p>First</p></TooltipProvider>\n<TooltipProvider><p>Second</p></TooltipProvider>');
+    const result = lint(markup, {rules: tooltipRules, only, fix: true});
+    assert.equal(result.output, markup);
+    assert.deepEqual(result.messages.map((message) => message.messageId), ['oncePerFile']);
+    assert.equal(result.messages[0].ruleId, 'escore/tooltipprovider-must-follow-structure');
+    assert.equal(result.messages[0].message, 'Use <TooltipProvider> only once per file. Multiple providers create separate tooltip contexts. Consolidate them into one provider, ideally in a top-level shell or layout.');
+});
+
+test('once-per-file rejects special entries and does not suppress placement checks', () => {
+    for (const name of ['Comment', 'BlankLine', 'Group']) {
+        assert.throws(() => createComponentRules([entry('Panel', [entry(name, undefined, ['required', 'once-per-file'])])]), /once-per-file can only be declared on a component/);
+    }
+    const rules = createComponentRules([entry('Panel', undefined, ['required', 'once-per-file', 'top-level'])]);
+    const result = lint(template('<Panel /><main><Panel /></main>'), {rules});
+    assert.deepEqual(result.messages.map((message) => message.messageId).sort(), ['oncePerFile', 'topLevel']);
 });
 
 test('top-level means the file template, including for conditional and slot wrappers', () => {
@@ -1912,6 +1996,255 @@ test('wrong existing comments are reported without overwriting authored text', (
     assert.equal(result.output, sourceCode);
     assert.deepEqual(result.messages.map((message) => message.messageId), ['commentMismatch']);
     assert.equal(fixed(empty().replace('<!-- No results -->', '<!-- -->')), empty());
+});
+
+test('comment-from copies a scoped component comment without row or column relationships', () => {
+    const rules = createComponentRules([entry('Panel', [
+        entry('Heading'), entry('Icon'),
+        entry('Comment', undefined, ['required', 'comment-from:Heading']),
+        entry('Action', undefined, ['required', 'repeatable', 'comment-source']),
+    ])]);
+    const markup = template(`<Panel>
+<!-- Account settings -->
+<Heading colspan="unknown">Ignored content</Heading>
+<Icon />
+<Action>Save</Action>
+<!-- Incorrect -->
+<Action>Cancel</Action>
+</Panel>`);
+    const output = fixed(markup, {rules});
+    assert.match(output, /<!-- Account settings -->\n<Action>Save/);
+    assert.match(output, /<!-- Account settings -->\n<Action>Cancel/);
+    assert.doesNotMatch(output, /<!-- (Ignored content|Save|Cancel|Incorrect) -->/);
+    const mismatch = lint(markup, {rules}).messages.find((message) => message.messageId === 'commentReferenceMismatch');
+    assert.equal(mismatch.message, 'Replace the comment above <Action> with <!-- Account settings --> to match the comment above <Heading>.');
+});
+
+test('comment-from can copy ancestor and descendant comments', () => {
+    const ancestorRules = createComponentRules([
+        comment(), entry('Panel', [entry('Comment', undefined, ['required', 'comment-from:Panel']), entry('Action')]),
+    ]);
+    const ancestor = template('<!-- Account -->\n<Panel>\n<Action>Save</Action>\n</Panel>');
+    assert.match(fixed(ancestor, {rules: ancestorRules}), /<!-- Account -->\n<Action>/);
+
+    const descendantRules = createComponentRules([
+        entry('Comment', undefined, ['required', 'comment-from:Heading']),
+        entry('Panel', [entry('Comment', undefined, ['required', 'text:Account']), entry('Heading')]),
+    ]);
+    const descendant = template('<Panel>\n<Heading>Account</Heading>\n</Panel>');
+    assert.equal(fixed(descendant, {rules: descendantRules}), template('<!-- Account -->\n<Panel>\n<!-- Account -->\n<Heading>Account</Heading>\n</Panel>'));
+});
+
+test('comment-from resolves the nearest repeated component scope without borrowing a missing source', () => {
+    const rules = createComponentRules([entry('Panel', [
+        entry('Heading'),
+        entry('Section', [
+            entry('Heading', undefined, ['optional']),
+            entry('Comment', undefined, ['required', 'comment-from:Heading']), entry('Action'),
+        ], ['required', 'repeatable']),
+    ])]);
+    const markup = template(`<Panel>
+<!-- Outer -->
+<Heading>Outer</Heading>
+<Section>
+<!-- First -->
+<Heading>First</Heading>
+<Action>One</Action>
+</Section>
+<Section>
+<!-- Second -->
+<Heading>Second</Heading>
+<Action>Two</Action>
+</Section>
+</Panel>`);
+    const output = fixed(markup, {rules});
+    assert.match(output, /<!-- First -->\n<Action>One/);
+    assert.match(output, /<!-- Second -->\n<Action>Two/);
+    const missing = lint(markup.replace('<!-- Second -->\n<Heading>Second</Heading>\n', ''), {rules, fix: true});
+    assert.deepEqual(missing.messages.map((message) => message.messageId), ['commentReferenceUnavailable']);
+    assert.doesNotMatch(missing.output, /<!-- (First|Outer) -->\n<Action>Two/);
+});
+
+test('comment-from resolves sources inside each transparent Group occurrence', () => {
+    const rules = createComponentRules([entry('Panel', [entry('Group', [
+        entry('Heading'), entry('Comment', undefined, ['required', 'comment-from:Heading']), entry('Action'),
+    ], ['required', 'repeatable'])])]);
+    const markup = template('<Panel>\n<!-- First -->\n<Heading>A</Heading>\n<Action>One</Action>\n<!-- Second -->\n<Heading>B</Heading>\n<Action>Two</Action>\n</Panel>');
+    const output = fixed(markup, {rules});
+    assert.match(output, /<!-- First -->\n<Action>One/);
+    assert.match(output, /<!-- Second -->\n<Action>Two/);
+});
+
+test('comment-from refuses multiple sources unless the family supplies an unambiguous matcher', () => {
+    const definition = [entry('Panel', [
+        entry('Heading', undefined, ['required', 'repeatable']),
+        entry('Comment', undefined, ['required', 'comment-from:Heading']), entry('Action'),
+    ])];
+    const markup = template('<Panel>\n<!-- First -->\n<Heading>A</Heading>\n<!-- Second -->\n<Heading>B</Heading>\n<Action>Save</Action>\n</Panel>');
+    const result = lint(markup, {rules: createComponentRules(definition), fix: true});
+    assert.deepEqual(result.messages.map((message) => message.messageId), ['commentReferenceUnavailable']);
+    assert.equal(result.fixed, false);
+    const rules = createComponentRules(definition, {commentMatchers: {Heading: ({candidates}) => candidates[1]}});
+    assert.match(fixed(markup, {rules}), /<!-- Second -->\n<Action>/);
+    const outOfScope = createComponentRules(definition, {commentMatchers: {Heading: ({instance}) => instance}});
+    assert.equal(lint(markup, {rules: outOfScope, fix: true}).fixed, false);
+    assert.throws(() => createComponentRules(definition, {commentMatchers: {Heading: 'column'}}), /matching functions/);
+});
+
+const columnRules = createComponentRules([entry('Grid', [
+    entry('GridHeader', [entry('GridRow', [entry('GridHead', undefined, ['required', 'repeatable'])], ['required', 'repeatable'])]),
+    entry('GridBody', [entry('GridRow', [
+        entry('Comment', undefined, ['required', 'comment-from:GridHead']),
+        entry('GridCell', undefined, ['required', 'repeatable', 'comment-source']),
+    ], ['required', 'repeatable'])]),
+])], {commentMatchers: {GridHead: matchCommentByColumn}});
+const columnGrid = (heads, rows) => `<Grid>\n<GridHeader>\n<GridRow>\n${heads}\n</GridRow>\n</GridHeader>\n<GridBody>\n${rows}\n</GridBody>\n</Grid>`;
+const columnHeads = '<!-- Name -->\n<GridHead>Display name</GridHead>\n<!-- Role -->\n<GridHead>Access level</GridHead>';
+
+test('comment-from copies authored header comments by column for every row and fixes mismatches', () => {
+    const row = (name, role) => `<GridRow>\n<GridCell>${name}</GridCell>\n<!-- Wrong -->\n<GridCell>${role}</GridCell>\n</GridRow>`;
+    const input = template(columnGrid(columnHeads, `${row('Ada', 'Owner')}\n${row('Grace', 'Editor')}`));
+    const output = fixed(input, {rules: columnRules});
+    assert.equal((output.match(/<!-- Name -->/g) ?? []).length, 3);
+    assert.equal((output.match(/<!-- Role -->/g) ?? []).length, 3);
+    assert.match(output, /<!-- Name -->\n<GridCell>Ada<\/GridCell>/);
+    assert.match(output, /<!-- Role -->\n<GridCell>Editor<\/GridCell>/);
+    assert.doesNotMatch(output, /<!-- (Wrong|Display name|Access level|Ada|Grace) -->/);
+    const reported = lint(input, {rules: columnRules}).messages;
+    assert.equal(reported.filter((message) => message.messageId === 'commentReferenceMismatch').length, 2);
+    assert.ok(reported.every((message) => message.fix));
+});
+
+test('comment-from keeps separate and nested tables scoped to their own headers', () => {
+    const row = '<GridRow>\n<GridCell>Value</GridCell>\n</GridRow>';
+    const first = columnGrid('<!-- First -->\n<GridHead>A</GridHead>', row);
+    const second = columnGrid('<!-- Second -->\n<GridHead>B</GridHead>', row);
+    const output = fixed(template(`${first}\n${second}`), {rules: columnRules});
+    assert.equal((output.match(/<!-- First -->/g) ?? []).length, 2);
+    assert.equal((output.match(/<!-- Second -->/g) ?? []).length, 2);
+    const nested = columnGrid('<!-- Outer -->\n<GridHead>A</GridHead>', `<GridRow>\n<GridCell>${second}</GridCell>\n</GridRow>`);
+    const nestedOutput = fixed(template(nested), {rules: columnRules});
+    assert.match(nestedOutput, /<!-- Outer -->\n<GridCell><Grid>/);
+    assert.match(nestedOutput, /<!-- Second -->\n<GridCell>Value/);
+    const missingInner = lint(template(nested.replace('<!-- Second -->\n', '')), {rules: columnRules, fix: true});
+    assert.deepEqual(missingInner.messages.map((message) => message.messageId), ['commentReferenceUnavailable']);
+    assert.doesNotMatch(missingInner.output, /<!-- Outer -->\n<GridCell>Value/);
+});
+
+test('comment-from reports unavailable or ambiguous sources without guessing or accepting manual fallbacks', () => {
+    const row = '<GridRow>\n<!-- Authored cell -->\n<GridCell>Value</GridCell>\n</GridRow>';
+    for (const heads of ['<GridHead>A</GridHead>', '<!-- -->\n<GridHead>A</GridHead>', '<!-- eslint-disable-next-line unknown/rule -->\n<GridHead>A</GridHead>']) {
+        const input = template(columnGrid(heads, row));
+        const result = lint(input, {rules: columnRules, only: ['grid-must-have-valid-comments'], fix: true});
+        assert.ok(result.messages.some((message) => message.messageId === 'commentReferenceUnavailable'));
+        assert.equal(result.output, input);
+    }
+    for (const input of [
+        columnGrid('<!-- Name -->\n<GridHead>Name</GridHead>', '<GridRow>\n<!-- Name -->\n<GridCell>Ada</GridCell>\n<GridCell>Extra</GridCell>\n</GridRow>'),
+        columnGrid(columnHeads, row).replace('</GridHeader>', '<GridRow>\n<!-- Another -->\n<GridHead>Another</GridHead>\n</GridRow>\n</GridHeader>'),
+        columnGrid(columnHeads, row).replace(/<GridHeader>[\s\S]*?<\/GridHeader>/, ''),
+    ]) {
+        const result = lint(template(input), {rules: columnRules, only: ['grid-must-have-valid-comments'], fix: true});
+        assert.deepEqual(result.messages.map((message) => message.messageId), ['commentReferenceUnavailable']);
+        assert.equal(result.fixed, false);
+    }
+});
+
+test('comment-from handles literal colspans and refuses cells spanning different header labels', () => {
+    for (const binding of ['colspan="2"', ':colspan="2"', 'v-bind="{ colspan: 2 }"', 'v-bind="attrs" :colspan="2" :rowspan="1"', ':colSpan="2"', 'colspan="1" :colSpan="2"', ':colSpan="1" colspan="2"']) {
+        const heads = `<!-- Identity -->\n<GridHead ${binding}>Identity</GridHead>\n<!-- Role -->\n<GridHead>Role</GridHead>`;
+        for (const cells of [
+            '<GridCell>First</GridCell>\n<GridCell>Last</GridCell>\n<GridCell>Owner</GridCell>',
+            '<GridCell colspan="2">Full name</GridCell>\n<GridCell>Owner</GridCell>',
+        ]) {
+            const output = fixed(template(columnGrid(heads, `<GridRow>\n${cells}\n</GridRow>`)), {rules: columnRules});
+            assert.match(output, /<!-- Identity -->\n<GridCell/);
+            assert.match(output, /<!-- Role -->\n<GridCell>Owner/);
+        }
+    }
+    const combined = template(columnGrid(columnHeads, '<GridRow>\n<GridCell colspan="2">Combined</GridCell>\n</GridRow>'));
+    const result = lint(combined, {rules: columnRules, fix: true});
+    assert.equal(result.output, combined);
+    assert.deepEqual(result.messages.map((message) => message.messageId), ['commentReferenceUnavailable']);
+});
+
+test('comment-from refuses uncertain cell counts and rowspans but supports repeated body rows', () => {
+    const row = '<GridRow>\n<GridCell>Ada</GridCell>\n<GridCell>Owner</GridCell>\n</GridRow>';
+    for (const attribute of ['v-for="cell in cells"', 'v-if="shown"', ':colspan="width"', 'rowspan="2"', 'v-bind="attrs"']) {
+        const input = template(columnGrid(columnHeads, row.replace('<GridCell>', `<GridCell ${attribute}>`)));
+        const result = lint(input, {rules: columnRules, fix: true});
+        assert.deepEqual(result.messages.map((message) => message.messageId), Array(2).fill('commentReferenceUnavailable'));
+        assert.equal(result.fixed, false);
+    }
+    for (const markup of [
+        columnGrid(columnHeads.replace('<GridHead>', '<GridHead v-if="shown">'), row),
+        columnGrid(columnHeads, row).replace('<GridRow>', '<GridRow v-for="header in headers">'),
+        columnGrid(columnHeads, `${row.replace('<GridCell>', '<GridCell rowspan="2">')}\n${row}`),
+    ]) {
+        const result = lint(template(markup), {rules: columnRules, fix: true});
+        assert.ok(result.messages.every((message) => message.messageId === 'commentReferenceUnavailable'));
+        assert.equal(result.fixed, false);
+    }
+    const repeated = template(columnGrid(columnHeads, row.replace('<GridRow>', '<GridRow v-for="item in items" :key="item.id">')));
+    assert.match(fixed(repeated, {rules: columnRules}), /<!-- Role -->\n<GridCell>Owner/);
+});
+
+test('comment-from preserves authored comment text, CRLF, and kebab-case matching', () => {
+    const text = 'Status: A &lt; B < C > D';
+    const markup = template(columnGrid(`<!-- ${text} -->\n<GridHead>Status</GridHead>`, '<GridRow>\n<GridCell>Value</GridCell>\n</GridRow>'))
+        .replace(/Grid(Head|Header|Body|Row|Cell)/g, (_, name) => `grid-${name.toLowerCase()}`).replaceAll('\n', '\r\n');
+    const output = fixed(markup, {rules: columnRules});
+    assert.ok(output.includes(`<!-- ${text} -->\r\n<grid-cell>`));
+    assert.equal(output.replaceAll('\r\n', '').includes('\n'), false);
+});
+
+test('Table body cells copy header comments generated by the normal comment-source flag', () => {
+    const markup = template(`<Table>
+<TableCaption>Members</TableCaption>
+<TableHeader><TableRow>
+<TableHead>Name</TableHead>
+<TableHead>Role</TableHead>
+</TableRow></TableHeader>
+<TableBody>
+<!-- Ada -->
+<TableRow>
+<TableCell>Ada</TableCell>
+<TableCell>Owner</TableCell>
+</TableRow>
+<!-- Grace -->
+<TableRow>
+<TableCell>Grace</TableCell>
+<TableCell>Editor</TableCell>
+</TableRow>
+</TableBody>
+<TableFooter><TableRow>
+<!-- Total -->
+<TableCell colspan="2">2</TableCell>
+</TableRow></TableFooter>
+</Table>`);
+    const output = fixed(markup, {rules: tableRules, only: ['table-must-have-valid-comments']});
+    assert.equal((output.match(/<!-- Name -->/g) ?? []).length, 3);
+    assert.equal((output.match(/<!-- Role -->/g) ?? []).length, 3);
+    assert.match(output, /<!-- Total -->\n<TableCell colspan="2">2/);
+});
+
+test('comment-from validates declaration placement, source names, and conflicting text', () => {
+    for (const value of ['', ' ', 'TableHead,Other', 'TableHead.name text', 'TableHead\n']) {
+        assert.throws(() => createComponentRules([entry('Comment', undefined, ['required', `comment-from:${value}`]), entry('Panel')]), /only allowed once on Comment/);
+    }
+    for (const name of ['Panel', 'BlankLine', 'Group']) {
+        assert.throws(() => createComponentRules([entry(name, undefined, ['required', 'comment-from:Head'])]), /only allowed once on Comment/);
+    }
+    for (const extra of ['comment-from:Other', 'text:Fixed']) {
+        assert.throws(() => createComponentRules([entry('Comment', undefined, ['required', 'comment-from:Head', extra]), entry('Panel')]), /only allowed once|cannot be used together/);
+    }
+    assert.throws(() => createComponentRules([entry('Panel', [
+        entry('Comment', undefined, ['required', 'comment-from:Missing']), entry('Cell'),
+    ])]), /has no allowed source/);
+    assert.throws(() => createComponentRules([entry('Panel', [
+        entry('Comment', undefined, ['required', 'comment-from:Cell']), entry('Head'),
+        entry('Comment', undefined, ['required', 'comment-from:Head']), entry('Cell'),
+    ])]), /cannot copy from another comment-from/);
 });
 
 test('fixed comment text overrides sources and fixes missing, empty, or different comments', () => {

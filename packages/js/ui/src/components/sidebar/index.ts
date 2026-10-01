@@ -44,6 +44,8 @@ const sidebarMenuButtonBase = [
   "disabled:pointer-events-none disabled:opacity-50",
   "aria-disabled:pointer-events-none aria-disabled:opacity-50",
   "group-has-data-[sidebar=menu-action]/menu-item:pr-8",
+  "[[data-slot=sidebar-menu-item]:has(>[data-slot=sidebar-menu-badge])>&:not([data-size=icon])]:pr-8",
+  "[[data-slot=sidebar-menu-item]:has(>[data-slot=sidebar-menu-badge]):has(>[data-slot=sidebar-menu-action])>&:not([data-size=icon])]:pr-16",
   "group-data-[collapsible=icon]:h-[calc(var(--control-height)-0.25rem)]!",
   "group-data-[collapsible=icon]:w-[calc(100%-0.5rem)]!",
   "group-data-[collapsible=icon]:px-2.5!",

@@ -63,7 +63,6 @@ import requireCommentStatCard from './rules/template/element-comments/require-co
 import requireCommentTableEmpty from './rules/template/element-comments/require-comment-table-empty.js';
 import requireCommentTableHead from './rules/template/element-comments/require-comment-table-head.js';
 import requireCommentToggleGroupItem from './rules/template/element-comments/require-comment-toggle-group-item.js';
-import requireCommentTableCell from './rules/template/element-comments/require-comment-table-cell.js';
 import requireCommentTableRow from './rules/template/element-comments/require-comment-table-row.js';
 import requireAttributeButtonType from './rules/template/element-attributes/require-attribute-button-type.js';
 import requireAttributeButtonSize from './rules/template/element-attributes/require-attribute-button-size.js';
@@ -139,7 +138,6 @@ const escore = {
         'require-comment-table-empty': requireCommentTableEmpty,
         'require-comment-table-head': requireCommentTableHead,
         'require-comment-toggle-group-item': requireCommentToggleGroupItem,
-        'require-comment-table-cell': requireCommentTableCell,
         'require-comment-table-row': requireCommentTableRow,
         'forbid-one-liner-table-cell': forbidOneLinerTableCell,
         'forbid-one-liner-table-head': forbidOneLinerTableHead,
@@ -333,7 +331,6 @@ export default defineConfigWithVueTs(
             'escore/require-comment-table-empty': 'error',
             'escore/require-comment-table-head': 'error',
             'escore/require-comment-toggle-group-item': 'error',
-            'escore/require-comment-table-cell': 'error',
             'escore/require-comment-table-row': 'error',
             'escore/forbid-one-liner-table-cell': 'error',
             'escore/forbid-one-liner-table-head': 'error',

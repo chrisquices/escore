@@ -1,15 +1,16 @@
 import createComponentRules from '../../helpers/create-component-rules.js';
+import {matchCommentByColumn} from '../../helpers/component-comments.js';
 
 export const structure = [
     {Comment: {flags: ['required']}},
     {
         Table: {
-            flags: ['required'],
+            flags: ['required', 'blank-line-between-children'],
             children: [
                 {TableCaption: {flags: ['optional', 'comment-source', 'one-liner']}},
                 {
                     TableHeader: {
-                        flags: ['required'],
+                        flags: ['required', 'blank-line-between-children'],
                         children: [
                             {
                                 TableRow: {
@@ -33,7 +34,7 @@ export const structure = [
                                 TableRow: {
                                     flags: ['optional', 'repeatable'],
                                     children: [
-                                        {Comment: {flags: ['required']}},
+                                        {Comment: {flags: ['required', 'comment-from:TableHead']}},
                                         {TableCell: {flags: ['required', 'repeatable', 'multi-liner']}},
                                     ],
                                 },
@@ -65,4 +66,6 @@ export const structure = [
     },
 ];
 
-export default createComponentRules(structure);
+export default createComponentRules(structure, {
+    commentMatchers: {TableHead: matchCommentByColumn},
+});

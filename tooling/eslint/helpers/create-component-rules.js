@@ -5,16 +5,23 @@ import {checkLayout} from './component-layout.js';
 import {checkAttributes, checkProps} from './component-props.js';
 
 // One definition produces independently configurable rules for each concern.
-export default function createComponentRules(structure, {forbiddenMessage, propsScope = 'all'} = {}) {
+export default function createComponentRules(structure, {forbiddenMessage, oncePerFileMessage, propsScope = 'all', commentMatchers = {}} = {}) {
     if (!['all', 'root', 'family'].includes(propsScope)) throw new TypeError('propsScope must be all, root, or family.');
+    if (!commentMatchers || typeof commentMatchers !== 'object' || Array.isArray(commentMatchers)
+        || Object.values(commentMatchers).some((matcher) => typeof matcher !== 'function')) {
+        throw new TypeError('commentMatchers must map source component names to matching functions.');
+    }
     const root = compileStructure(structure);
     const family = root.name.toLowerCase();
     const analyses = new WeakMap();
     const allowedParents = new Map();
     const forbidden = new Set();
+    const oncePerFile = new Set();
+    const occurrences = new WeakMap();
     const pending = [root];
 
     for (const parent of pending) {
+        if (parent.oncePerFile) oncePerFile.add(parent.name);
         for (const child of parent.children ?? []) {
             if (child.special) continue;
             if (child.group) {
@@ -110,9 +117,11 @@ export default function createComponentRules(structure, {forbiddenMessage, props
                 commentManual: 'No comment source provides usable text. Add a standalone comment immediately above <{{ element }}> describing its purpose from the surrounding template.',
                 commentMismatch: 'Replace the comment above <{{ element }}> with <!-- {{ expected }} --> to match the first usable comment source.',
                 commentFixed: 'Replace the comment above <{{ element }}> with <!-- {{ expected }} -->.',
+                commentReferenceMismatch: 'Replace the comment above <{{ element }}> with <!-- {{ expected }} --> to match the comment above <{{ source }}>.',
+                commentReferenceUnavailable: 'Cannot copy a comment for <{{ element }}>. Ensure one matching <{{ source }}> in this structure has a standalone comment; the source must be unambiguous.',
                 directChildComment: 'Remove this comment directly inside <{{ element }}>; direct-child comments are forbidden.',
             },
-            checkComment,
+            (context, instance) => checkComment(context, instance, commentMatchers),
             {fixable: 'code', prepare: (context) => registerCommentBans(context.sourceCode, root)},
         ),
 
@@ -120,6 +129,7 @@ export default function createComponentRules(structure, {forbiddenMessage, props
             `Enforce declared parents, required children, allowed children, and child order for ${root.name}.`,
             {
                 forbidden: forbiddenMessage ?? 'Do not use <{{ element }}>; it is forbidden. Replace it while preserving its content and behavior.',
+                oncePerFile: oncePerFileMessage ?? 'Use <{{ element }}> only once per file. Consolidate duplicate instances while preserving their content and behavior.',
                 topLevel: 'Move <{{ element }}> directly inside the root <template>, outside all wrappers. Preserve its conditions, bindings, and behavior.',
                 lastInTemplate: 'Move <{{ element }}> after all other root <template> children. Order among <{{ root }}> instances is unrestricted. Preserve conditions and bindings.',
                 misplaced: 'Move <{{ element }}> directly inside {{ expected }}; currently inside {{ actual }}. Preserve its content and bindings.',
@@ -211,6 +221,19 @@ export default function createComponentRules(structure, {forbiddenMessage, props
             },
             {
                 checkElement(context, node) {
+                    for (const name of oncePerFile) {
+                        if (!matchesComponent(node, name)) continue;
+                        if (!occurrences.has(context)) occurrences.set(context, new Set());
+                        const seen = occurrences.get(context);
+                        if (seen.has(name)) {
+                            context.report({
+                                loc: node.startTag.loc,
+                                messageId: 'oncePerFile',
+                                data: {element: node.rawName},
+                            });
+                        }
+                        seen.add(name);
+                    }
                     if (matchesComponent(node, root.name)) {
                         const templateBody = context.sourceCode.ast.templateBody;
                         if (node.parent !== templateBody) {
