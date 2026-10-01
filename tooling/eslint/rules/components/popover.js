@@ -22,6 +22,7 @@ export const headerStructure = [
             children: [
                 {PopoverTitle: {flags: ['required', 'one-liner', 'non-empty']}},
                 {PopoverDescription: {flags: ['optional', 'one-liner', 'non-empty']}},
+                {BlankLine: {flags: ['required']}},
                 {PopoverAction: {flags: ['optional', 'non-empty']}},
             ],
         },

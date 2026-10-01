@@ -2,7 +2,7 @@ import {compileStructure, matchesComponent, matchStructure, walkStructure} from 
 import {checkComment} from './component-comments.js';
 import {checkSpacing} from './component-spacing.js';
 import {checkLayout} from './component-layout.js';
-import {checkProps} from './component-props.js';
+import {checkAttributes, checkProps} from './component-props.js';
 
 // One definition produces independently configurable rules for each concern.
 export default function createComponentRules(structure, {forbiddenMessage, propsScope = 'all'} = {}) {
@@ -77,6 +77,16 @@ export default function createComponentRules(structure, {forbiddenMessage, props
     }
 
     return {
+        [`${family}-must-have-valid-attributes`]: createRule(
+            `Enforce declared attribute values and associations within ${root.name}.`,
+            {
+                attributeEmpty: 'Set {{ attribute }} on <{{ element }}> to a nonempty value.',
+                attributeValue: 'Set {{ attribute }} on <{{ element }}> to {{ expected }}; received {{ actual }}.',
+                attributeMismatch: 'Set {{ attribute }} on <{{ element }}> to the same value or binding as {{ targetAttribute }} on a single <{{ target }}> in the same {{ scope }}.',
+            },
+            checkAttributes,
+        ),
+
         [`${family}-must-have-valid-props`]: createRule(
             `Validate ${root.name} family props against their component source.`,
             {
@@ -98,6 +108,7 @@ export default function createComponentRules(structure, {forbiddenMessage, props
                 commentManual: 'No comment source provides usable text. Add a standalone comment immediately above <{{ element }}> describing its purpose from the surrounding template.',
                 commentMismatch: 'Replace the comment above <{{ element }}> with <!-- {{ expected }} --> to match the first usable comment source.',
                 commentFixed: 'Replace the comment above <{{ element }}> with <!-- {{ expected }} -->.',
+                directChildComment: 'Move or remove this comment directly inside <{{ element }}>. Preserve any needed explanation or tooling directive.',
             },
             checkComment,
             {fixable: 'code'},
@@ -251,10 +262,11 @@ export default function createComponentRules(structure, {forbiddenMessage, props
         ),
 
         [`${family}-must-have-required-blank-lines`]: createRule(
-            `Enforce declared blank lines within ${root.name}.`,
+            `Enforce required and forbidden blank lines within ${root.name}.`,
             {
                 spacing: 'Keep exactly one blank line between <{{ before }}> and <{{ after }}>, before any leading comments attached to <{{ after }}>.',
                 spacingAbove: 'Keep exactly one blank line above <{{ after }}>, before any leading comments attached to it.',
+                noSpacing: 'Remove blank lines between <{{ before }}> and <{{ after }}>. Preserve content and bindings; move intervening comments if needed.',
             },
             checkSpacing,
             {fixable: 'whitespace'},

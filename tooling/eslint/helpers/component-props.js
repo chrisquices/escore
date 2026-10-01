@@ -2,11 +2,13 @@ import {statSync} from 'node:fs';
 import {createRequire} from 'node:module';
 import {basename, dirname, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {walkStructure} from './component-structure.js';
 
 const libraryRequire = createRequire(new URL('../../../packages/js/package.json', import.meta.url));
 const defaultConfig = fileURLToPath(new URL('../../../packages/js/ui/tsconfig.json', import.meta.url));
 const projects = new Map();
 const sources = new WeakMap();
+const bindings = new WeakMap();
 const unknown = Symbol('unknown template value');
 const camelize = (name) => name.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
 const kebab = (name) => name.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
@@ -198,25 +200,18 @@ function accepts(project, type, value) {
     return !actual || checker.isTypeAssignableTo(actual, type);
 }
 
-export function checkProps(context, instance) {
-    for (let node = instance.node; node?.type === 'VElement'; node = node.parent) {
-        if (node.startTag.attributes.some((attribute) => attribute.directive && attribute.key.name.name === 'pre')) return;
+function readAttributes(sourceCode, node) {
+    for (let ancestor = node; ancestor?.type === 'VElement'; ancestor = ancestor.parent) {
+        if (ancestor.startTag.attributes.some((attribute) => attribute.directive && attribute.key.name.name === 'pre')) return null;
     }
-    const sourceCode = context.sourceCode;
-    let project = sources.get(sourceCode);
-    if (!project) {
-        project = readProject(resolve(context.settings.escore?.componentTsconfig ?? defaultConfig));
-        sources.set(sourceCode, project);
-    }
-    const props = readProps(project, instance.entry.name);
-    if (!props) return;
+    if (bindings.has(node)) return bindings.get(node);
     const attributes = new Map();
     let uncertain = false;
     // Template references identify v-for/slot bindings; module scopes identify script bindings.
     const shadowsUndefined = sourceCode.scopeManager.scopes.some((scope) => (
         ['global', 'module'].includes(scope.type) && scope.set.get('undefined')?.defs.length
     ));
-    const undefinedReferences = new Set(shadowsUndefined ? [] : instance.node.startTag.attributes
+    const undefinedReferences = new Set(shadowsUndefined ? [] : node.startTag.attributes
         .flatMap((attribute) => attribute.value?.references ?? [])
         .filter((reference) => reference.id.name === 'undefined' && !reference.variable)
         .map((reference) => reference.id));
@@ -227,7 +222,15 @@ export function checkProps(context, instance) {
         uncertain = true;
     }
 
-    function bindObject(expression) {
+    function boundValue(expression, attribute, reportNode = attribute) {
+        return {
+            value: literal(expression, undefinedReferences), node: reportNode, expression,
+            references: (attribute.value?.references ?? []).filter((reference) => expression?.range
+                && reference.id.range[0] >= expression.range[0] && reference.id.range[1] <= expression.range[1]),
+        };
+    }
+
+    function bindObject(expression, attribute) {
         expression = unwrap(expression);
         if (expression?.type !== 'ObjectExpression') {
             const value = literal(expression, undefinedReferences);
@@ -236,16 +239,16 @@ export function checkProps(context, instance) {
         }
         for (const property of expression.properties) {
             if (property.type === 'SpreadElement') {
-                bindObject(property.argument);
+                bindObject(property.argument, attribute);
                 continue;
             }
             const name = !property.computed && property.key.type === 'Identifier' ? property.key.name : literal(property.key, undefinedReferences);
             if (typeof name !== 'string') forgetBindings();
-            else attributes.set(camelize(name), {value: property.kind === 'init' ? literal(property.value, undefinedReferences) : unknown, node: property});
+            else attributes.set(camelize(name), boundValue(property.kind === 'init' ? property.value : null, attribute, property));
         }
     }
 
-    for (const attribute of instance.node.startTag.attributes) {
+    for (const attribute of node.startTag.attributes) {
         if (!attribute.directive) {
             attributes.set(camelize(attribute.key.rawName), {value: attribute.value?.value ?? '', node: attribute});
             continue;
@@ -254,13 +257,31 @@ export function checkProps(context, instance) {
         if (!['bind', 'model'].includes(directive)) continue;
         const argument = attribute.key.argument;
         if (!argument && directive === 'bind') {
-            bindObject(attribute.value?.expression);
+            bindObject(attribute.value?.expression, attribute);
             continue;
         }
         const name = !argument ? 'modelValue' : argument.type === 'VIdentifier' ? argument.rawName : literal(argument.expression, undefinedReferences);
         if (typeof name !== 'string') forgetBindings();
-        else attributes.set(camelize(name), {value: literal(attribute.value?.expression, undefinedReferences), node: attribute});
+        else attributes.set(camelize(name), boundValue(attribute.value?.expression, attribute));
     }
+
+    const result = {attributes, uncertain};
+    bindings.set(node, result);
+    return result;
+}
+
+export function checkProps(context, instance) {
+    const sourceCode = context.sourceCode;
+    const bindings = readAttributes(sourceCode, instance.node);
+    if (!bindings) return;
+    let project = sources.get(sourceCode);
+    if (!project) {
+        project = readProject(resolve(context.settings.escore?.componentTsconfig ?? defaultConfig));
+        sources.set(sourceCode, project);
+    }
+    const props = readProps(project, instance.entry.name);
+    if (!props) return;
+    const {attributes, uncertain} = bindings;
 
     for (const [name, prop] of props) {
         const attribute = attributes.get(name);
@@ -285,5 +306,76 @@ export function checkProps(context, instance) {
                 actual: (JSON.stringify(value, (_, item) => item === unknown ? '(dynamic)' : typeof item === 'bigint' ? `${item}n` : item) ?? String(value)).slice(0, 160),
             },
         });
+    }
+}
+
+// Compare syntax and template scope, not spelling alone: two loop variables can share a name.
+function sameBinding(sourceCode, left, right) {
+    if (!left || !right) return false;
+    if (left.value !== unknown || right.value !== unknown) {
+        return left.value !== unknown && right.value !== unknown && left.value === right.value;
+    }
+    if (!left.expression || !right.expression) return false;
+    let stable = true;
+    function shape(expression) {
+        const node = unwrap(expression);
+        if (!node) return null;
+        if (['CallExpression', 'NewExpression', 'AssignmentExpression', 'UpdateExpression', 'AwaitExpression', 'YieldExpression'].includes(node.type)) stable = false;
+        if (node.type === 'Identifier') return [node.type, node.name];
+        if (node.type === 'Literal') return [node.regex ? 'RegExp' : node.bigint !== undefined ? 'BigInt' : node.type, node.regex ?? node.bigint ?? node.value];
+        if (node.type === 'TemplateLiteral' && !node.expressions.length) return ['Literal', node.quasis[0].value.cooked];
+        if (node.type === 'TemplateElement') return [node.type, node.value.cooked ?? node.value.raw];
+        const flags = ['operator', 'computed', 'optional', 'kind', 'method', 'shorthand', 'async', 'generator', 'delegate', 'prefix']
+            .filter((key) => node[key] !== undefined).map((key) => [key, node[key]]);
+        const children = (sourceCode.visitorKeys[node.type] ?? [])
+            .filter((key) => !['typeArguments', 'typeParameters', 'typeAnnotation', 'returnType'].includes(key))
+            .map((key) => [key, Array.isArray(node[key]) ? node[key].map(shape) : shape(node[key])]);
+        return [node.type, flags, children];
+    }
+    const equal = JSON.stringify(shape(left.expression)) === JSON.stringify(shape(right.expression));
+    const locals = (binding) => new Map(binding.references.filter((reference) => reference.variable)
+        .map((reference) => [reference.id.name, reference.variable]));
+    const leftLocals = locals(left);
+    const rightLocals = locals(right);
+    return stable && equal && leftLocals.size === rightLocals.size
+        && [...leftLocals].every(([name, variable]) => rightLocals.get(name) === variable);
+}
+
+export function checkAttributes(context, instance) {
+    if (!instance.entry.attributes.length) return;
+    const bindings = readAttributes(context.sourceCode, instance.node);
+    if (!bindings) return;
+    for (const constraint of instance.entry.attributes) {
+        const attribute = bindings.attributes.get(camelize(constraint.name));
+        // Required presence is owned by component types. Unknown spreads still need a verifiable constraint.
+        if (!attribute && !bindings.uncertain) continue;
+        const data = {element: instance.node.rawName, attribute: constraint.name};
+        const report = (messageId, extra = {}) => context.report({
+            node: attribute?.node ?? instance.node.startTag, messageId, data: {...data, ...extra},
+        });
+        if (constraint.nonEmpty && attribute && (attribute.value == null || (typeof attribute.value === 'string' && !attribute.value.trim()))) {
+            report('attributeEmpty');
+            continue;
+        }
+        if (constraint.value !== undefined && attribute?.value !== constraint.value) {
+            report('attributeValue', {expected: JSON.stringify(constraint.value),
+                actual: !attribute || attribute.value === unknown ? 'an unverified binding'
+                    : (JSON.stringify(attribute.value, (_, value) => typeof value === 'bigint' ? `${value}n` : value) ?? String(attribute.value)).slice(0, 160)});
+        }
+        if (!constraint.match) continue;
+        const target = constraint.match;
+        const group = instance.groups.get(target.scopePath);
+        let scope = instance;
+        if (target.group) {
+            while (scope.parent && scope.groups.get(target.scopePath) === group) scope = scope.parent;
+        } else {
+            while (scope.parent && scope.entry.path !== target.scopePath) scope = scope.parent;
+        }
+        const candidates = [...walkStructure(scope)].filter((candidate) => target.paths.has(candidate.entry.path)
+            && (!target.group || candidate.groups.get(target.scopePath) === group));
+        const match = candidates.length === 1 ? readAttributes(context.sourceCode, candidates[0].node)?.attributes.get(camelize(target.attribute)) : undefined;
+        if (sameBinding(context.sourceCode, attribute, match)) continue;
+        report('attributeMismatch', {target: target.name, targetAttribute: target.attribute,
+            scope: target.group ? `Group occurrence inside <${scope.node.rawName}>` : `<${scope.node.rawName}>`});
     }
 }

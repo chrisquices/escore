@@ -21,6 +21,7 @@ export const structure = [
                         ],
                     },
                 },
+                {BlankLine: {flags: ['required']}},
                 {MessageScrollerButton: {flags: ['optional', 'repeatable', 'one-liner']}},
             ],
         },

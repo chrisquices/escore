@@ -1,6 +1,8 @@
-const supportedFlags = new Set(['required', 'optional', 'forbidden', 'repeatable', 'one-of', 'comment-source', 'one-liner', 'multi-liner', 'one-liner-attributes', 'multi-liner-attributes', 'self-closing', 'blank-line-between-children', 'non-empty', 'unordered', 'top-level', 'last-in-template']);
+const supportedFlags = new Set(['required', 'optional', 'forbidden', 'repeatable', 'one-of', 'comment-source', 'one-liner', 'multi-liner', 'one-liner-attributes', 'multi-liner-attributes', 'self-closing', 'blank-line-between-children', 'no-blank-line-between-children', 'no-direct-child-comments', 'non-empty', 'unordered', 'top-level', 'last-in-template']);
 const attributeCommentSource = /^comment-source:[a-zA-Z_][\w.:-]*$/;
 const specialNames = new Set(['Comment', 'BlankLine']);
+const attributeName = /^[a-zA-Z_][\w:-]*$/;
+const attributeMatch = /^matches:([a-zA-Z_][\w-]*)\.([a-zA-Z_][\w:-]*)$/;
 
 export function matchesComponent(node, name) {
     if (node?.type !== 'VElement') return false;
@@ -30,8 +32,8 @@ export function compileStructure(structure) {
             if (!name || !options || typeof options !== 'object' || Array.isArray(options)) {
                 invalid(position, 'expected a name and an options object.');
             }
-            if (Object.keys(options).some((key) => !['flags', 'children'].includes(key))) {
-                invalid(position, 'only flags and children are supported.');
+            if (Object.keys(options).some((key) => !['flags', 'children', 'attributes'].includes(key))) {
+                invalid(position, 'only flags, children, and attributes are supported.');
             }
             if (!Array.isArray(options.flags) || options.flags.some((flag) => typeof flag !== 'string'
                 || (!supportedFlags.has(flag) && !attributeCommentSource.test(flag) && !flag.startsWith('text:') && !flag.startsWith('not-within:')))
@@ -74,14 +76,48 @@ export function compileStructure(structure) {
             const nonEmpty = options.flags.includes('non-empty');
             const selfClosing = options.flags.includes('self-closing');
             const blankLineBetweenChildren = options.flags.includes('blank-line-between-children');
+            const noBlankLineBetweenChildren = options.flags.includes('no-blank-line-between-children');
+            const noDirectChildComments = options.flags.includes('no-direct-child-comments');
             const unordered = options.flags.includes('unordered');
             const repeatable = options.flags.includes('repeatable');
             const topLevel = options.flags.includes('top-level');
             const lastInTemplate = options.flags.includes('last-in-template');
             const commentSources = options.flags.filter((flag) => flag === 'comment-source' || flag.startsWith('comment-source:'));
             const special = specialNames.has(name);
+            const attributes = [];
+            if ('attributes' in options) {
+                if (special || group || forbidden) invalid(position, 'attributes can only be declared on an allowed component.');
+                if (!options.attributes || typeof options.attributes !== 'object' || Array.isArray(options.attributes)) {
+                    invalid(position, 'attributes must be an object mapping attribute names to constraint arrays.');
+                }
+                const names = new Set();
+                for (const [name, constraints] of Object.entries(options.attributes)) {
+                    const normalized = name.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
+                    if (!attributeName.test(name) || names.has(normalized)) invalid(position, 'attribute names must be valid and unique, including camelCase/kebab-case aliases.');
+                    names.add(normalized);
+                    if (!Array.isArray(constraints) || !constraints.length || new Set(constraints).size !== constraints.length
+                        || constraints.some((flag) => typeof flag !== 'string' || !(flag === 'non-empty' || attributeMatch.test(flag)
+                            || (flag.startsWith('value:') && flag.slice(6).trim() && !/[\r\n]/.test(flag))))) {
+                        invalid(position, `constraints for ${name} must be unique values: non-empty, value:<text>, matches:<Component>.<attribute>.`);
+                    }
+                    const values = constraints.filter((flag) => flag.startsWith('value:'));
+                    const matches = constraints.filter((flag) => flag.startsWith('matches:'));
+                    if (values.length > 1 || matches.length > 1) invalid(position, `declare at most one value and one matches constraint for ${name}.`);
+                    const match = matches[0]?.match(attributeMatch);
+                    attributes.push({name, nonEmpty: constraints.includes('non-empty'), value: values[0]?.slice(6),
+                        match: match ? {name: match[1], attribute: match[2]} : undefined});
+                }
+            }
             if (blankLineBetweenChildren && (special || group)) {
                 invalid(position, 'blank-line-between-children can only be declared on a component.');
+            }
+            for (const flag of ['no-blank-line-between-children', 'no-direct-child-comments']) {
+                if (options.flags.includes(flag) && (special || group)) {
+                    invalid(position, `${flag} can only be declared on a component.`);
+                }
+            }
+            if (blankLineBetweenChildren && noBlankLineBetweenChildren) {
+                invalid(position, 'blank-line-between-children and no-blank-line-between-children cannot be used together.');
             }
             if (blankLineBetweenChildren && (selfClosing || layout === 'one-liner')) {
                 invalid(position, 'blank-line-between-children cannot be combined with self-closing or one-liner.');
@@ -109,6 +145,14 @@ export function compileStructure(structure) {
                 invalid(position, 'Group supports required or optional, with either repeatable or one-of.');
             }
             const children = 'children' in options ? compile(options.children, `${position}.${name}.children`, unordered) : null;
+            const directEntries = children?.flatMap((child) => child.group ? child.children : [child]) ?? [];
+            if (noBlankLineBetweenChildren && directEntries.some((child) => child.name === 'BlankLine' && child.required)) {
+                invalid(position, 'no-blank-line-between-children cannot be combined with required BlankLine entries at the same child level.');
+            }
+            if (noDirectChildComments && directEntries.some((child) => child.name === 'Comment' && child.required
+                && !child.notWithin.some((ancestor) => matchesComponent({type: 'VElement', rawName: name}, ancestor)))) {
+                invalid(position, 'no-direct-child-comments cannot be combined with required Comment entries at the same child level; remove the requirement or exclude this parent with not-within.');
+            }
             if (selfClosing && children?.length) {
                 invalid(position, 'self-closing cannot declare child entries; omit children or use an empty array.');
             }
@@ -146,6 +190,8 @@ export function compileStructure(structure) {
                 attributeLayout,
                 selfClosing,
                 blankLineBetweenChildren,
+                noBlankLineBetweenChildren,
+                noDirectChildComments,
                 nonEmpty,
                 unordered,
                 topLevel,
@@ -153,6 +199,7 @@ export function compileStructure(structure) {
                 commentSources,
                 text,
                 notWithin,
+                attributes,
                 children,
             };
         });
@@ -205,6 +252,25 @@ export function compileStructure(structure) {
         pending.push(...(entry.children ?? []));
     }
 
+    // Resolve references by declaration, so a missing target cannot fall back to another occurrence.
+    function descendants(entry) {
+        return [entry, ...(entry.children ?? []).flatMap(descendants)];
+    }
+    function resolveAttributes(entry, ancestors = []) {
+        for (const attribute of entry.attributes) {
+            if (!attribute.match) continue;
+            const target = attribute.match;
+            for (const scope of [entry, ...ancestors]) {
+                const targets = descendants(scope).filter((candidate) => !candidate.special && !candidate.group && !candidate.forbidden && candidate.name === target.name);
+                if (!targets.length) continue;
+                Object.assign(target, {scopePath: scope.path, group: scope.group, paths: new Set(targets.map((candidate) => candidate.path))});
+                break;
+            }
+            if (!target.scopePath) invalid(entry.path, `matches:${target.name}.${target.attribute} has no allowed target in this structure.`);
+        }
+        for (const child of entry.children ?? []) resolveAttributes(child, [entry, ...ancestors]);
+    }
+    resolveAttributes(roots[0]);
     return roots[0];
 }
 
@@ -250,7 +316,8 @@ function expandGroups(entries, actual) {
             const selected = entry.required
                 ? entry.children.find((child) => (remaining.get(child.name) ?? 0) > 0) ?? entry.children[0]
                 : undefined;
-            const alternatives = entry.children.map((child) => ({...child, required: child === selected, alternative: true}));
+            const groupScope = {path: entry.path, token: {}};
+            const alternatives = entry.children.map((child) => ({...child, groupScope, required: child === selected, alternative: true}));
             expanded.push(...alternatives);
             choices.push({entry, alternatives});
             for (const child of alternatives) remaining.set(child.name, Math.max(0, (remaining.get(child.name) ?? 0) - 1));
@@ -267,8 +334,9 @@ function expandGroups(entries, actual) {
         }
         if (!entry.repeatable) repetitions = Math.min(1, repetitions);
         for (let repetition = 0; repetition < repetitions; repetition++) {
+            const groupScope = {path: entry.path, token: {}};
             for (const child of entry.children) {
-                expanded.push({...child});
+                expanded.push({...child, groupScope});
                 if (!child.special) remaining.set(child.name, Math.max(0, (remaining.get(child.name) ?? 0) - 1));
             }
         }
@@ -279,9 +347,11 @@ function expandGroups(entries, actual) {
 
 // Match sibling occurrences, not a global map keyed by component name.
 // Matching independently of order allows order errors without false missing errors.
-export function matchStructure(entry, node) {
+export function matchStructure(entry, node, parent = null) {
     const actual = meaningfulChildren(node);
-    const instance = {entry, node, hasContent: actual.length > 0, entries: entry.children, children: [], missing: [], choices: [], unexpected: [], outOfOrder: false};
+    const groups = new Map(parent?.groups);
+    if (entry.groupScope) groups.set(entry.groupScope.path, entry.groupScope.token);
+    const instance = {entry, node, parent, groups, hasContent: actual.length > 0, entries: entry.children, children: [], missing: [], choices: [], unexpected: [], outOfOrder: false};
     if (entry.children === null) return instance;
 
     const expanded = expandGroups(entry.children, actual);
@@ -317,7 +387,7 @@ export function matchStructure(entry, node) {
 
         for (const candidate of candidates.slice(0, count)) {
             available.delete(candidate);
-            instance.children.push(matchStructure(child, candidate));
+            instance.children.push(matchStructure(child, candidate, instance));
         }
     }
 

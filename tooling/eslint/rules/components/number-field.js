@@ -4,7 +4,7 @@ export const structure = [
     {Comment: {flags: ['required']}},
     {
         NumberField: {
-            flags: ['required'],
+            flags: ['required', 'multi-liner-attributes'],
             children: [
                 {Label: {flags: ['optional']}},
                 {

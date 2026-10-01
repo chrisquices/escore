@@ -7,7 +7,7 @@ export const structure = [
             flags: ['required'],
             children: [
                 {MarkerIcon: {flags: ['optional']}},
-                {MarkerContent: {flags: ['required', 'comment-source', 'one-liner', 'non-empty']}},
+                {MarkerContent: {flags: ['required', 'comment-source', 'one-liner-attributes', 'non-empty']}},
             ],
         },
     },

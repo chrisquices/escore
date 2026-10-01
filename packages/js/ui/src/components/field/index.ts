@@ -18,9 +18,6 @@ export const fieldVariants = cva(
         ],
       },
     },
-    defaultVariants: {
-      orientation: "vertical",
-    },
   },
 )
 

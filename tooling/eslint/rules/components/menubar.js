@@ -22,6 +22,7 @@ export const structure = [
                                         {Comment: {flags: ['required']}},
                                         {MenubarItem: {flags: ['optional', 'repeatable', 'comment-source', 'non-empty']}},
                                         {MenubarCheckboxItem: {flags: ['optional', 'repeatable', 'non-empty']}},
+                                        {Comment: {flags: ['required']}},
                                         {
                                             MenubarRadioGroup: {
                                                 flags: ['optional', 'repeatable'],

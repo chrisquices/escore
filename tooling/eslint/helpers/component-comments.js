@@ -111,13 +111,31 @@ export function standaloneComment(sourceCode, tokenStore, node) {
 }
 
 export function checkComment(context, instance) {
-    if (!hasActiveComment(instance)) return;
+    const activeComment = hasActiveComment(instance);
+    if (!activeComment && !instance.entry.noDirectChildComments) return;
 
     const sourceCode = context.sourceCode;
     const tokenStore = sourceCode.parserServices.getTemplateBodyTokenStore?.();
     if (!tokenStore) return;
 
     const node = instance.node;
+    if (instance.entry.noDirectChildComments && node.endTag) {
+        const children = node.children.filter((child) => child.type === 'VElement');
+        for (const comment of tokenStore.getTokensBetween(node.startTag, node.endTag, {includeComments: true})) {
+            if (comment.type !== 'HTMLComment' || children.some((child) => (
+                child.range[0] <= comment.range[0] && comment.range[1] <= child.range[1]
+            ))) continue;
+
+            // Report instead of deleting explanations or changing tooling directives.
+            context.report({
+                loc: comment.loc,
+                messageId: 'directChildComment',
+                data: {element: node.rawName},
+            });
+        }
+    }
+    if (!activeComment) return;
+
     const comment = standaloneComment(sourceCode, tokenStore, node);
     if (!comment && !instance.entry.comment.required) return;
     const fixedText = instance.entry.comment.text;

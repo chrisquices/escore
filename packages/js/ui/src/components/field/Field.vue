@@ -6,7 +6,7 @@ import { fieldVariants } from "."
 
 const props = defineProps<{
   class?: HTMLAttributes["class"]
-  orientation?: FieldVariants["orientation"]
+  orientation: NonNullable<FieldVariants["orientation"]>
 }>()
 </script>
 

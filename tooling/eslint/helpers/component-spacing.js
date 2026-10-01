@@ -2,7 +2,7 @@ import {meaningfulToken} from './component-comments.js';
 
 export function checkSpacing(context, instance) {
     const checkEntries = instance.entries && !instance.outOfOrder && !instance.unexpected.length && !instance.choices.length;
-    if (!checkEntries && !instance.entry.blankLineBetweenChildren) return;
+    if (!checkEntries && !instance.entry.blankLineBetweenChildren && !instance.entry.noBlankLineBetweenChildren) return;
 
     const sourceCode = context.sourceCode;
     const tokenStore = sourceCode.parserServices.getTemplateBodyTokenStore?.();
@@ -10,7 +10,7 @@ export function checkSpacing(context, instance) {
 
     const boundaries = [];
     let preservesWhitespace = false;
-    if (instance.entry.blankLineBetweenChildren) {
+    if (instance.entry.blankLineBetweenChildren || instance.entry.noBlankLineBetweenChildren) {
         for (let node = instance.node; node?.type === 'VElement'; node = node.parent) {
             if (['pre', 'textarea', 'script', 'style'].includes(node.rawName)
                 || node.startTag.attributes.some((attribute) => attribute.directive && attribute.key.name.name === 'pre')) {
@@ -20,7 +20,7 @@ export function checkSpacing(context, instance) {
         }
         const children = instance.node.children.filter((child) => child.type === 'VElement');
         for (let index = 1; index < children.length; index++) {
-            boundaries.push({left: children[index - 1], right: children[index], betweenChildren: true});
+            boundaries.push({left: children[index - 1], right: children[index], betweenChildren: true, noBlankLine: instance.entry.noBlankLineBetweenChildren});
         }
     }
     // Explicit BlankLine entries depend on a valid match; the parent flag uses actual children.
@@ -52,9 +52,37 @@ export function checkSpacing(context, instance) {
     }
 
     const checked = new Set();
-    for (const {left, right, betweenChildren} of boundaries) {
+    for (const {left, right, betweenChildren, noBlankLine} of boundaries) {
         if (checked.has(right)) continue;
         checked.add(right);
+
+        if (noBlankLine) {
+            const tokens = tokenStore.getTokensBetween(left, right, {includeComments: true});
+            const comments = tokens.filter((token) => token.type === 'HTMLComment');
+            const gaps = [];
+            let start = left.range[1];
+            for (const comment of comments) {
+                gaps.push(sourceCode.text.slice(start, comment.range[0]));
+                start = comment.range[1];
+            }
+            gaps.push(sourceCode.text.slice(start, right.range[0]));
+            // Blank lines inside a comment are its content, not sibling spacing.
+            if (!gaps.some((gap) => gap.split(/\r\n|\n|\r/).slice(1, -1).some((line) => /^[\t ]*$/.test(line)))) continue;
+
+            const gap = sourceCode.text.slice(left.range[1], right.range[0]);
+            const safe = !preservesWhitespace && /^[\t \r\n]*$/.test(gap)
+                && tokens.every((token) => token.type === 'HTMLWhitespace');
+            const newline = gap.match(/\r\n|\n|\r/)[0];
+            const indentation = gap.split(/\r\n|\n|\r/).at(-1);
+            context.report({
+                loc: right.startTag.loc,
+                messageId: 'noSpacing',
+                data: {before: left.rawName, after: right.rawName},
+                // Comments may require their own blank line; leave those conflicts for an explicit edit.
+                fix: safe ? (fixer) => fixer.replaceTextRange([left.range[1], right.range[0]], newline + indentation) : undefined,
+            });
+            continue;
+        }
 
         let anchor = right;
         // Keep leading standalone comments attached to the following component.

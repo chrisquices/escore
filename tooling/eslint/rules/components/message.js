@@ -11,11 +11,10 @@ export const structure = [
                     MessageContent: {
                         flags: ['required'],
                         children: [
-                            {MessageHeader: {flags: ['optional', 'comment-source']}},
+                            {MessageHeader: {flags: ['optional', 'comment-source', 'one-liner']}},
                             {Bubble: {flags: ['optional', 'repeatable']}},
                             {BubbleGroup: {flags: ['optional']}},
-                            {div: {flags: ['optional', 'repeatable']}},
-                            {MessageFooter: {flags: ['optional']}},
+                            {MessageFooter: {flags: ['optional', 'one-liner']}},
                         ],
                     },
                 },

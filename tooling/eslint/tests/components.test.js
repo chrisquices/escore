@@ -1244,6 +1244,197 @@ test('blank-line-between-children rejects incompatible flags and special entries
     }
 });
 
+test('no-blank-line-between-children removes only blank lines between actual direct elements', () => {
+    const rules = createComponentRules([entry('Panel', undefined, ['required', 'no-blank-line-between-children'])]);
+    const nested = '<First>\n<Nested />\n\n<Nested />\n</First>';
+    const markup = template(`<Panel>\n\n${nested}\n\n  \n\t<Second />\n\n\t<Third />\n\n</Panel>`);
+    const expected = template(`<Panel>\n\n${nested}\n\t<Second />\n\t<Third />\n\n</Panel>`);
+    assert.equal(fixed(markup, {rules}), expected);
+    assert.equal(fixed(markup.replaceAll('\n', '\r\n'), {rules}), expected.replaceAll('\n', '\r\n'));
+    for (const body of ['', '\n\n', '<Only />\n\n', '<First /><Second />', '<First /> <Second />', '<First />\n<Second />']) {
+        const unchanged = template(`<Panel>${body}</Panel>`);
+        assert.equal(fixed(unchanged, {rules}), unchanged);
+    }
+});
+
+test('no-blank-line-between-children works with unordered repetitions and transparent groups', () => {
+    const definitions = [
+        entry('Panel', [entry('Item', undefined, ['optional', 'repeatable']), entry('Footer')], ['required', 'unordered', 'no-blank-line-between-children']),
+        entry('Panel', [entry('Group', [entry('Item'), entry('Separator')], ['optional', 'repeatable']), entry('Footer')], ['required', 'no-blank-line-between-children']),
+    ];
+    for (const [index, definition] of definitions.entries()) {
+        const rules = createComponentRules([definition]);
+        const body = index ? '<Item />\n\n<Separator />\n\n<Item />\n\n<Separator />\n\n<Footer />' : '<Item />\n\n<Footer />\n\n<Item />';
+        const markup = template(`<Panel>${body}</Panel>`);
+        assert.equal(fixed(markup, {rules}), markup.replaceAll('\n\n', '\n'));
+        assert.equal(fixed(template('<Panel><Footer /></Panel>'), {rules}), template('<Panel><Footer /></Panel>'));
+    }
+});
+
+test('no-blank-line-between-children runs despite unrelated structure errors', () => {
+    for (const [children, body, errors] of [
+        [[entry('First'), entry('Second')], '<Second />\n\n<First />', ['order']],
+        [[entry('First'), entry('Second')], '<First />\n\n<Wrong />\n\n<Second />', ['unexpected']],
+        [[entry('Group', [entry('First'), entry('Second')], ['required', 'one-of'])], '<First />\n\n<Second />', ['choiceMultiple']],
+    ]) {
+        const rules = createComponentRules([entry('Panel', children, ['required', 'no-blank-line-between-children'])]);
+        const markup = template(`<Panel>${body}</Panel>`);
+        const result = lint(markup, {rules, fix: true});
+        assert.equal(result.output, markup.replaceAll('\n\n', '\n'));
+        assert.deepEqual(result.messages.map((message) => message.messageId), errors);
+        assert.equal(lint(result.output, {rules, fix: true}).fixed, false);
+    }
+});
+
+test('no-blank-line-between-children preserves comments, meaningful text, and preformatted whitespace', () => {
+    const rules = createComponentRules([entry('Panel', undefined, ['required', 'no-blank-line-between-children'])]);
+    for (const body of [
+        '<pre><Panel><First />\n\n<Second /></Panel></pre>',
+        '<Panel v-pre><First />\n\n<Second /></Panel>',
+        '<Panel><First /> Text\n\n<Second /></Panel>',
+        '<Panel><First />{{ label }}\n\n<Second /></Panel>',
+        '<Panel><First />\n\n<!-- Keep -->\n<Second /></Panel>',
+        '<Panel><First />\n<!-- Keep -->\n\n<Second /></Panel>',
+    ]) {
+        const markup = template(body);
+        const result = lint(markup, {rules, fix: true});
+        assert.equal(result.output, markup);
+        assert.deepEqual(result.messages.map((message) => message.messageId), ['noSpacing']);
+    }
+    const commentContent = template('<Panel><First />\n<!-- Paragraph one\n\nParagraph two -->\n<Second /></Panel>');
+    assert.equal(fixed(commentContent, {rules}), commentContent);
+});
+
+test('no-blank-line-between-children does not fight the general comment spacing fixer', async () => {
+    const {default: commentSpacing} = await import('../rules/general/comment-must-have-blank-line-above.js');
+    const rules = {...createComponentRules([entry('Panel', undefined, ['required', 'no-blank-line-between-children'])]), commentSpacing};
+    const markup = template('<Panel>\n<First />\n<!-- Keep -->\n<Second />\n</Panel>');
+    const result = lint(markup, {rules, fix: true});
+    assert.equal(result.output, markup.replace('<!-- Keep -->', '\n<!-- Keep -->'));
+    assert.deepEqual(result.messages.map((message) => message.messageId), ['noSpacing']);
+    assert.equal(lint(result.output, {rules, fix: true}).fixed, false);
+});
+
+test('no-blank-line-between-children rejects conflicting blank-line requirements at the same child level', () => {
+    assert.throws(() => createComponentRules([entry('Panel', undefined, ['required', 'blank-line-between-children', 'no-blank-line-between-children'])]), /cannot be used together/);
+    for (const children of [
+        [entry('First'), blank(), entry('Second')],
+        [entry('Group', [entry('First'), blank(), entry('Second')], ['optional', 'repeatable'])],
+    ]) {
+        assert.throws(() => createComponentRules([entry('Panel', children, ['required', 'no-blank-line-between-children'])]), /required BlankLine entries/);
+    }
+    for (const name of ['Comment', 'BlankLine', 'Group']) {
+        assert.throws(() => createComponentRules([entry('Panel', [entry(name, undefined, ['required', 'no-blank-line-between-children'])])]), /can only be declared on a component/);
+    }
+    assert.doesNotThrow(() => createComponentRules([entry('Panel', [entry('Body', [entry('First'), blank(), entry('Second')])], ['required', 'no-blank-line-between-children'])]));
+    for (const flag of ['one-liner', 'multi-liner', 'self-closing']) {
+        assert.doesNotThrow(() => createComponentRules([entry('Panel', undefined, ['required', 'no-blank-line-between-children', flag])]));
+    }
+});
+
+test('no-direct-child-comments covers leading, intervening, trailing, inline, and comment-only content', () => {
+    const rules = createComponentRules([entry('Panel', undefined, ['required', 'no-direct-child-comments'])]);
+    const markup = template(`<Panel>
+<!-- Before -->
+<First><!-- Nested: keep --></First><!-- Inline -->
+<!-- Between -->
+<Second />
+<!-- After -->
+</Panel>`);
+    const result = lint(markup, {rules, fix: true});
+    assert.equal(result.output, markup);
+    assert.deepEqual(result.messages.map((message) => message.messageId), Array(4).fill('directChildComment'));
+    for (const body of ['<!-- Only -->', '\n<!-- Multiple\nlines -->\n']) {
+        const sourceCode = template(`<Panel>${body}</Panel>`);
+        const comments = lint(sourceCode, {rules, fix: true});
+        assert.equal(comments.output, sourceCode);
+        assert.deepEqual(comments.messages.map((message) => message.messageId), ['directChildComment']);
+    }
+    for (const body of ['', '\n', '<Child><!-- Nested --></Child>', '<template #default><!-- Nested --><Child /></template>']) {
+        const unchanged = template(`<Panel>${body}</Panel>`);
+        assert.equal(fixed(unchanged, {rules}), unchanged);
+    }
+    assert.deepEqual(lint(template('<Panel />'), {rules}).messages, []);
+});
+
+test('no-direct-child-comments preserves the parent comment and nested comment requirements', () => {
+    const rules = createComponentRules([
+        comment(), entry('Panel', [entry('Body', [comment(), source('Item')])], ['required', 'no-direct-child-comments']),
+    ]);
+    const markup = template('<!-- Outer -->\n<Panel>\n<Body>\n<Item>Inner</Item>\n</Body>\n</Panel>');
+    assert.equal(fixed(markup, {rules}), markup.replace('<Item>Inner</Item>', '<!-- Inner -->\n<Item>Inner</Item>'));
+    const withDirectComment = markup.replace('<Body>', '<!-- Forbidden -->\n<Body>');
+    const result = lint(withDirectComment, {rules, fix: true});
+    assert.deepEqual(result.messages.map((message) => message.messageId), ['directChildComment']);
+    assert.match(result.output, /<!-- Outer -->\n<Panel>/);
+    assert.match(result.output, /<!-- Inner -->\n<Item>/);
+});
+
+test('no-direct-child-comments checks undeclared children and transparent groups despite structure errors', () => {
+    for (const [children, flags, body, structureErrors] of [
+        [[entry('First'), entry('Second')], [], '<!-- Keep meaning --><Second /><First />', ['order']],
+        [[entry('First')], ['unordered'], '<First /><!-- Keep meaning --><Wrong />', ['unexpected']],
+        [[entry('Group', [entry('First'), entry('Second')], ['required', 'one-of'])], [], '<First /><!-- Keep meaning --><Second />', ['choiceMultiple']],
+        [[entry('Group', [entry('Item'), entry('Separator')], ['optional', 'repeatable'])], [], '<!-- Keep meaning --><Item /><Separator /><Item /><Separator />', []],
+    ]) {
+        const rules = createComponentRules([entry('Panel', children, ['required', 'no-direct-child-comments', ...flags])]);
+        const markup = template(`<Panel>${body}</Panel>`);
+        const result = lint(markup, {rules, fix: true});
+        assert.equal(result.output, markup);
+        assert.deepEqual(result.messages.map((message) => message.messageId).sort(), [...structureErrors, 'directChildComment'].sort());
+    }
+});
+
+test('no-direct-child-comments reports tooling directives and does not delete or oscillate with other comment rules', async () => {
+    const {default: commentSpacing} = await import('../rules/general/comment-must-have-blank-line-above.js');
+    const rules = {
+        ...createComponentRules([entry('Panel', undefined, ['required', 'no-direct-child-comments'])]),
+        ...createComponentRules([comment(), source('Item')]),
+        commentSpacing,
+    };
+    const markup = template('<Panel>\n<!-- prettier-ignore -->\n<Item>Save</Item>\n</Panel>');
+    const result = lint(markup, {rules, fix: true});
+    assert.match(result.output, /<!-- prettier-ignore -->/);
+    assert.ok(result.messages.some((message) => message.messageId === 'directChildComment'));
+    assert.equal(lint(result.output, {rules, fix: true}).fixed, false);
+});
+
+test('no-direct-child-comments combines with no-blank-line-between-children without changing descendants', () => {
+    const rules = createComponentRules([entry('Panel', undefined, ['required', 'no-direct-child-comments', 'no-blank-line-between-children'])]);
+    const markup = template('<Panel><!-- Forbidden --><First><!-- Nested -->\n<Inner />\n\n<Inner /></First>\n\n<Second /><!-- Forbidden --></Panel>');
+    const result = lint(markup, {rules, fix: true});
+    assert.equal(result.output, markup.replace('</First>\n\n<Second', '</First>\n<Second'));
+    assert.deepEqual(result.messages.map((message) => message.messageId), ['directChildComment', 'directChildComment']);
+    assert.equal(lint(result.output, {rules, fix: true}).fixed, false);
+});
+
+test('no-direct-child-comments rejects contradictory declarations and the old flag spelling', () => {
+    for (const children of [
+        [comment(), entry('Item')],
+        [entry('Group', [comment(), entry('Item')], ['optional', 'repeatable'])],
+    ]) {
+        assert.throws(() => createComponentRules([entry('Panel', children, ['required', 'no-direct-child-comments'])]), /required Comment entries/);
+    }
+    for (const name of ['Comment', 'BlankLine', 'Group']) {
+        assert.throws(() => createComponentRules([entry('Panel', [entry(name, undefined, ['required', 'no-direct-child-comments'])])]), /can only be declared on a component/);
+    }
+    assert.throws(() => createComponentRules([entry('Panel', undefined, ['required', 'no-comment-between-children'])]), /supported values/);
+    assert.doesNotThrow(() => createComponentRules([entry('Panel', [entry('Body', [comment(), entry('Item')])], ['required', 'no-direct-child-comments'])]));
+    for (const flag of ['one-liner', 'multi-liner', 'self-closing', 'blank-line-between-children']) {
+        assert.doesNotThrow(() => createComponentRules([entry('Panel', undefined, ['required', 'no-direct-child-comments', flag])]));
+    }
+});
+
+test('no-direct-child-comments allows comment requirements explicitly excluded from this parent', () => {
+    for (const excluded of ['Panel', 'Other, Panel']) {
+        const rules = createComponentRules([entry('Panel', [
+            entry('Comment', undefined, ['required', `not-within:${excluded}`]), source('Item'),
+        ], ['required', 'no-direct-child-comments'])]);
+        const markup = template('<Panel><Item>Save</Item></Panel>');
+        assert.equal(fixed(markup, {rules}), markup);
+    }
+});
+
 test('DrawerFooter adds a blank line between Button and DrawerClose while preserving nested content', async () => {
     const {default: rules} = await import('../rules/components/drawer.js');
     const options = {rules, only: ['drawer-must-have-required-blank-lines']};
