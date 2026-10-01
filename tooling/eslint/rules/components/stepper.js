@@ -4,17 +4,17 @@ export const structure = [
     {Comment: {flags: ['required']}},
     {
         Stepper: {
-            flags: ['required'],
+            flags: ['required', 'blank-line-between-children'],
             children: [
                 {
                     StepperItem: {
-                        flags: ['required', 'repeatable'],
+                        flags: ['required', 'repeatable', 'blank-line-between-children'],
                         children: [
                             {
                                 StepperTrigger: {
                                     flags: ['required'],
                                     children: [
-                                        {StepperIndicator: {flags: ['required', 'non-empty']}},
+                                        {StepperIndicator: {flags: ['required', 'non-empty', 'one-liner']}},
                                         {StepperTitle: {flags: ['optional', 'comment-source', 'one-liner', 'non-empty']}},
                                         {StepperDescription: {flags: ['optional', 'comment-source', 'one-liner', 'non-empty']}},
                                     ],

@@ -4,11 +4,18 @@ export const structure = [
     {Comment: {flags: ['required']}},
     {
         Sidebar: {
-            flags: ['required'],
+            flags: ['required', 'blank-line-between-children'],
             children: [
                 {SidebarHeader: {flags: ['optional']}},
+                {Comment: {flags: ['required', 'text:Separator']}},
+                {SidebarSeparator: {flags: ['optional', 'one-liner']}},
+                {Comment: {flags: ['required']}},
                 {SidebarContent: {flags: ['required', 'non-empty']}},
+                {Comment: {flags: ['required', 'text:Separator']}},
+                {SidebarSeparator: {flags: ['optional', 'one-liner']}},
+                {Comment: {flags: ['required']}},
                 {SidebarFooter: {flags: ['optional']}},
+                {Comment: {flags: ['required']}},
                 {SidebarRail: {flags: ['optional', 'one-liner']}},
             ],
         },
@@ -16,7 +23,7 @@ export const structure = [
 ];
 
 export const providerStructure = [
-    {SidebarProvider: {flags: ['required', 'non-empty']}},
+    {SidebarProvider: {flags: ['required', 'non-empty', 'blank-line-between-children']}},
 ];
 
 export const insetStructure = [
@@ -48,7 +55,7 @@ export const groupStructure = [
 export const menuStructure = [
     {
         SidebarMenu: {
-            flags: ['required'],
+            flags: ['required', 'blank-line-between-children'],
             children: [
                 {
                     SidebarMenuItem: {
