@@ -6,11 +6,13 @@ export const structure = [
         ResizablePanelGroup: {
             flags: ['required'],
             children: [
+                {Comment: {flags: ['required']}},
                 {ResizablePanel: {flags: ['required', 'non-empty']}},
                 {
                     Group: {
                         flags: ['required', 'repeatable'],
                         children: [
+                            {Comment: {flags: ['required', 'text:Handle']}},
                             {ResizableHandle: {flags: ['required', 'one-liner']}},
                             {ResizablePanel: {flags: ['required', 'non-empty']}},
                         ],

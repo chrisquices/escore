@@ -1332,7 +1332,7 @@ test('no-blank-line-between-children rejects conflicting blank-line requirements
     }
 });
 
-test('no-direct-child-comments covers leading, intervening, trailing, inline, and comment-only content', () => {
+test('no-direct-child-comments removes leading, intervening, trailing, inline, and comment-only content', () => {
     const rules = createComponentRules([entry('Panel', undefined, ['required', 'no-direct-child-comments'])]);
     const markup = template(`<Panel>
 <!-- Before -->
@@ -1341,14 +1341,11 @@ test('no-direct-child-comments covers leading, intervening, trailing, inline, an
 <Second />
 <!-- After -->
 </Panel>`);
-    const result = lint(markup, {rules, fix: true});
-    assert.equal(result.output, markup);
-    assert.deepEqual(result.messages.map((message) => message.messageId), Array(4).fill('directChildComment'));
-    for (const body of ['<!-- Only -->', '\n<!-- Multiple\nlines -->\n']) {
+    assert.deepEqual(lint(markup, {rules}).messages.map((message) => message.messageId), Array(4).fill('directChildComment'));
+    assert.equal(fixed(markup, {rules}), template('<Panel>\n<First><!-- Nested: keep --></First>\n<Second />\n</Panel>'));
+    for (const [body, expected] of [['<!-- Only -->', ''], ['\n<!-- Multiple\nlines -->\n', '\n']]) {
         const sourceCode = template(`<Panel>${body}</Panel>`);
-        const comments = lint(sourceCode, {rules, fix: true});
-        assert.equal(comments.output, sourceCode);
-        assert.deepEqual(comments.messages.map((message) => message.messageId), ['directChildComment']);
+        assert.equal(fixed(sourceCode, {rules}), template(`<Panel>${expected}</Panel>`));
     }
     for (const body of ['', '\n', '<Child><!-- Nested --></Child>', '<template #default><!-- Nested --><Child /></template>']) {
         const unchanged = template(`<Panel>${body}</Panel>`);
@@ -1365,7 +1362,8 @@ test('no-direct-child-comments preserves the parent comment and nested comment r
     assert.equal(fixed(markup, {rules}), markup.replace('<Item>Inner</Item>', '<!-- Inner -->\n<Item>Inner</Item>'));
     const withDirectComment = markup.replace('<Body>', '<!-- Forbidden -->\n<Body>');
     const result = lint(withDirectComment, {rules, fix: true});
-    assert.deepEqual(result.messages.map((message) => message.messageId), ['directChildComment']);
+    assert.deepEqual(result.messages, []);
+    assert.ok(!result.output.includes('<!-- Forbidden -->'));
     assert.match(result.output, /<!-- Outer -->\n<Panel>/);
     assert.match(result.output, /<!-- Inner -->\n<Item>/);
 });
@@ -1380,32 +1378,100 @@ test('no-direct-child-comments checks undeclared children and transparent groups
         const rules = createComponentRules([entry('Panel', children, ['required', 'no-direct-child-comments', ...flags])]);
         const markup = template(`<Panel>${body}</Panel>`);
         const result = lint(markup, {rules, fix: true});
-        assert.equal(result.output, markup);
-        assert.deepEqual(result.messages.map((message) => message.messageId).sort(), [...structureErrors, 'directChildComment'].sort());
+        assert.equal(result.output, markup.replace('<!-- Keep meaning -->', ''));
+        assert.deepEqual(result.messages.map((message) => message.messageId).sort(), structureErrors.sort());
     }
 });
 
-test('no-direct-child-comments reports tooling directives and does not delete or oscillate with other comment rules', async () => {
+test('no-direct-child-comments removes tooling directives without child rules adding comments back', async () => {
     const {default: commentSpacing} = await import('../rules/general/comment-must-have-blank-line-above.js');
     const rules = {
         ...createComponentRules([entry('Panel', undefined, ['required', 'no-direct-child-comments'])]),
         ...createComponentRules([comment(), source('Item')]),
         commentSpacing,
     };
-    const markup = template('<Panel>\n<!-- prettier-ignore -->\n<Item>Save</Item>\n</Panel>');
-    const result = lint(markup, {rules, fix: true});
-    assert.match(result.output, /<!-- prettier-ignore -->/);
-    assert.ok(result.messages.some((message) => message.messageId === 'directChildComment'));
-    assert.equal(lint(result.output, {rules, fix: true}).fixed, false);
+    for (const directive of ['prettier-ignore', 'eslint-disable-next-line example/rule', '@vue-ignore']) {
+        const markup = template(`<Panel>\n<!-- ${directive} -->\n<Item>Save</Item>\n</Panel>`);
+        assert.ok(!fixed(markup, {rules}).includes('<!--'));
+    }
 });
 
 test('no-direct-child-comments combines with no-blank-line-between-children without changing descendants', () => {
     const rules = createComponentRules([entry('Panel', undefined, ['required', 'no-direct-child-comments', 'no-blank-line-between-children'])]);
     const markup = template('<Panel><!-- Forbidden --><First><!-- Nested -->\n<Inner />\n\n<Inner /></First>\n\n<Second /><!-- Forbidden --></Panel>');
     const result = lint(markup, {rules, fix: true});
-    assert.equal(result.output, markup.replace('</First>\n\n<Second', '</First>\n<Second'));
-    assert.deepEqual(result.messages.map((message) => message.messageId), ['directChildComment', 'directChildComment']);
+    assert.equal(result.output, markup.replaceAll('<!-- Forbidden -->', '').replace('</First>\n\n<Second', '</First>\n<Second'));
+    assert.deepEqual(result.messages, []);
     assert.equal(lint(result.output, {rules, fix: true}).fixed, false);
+});
+
+test('no-direct-child-comments preserves inline text, indentation, CRLF, and preformatted whitespace', () => {
+    const rules = createComponentRules([entry('Panel', undefined, ['required', 'no-direct-child-comments'])]);
+    for (const newline of ['\n', '\r\n']) {
+        const markup = template('<Panel>\n\t<!-- First\n\tSecond -->\n\t<Child />\n\t<!-- Last -->\n</Panel>').replaceAll('\n', newline);
+        const expected = template('<Panel>\n\t<Child />\n</Panel>').replaceAll('\n', newline);
+        assert.equal(fixed(markup, {rules}), expected);
+    }
+    const inline = template('<Panel>Before<!-- Remove -->{{ value }}<!-- Remove --> after<Child /><!-- Remove --></Panel>');
+    assert.equal(fixed(inline, {rules}), inline.replaceAll('<!-- Remove -->', ''));
+    for (const markup of [
+        template('<pre><Panel>\n  <!-- Remove -->\n  Text\n</Panel></pre>'),
+        template('<Panel v-pre>\n  <!-- Remove -->\n  Text\n</Panel>'),
+    ]) assert.equal(fixed(markup, {rules}), markup.replace('<!-- Remove -->', ''));
+});
+
+test('no-direct-child-comments wins across active families regardless of rule order and only for direct children', () => {
+    const parentRules = createComponentRules([entry('Panel', undefined, ['required', 'no-direct-child-comments'])]);
+    const childRules = createComponentRules([comment(), source('Item')]);
+    const outerRules = createComponentRules([entry('Outer', [entry('Panel', [comment(), source('Item')])])]);
+    const markup = template('<Outer><Panel>\n<!-- Delete -->\n<Item>Save</Item>\n</Panel></Outer>');
+    for (const rules of [{...outerRules, ...childRules, ...parentRules}, {...parentRules, ...childRules, ...outerRules}]) {
+        assert.equal(fixed(markup, {rules}), markup.replace('<!-- Delete -->\n', ''));
+    }
+    const rules = {...parentRules, ...childRules};
+    assert.equal(fixed(template('<Panel><Wrapper>\n<Item>Keep</Item>\n</Wrapper></Panel>'), {rules}),
+        template('<Panel><Wrapper>\n<!-- Keep -->\n<Item>Keep</Item>\n</Wrapper></Panel>'));
+    const missing = template('<Panel>\n<Item>Save</Item>\n</Panel>');
+    assert.equal(fixed(missing, {rules, only: ['item-must-have-valid-comments']}), missing.replace('<Item>', '<!-- Save -->\n<Item>'));
+});
+
+test('no-direct-child-comments lets sources cross a suppressed optional comment boundary', () => {
+    const rules = createComponentRules([
+        comment(), entry('Panel', [entry('Comment', undefined, ['optional']), source('Item')], ['required', 'no-direct-child-comments']),
+    ]);
+    assert.equal(fixed(template('<Panel>\n<!-- Remove -->\n<Item>Save</Item>\n</Panel>'), {rules}),
+        template('<!-- Save -->\n<Panel>\n<Item>Save</Item>\n</Panel>'));
+});
+
+test('no-direct-child-comments removes SelectGroup item comments and settles with spacing rules', async () => {
+    const {default: selectRules} = await import('../rules/components/select.js');
+    const {default: commentSpacing} = await import('../rules/general/comment-must-have-blank-line-above.js');
+    const rules = {...selectRules, commentSpacing};
+    const markup = template(`<Select><SelectContent><SelectGroup>
+    <SelectLabel>Backend</SelectLabel>
+
+    <!-- Laravel -->
+    <SelectItem value="laravel">Laravel</SelectItem>
+
+    <!-- Rails -->
+    <SelectItem value="rails">Rails</SelectItem>
+</SelectGroup></SelectContent></Select>`);
+    const only = ['select-must-have-valid-comments', 'select-must-have-required-blank-lines', 'commentSpacing'];
+    const input = markup.replace('<Select>', '<!-- Laravel -->\n<Select>');
+    const output = fixed(input, {rules, only});
+    assert.match(output, /<SelectLabel>Backend<\/SelectLabel>\n    <SelectItem value="laravel">Laravel<\/SelectItem>\n    <SelectItem value="rails">Rails<\/SelectItem>/);
+    assert.ok(!output.slice(output.indexOf('<SelectGroup>')).includes('<!--'));
+});
+
+test('no-direct-child-comments settles with self-closing and line-layout fixes', () => {
+    for (const [layout, body, expected] of [
+        ['self-closing', '<Panel><!-- Remove --></Panel>', '<Panel />'],
+        ['one-liner', '<Panel>\n<!-- Remove -->\nSave\n</Panel>', '<Panel>Save</Panel>'],
+        ['multi-liner', '<Panel><!-- Remove --><Child /></Panel>', '<Panel>\n    <Child />\n</Panel>'],
+    ]) {
+        const rules = createComponentRules([entry('Panel', undefined, ['required', 'no-direct-child-comments', layout])]);
+        assert.equal(fixed(template(body), {rules}), template(expected));
+    }
 });
 
 test('no-direct-child-comments rejects contradictory declarations and the old flag spelling', () => {

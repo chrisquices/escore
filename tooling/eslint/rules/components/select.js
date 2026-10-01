@@ -17,19 +17,18 @@ export const structure = [
                 {BlankLine: {flags: ['required']}},
                 {
                     SelectContent: {
-                        flags: ['required', 'unordered', 'non-empty'],
+                        flags: ['required', 'unordered', 'non-empty', 'blank-line-between-children'],
                         children: [
                             {SelectLabel: {flags: ['optional', 'one-liner', 'non-empty']}},
-                            {Comment: {flags: ['required']}},
                             {SelectItem: {flags: ['optional', 'repeatable', 'comment-source', 'non-empty']}},
                             {Comment: {flags: ['required', 'text:Separator']}},
                             {SelectSeparator: {flags: ['optional', 'repeatable', 'one-liner']}},
+                            {BlankLine: {flags: ['required']}},
                             {
                                 SelectGroup: {
-                                    flags: ['optional', 'repeatable'],
+                                    flags: ['optional', 'repeatable', 'no-blank-line-between-children', 'no-direct-child-comments'],
                                     children: [
                                         {SelectLabel: {flags: ['optional', 'one-liner', 'non-empty']}},
-                                        {Comment: {flags: ['required']}},
                                         {SelectItem: {flags: ['required', 'repeatable', 'comment-source', 'non-empty']}},
                                     ],
                                 },

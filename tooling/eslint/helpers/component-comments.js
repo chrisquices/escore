@@ -1,4 +1,24 @@
-import {matchesComponent} from './component-structure.js';
+import {matchesComponent, matchStructure, walkStructure} from './component-structure.js';
+
+const commentBans = new WeakMap();
+
+// Register active rules before visiting nodes, including bans owned by another component family.
+export function registerCommentBans(sourceCode, root) {
+    const entries = [root];
+    for (const entry of entries) entries.push(...(entry.children ?? []));
+    if (!entries.some((entry) => entry.noDirectChildComments)) return;
+
+    if (!commentBans.has(sourceCode)) commentBans.set(sourceCode, new WeakSet());
+    const bannedParents = commentBans.get(sourceCode);
+    const nodes = [sourceCode.ast.templateBody].filter(Boolean);
+    for (const node of nodes) {
+        nodes.push(...node.children.filter((child) => child.type === 'VElement'));
+        if (!matchesComponent(node, root.name)) continue;
+        for (const instance of walkStructure(matchStructure(root, node))) {
+            if (instance.entry.noDirectChildComments) bannedParents.add(instance.node);
+        }
+    }
+}
 
 const nativeTextElements = new Set([
     'a', 'abbr', 'b', 'bdi', 'bdo', 'br', 'cite', 'code', 'data', 'del', 'div', 'em',
@@ -61,9 +81,10 @@ function attributeText(node, name, owner) {
     return text?.replace(/\s+/g, ' ').trim() || undefined;
 }
 
-function hasActiveComment(instance) {
+function hasActiveComment(sourceCode, instance) {
     const comment = instance.entry.comment;
     if (!comment) return false;
+    if (commentBans.get(sourceCode)?.has(instance.node.parent)) return false;
     if (!comment.notWithin.length) return true;
 
     for (let parent = instance.node.parent; parent; parent = parent.parent) {
@@ -72,14 +93,14 @@ function hasActiveComment(instance) {
     return true;
 }
 
-function sourceText(instance) {
+function sourceText(sourceCode, instance) {
     const candidates = [];
     const boundaries = new Set();
     const pending = [instance];
     while (pending.length) {
         const candidate = pending.pop();
         // An active declaration owns its subtree even when its comment is missing or optional.
-        if (candidate !== instance && hasActiveComment(candidate)) {
+        if (candidate !== instance && hasActiveComment(sourceCode, candidate)) {
             boundaries.add(candidate.node);
             continue;
         }
@@ -111,7 +132,7 @@ export function standaloneComment(sourceCode, tokenStore, node) {
 }
 
 export function checkComment(context, instance) {
-    const activeComment = hasActiveComment(instance);
+    const activeComment = hasActiveComment(context.sourceCode, instance);
     if (!activeComment && !instance.entry.noDirectChildComments) return;
 
     const sourceCode = context.sourceCode;
@@ -120,17 +141,33 @@ export function checkComment(context, instance) {
 
     const node = instance.node;
     if (instance.entry.noDirectChildComments && node.endTag) {
+        let preservesWhitespace = false;
+        for (let parent = node; parent?.type === 'VElement'; parent = parent.parent) {
+            if (['pre', 'textarea', 'script', 'style'].includes(parent.rawName)
+                || parent.startTag.attributes.some((attribute) => attribute.directive && attribute.key.name.name === 'pre')) {
+                preservesWhitespace = true;
+                break;
+            }
+        }
         const children = node.children.filter((child) => child.type === 'VElement');
         for (const comment of tokenStore.getTokensBetween(node.startTag, node.endTag, {includeComments: true})) {
             if (comment.type !== 'HTMLComment' || children.some((child) => (
                 child.range[0] <= comment.range[0] && comment.range[1] <= child.range[1]
             ))) continue;
 
-            // Report instead of deleting explanations or changing tooling directives.
             context.report({
                 loc: comment.loc,
                 messageId: 'directChildComment',
                 data: {element: node.rawName},
+                fix(fixer) {
+                    const start = sourceCode.getIndexFromLoc({line: comment.loc.start.line, column: 0});
+                    const before = sourceCode.text.slice(start, comment.range[0]);
+                    const after = sourceCode.text.slice(comment.range[1]).match(/^[\t ]*(?:\r\n|\r|\n|$)/);
+                    // Remove an entire standalone comment line; preserve text around inline comments.
+                    return !preservesWhitespace && /^[\t ]*$/.test(before) && after
+                        ? fixer.removeRange([start, comment.range[1] + after[0].length])
+                        : fixer.remove(comment);
+                },
             });
         }
     }
@@ -139,7 +176,7 @@ export function checkComment(context, instance) {
     const comment = standaloneComment(sourceCode, tokenStore, node);
     if (!comment && !instance.entry.comment.required) return;
     const fixedText = instance.entry.comment.text;
-    const expected = (fixedText ?? sourceText(instance))?.replace(/--|[<>]/g, (part) => (
+    const expected = (fixedText ?? sourceText(sourceCode, instance))?.replace(/--|[<>]/g, (part) => (
         part === '--' ? '&#45;&#45;' : part === '<' ? '&lt;' : '&gt;'
     ));
 

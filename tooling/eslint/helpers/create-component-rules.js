@@ -1,5 +1,5 @@
 import {compileStructure, matchesComponent, matchStructure, walkStructure} from './component-structure.js';
-import {checkComment} from './component-comments.js';
+import {checkComment, registerCommentBans} from './component-comments.js';
 import {checkSpacing} from './component-spacing.js';
 import {checkLayout} from './component-layout.js';
 import {checkAttributes, checkProps} from './component-props.js';
@@ -48,6 +48,7 @@ export default function createComponentRules(structure, {forbiddenMessage, props
         fixable,
         type = fixable === 'whitespace' ? 'layout' : 'problem',
         checkElement,
+        prepare,
     } = {}) {
         return {
             meta: {
@@ -61,6 +62,7 @@ export default function createComponentRules(structure, {forbiddenMessage, props
                 const sourceCode = context.sourceCode;
                 const services = sourceCode.parserServices;
                 if (!services.defineTemplateBodyVisitor) return {};
+                prepare?.(context);
                 if (!analyses.has(sourceCode)) analyses.set(sourceCode, new WeakMap());
                 const instances = analyses.get(sourceCode);
 
@@ -108,10 +110,10 @@ export default function createComponentRules(structure, {forbiddenMessage, props
                 commentManual: 'No comment source provides usable text. Add a standalone comment immediately above <{{ element }}> describing its purpose from the surrounding template.',
                 commentMismatch: 'Replace the comment above <{{ element }}> with <!-- {{ expected }} --> to match the first usable comment source.',
                 commentFixed: 'Replace the comment above <{{ element }}> with <!-- {{ expected }} -->.',
-                directChildComment: 'Move or remove this comment directly inside <{{ element }}>. Preserve any needed explanation or tooling directive.',
+                directChildComment: 'Remove this comment directly inside <{{ element }}>; direct-child comments are forbidden.',
             },
             checkComment,
-            {fixable: 'code'},
+            {fixable: 'code', prepare: (context) => registerCommentBans(context.sourceCode, root)},
         ),
 
         [`${family}-must-follow-structure`]: createRule(

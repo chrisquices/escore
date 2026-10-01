@@ -5,11 +5,4 @@ export const structure = [
     {ScrollArea: {flags: ['required', 'non-empty']}},
 ];
 
-export const barStructure = [
-    {ScrollBar: {flags: ['required', 'one-liner']}},
-];
-
-export default {
-    ...createComponentRules(structure),
-    ...createComponentRules(barStructure),
-};
+export default createComponentRules(structure);
