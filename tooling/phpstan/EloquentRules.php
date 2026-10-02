@@ -1,6 +1,6 @@
 <?php
 
-namespace Escore\PHPStan;
+namespace Strata\PHPStan;
 
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -29,6 +29,7 @@ use PHPStan\Reflection\ClassReflection;
 use PHPStan\Rules\Rule;
 use PHPStan\Rules\RuleError;
 use PHPStan\Rules\RuleErrorBuilder;
+use PHPStan\Type\NeverType;
 use PHPStan\Type\ObjectType;
 use PHPStan\Type\Type;
 use PHPStan\Type\TypeCombinator;
@@ -39,9 +40,7 @@ use PHPStan\Type\UnionType;
  */
 class EloquentRules implements Rule
 {
-    public function __construct(private Parser $parser)
-    {
-    }
+    public function __construct(private Parser $parser) {}
 
     public function getNodeType(): string
     {
@@ -72,11 +71,7 @@ class EloquentRules implements Rule
             return [];
         }
 
-        $queryType = TypeCombinator::union(
-            new ObjectType(Builder::class),
-            new ObjectType(QueryBuilder::class),
-            new ObjectType(Relation::class),
-        );
+        $queryType = TypeCombinator::union(new ObjectType(Builder::class), new ObjectType(QueryBuilder::class), new ObjectType(Relation::class));
         $root = $node;
         $callCount = 1;
 
@@ -109,7 +104,7 @@ class EloquentRules implements Rule
 
         return [
             RuleErrorBuilder::message('Begin Eloquent query chains of three or more calls with Model::query().')
-                ->identifier('escore.eloquent.enforceQueryUsage')
+                ->identifier('strata.eloquent.enforceQueryUsage')
                 ->line($root->getStartLine())
                 ->build(),
         ];
@@ -137,12 +132,7 @@ class EloquentRules implements Rule
                 ? $scope->resolveTypeByName($node->class)
                 : $scope->getType($node->class)->getObjectTypeOrClassStringObjectType())
             : TypeCombinator::removeNull($scope->getType($node->var));
-        $queryType = TypeCombinator::union(
-            new ObjectType(Model::class),
-            new ObjectType(Builder::class),
-            new ObjectType(QueryBuilder::class),
-            new ObjectType(Relation::class),
-        );
+        $queryType = TypeCombinator::union(new ObjectType(Model::class), new ObjectType(Builder::class), new ObjectType(QueryBuilder::class), new ObjectType(Relation::class));
 
         if (! $queryType->isSuperTypeOf($receiverType)->yes()) {
             return [];
@@ -159,7 +149,7 @@ class EloquentRules implements Rule
 
         return [
             RuleErrorBuilder::message("Pass select() columns as a single array, e.g. select(['id', 'name']).")
-                ->identifier('escore.eloquent.enforceArraySelectArguments')
+                ->identifier('strata.eloquent.enforceArraySelectArguments')
                 ->line($node->getStartLine())
                 ->build(),
         ];
@@ -260,7 +250,7 @@ class EloquentRules implements Rule
             }
 
             $errors[] = RuleErrorBuilder::message("Select columns for eager-loaded relationship '{$name}' using column notation, a query callback, or the relationship definition.")
-                ->identifier('escore.eloquent.enforceEagerLoadColumns')
+                ->identifier('strata.eloquent.enforceEagerLoadColumns')
                 ->line($node->getStartLine())
                 ->build();
         }
@@ -292,6 +282,7 @@ class EloquentRules implements Rule
                 }
 
                 $entries[] = $this->eagerLoadEntry($prefix.$name);
+
                 continue;
             }
 
@@ -350,10 +341,7 @@ class EloquentRules implements Rule
             return null;
         }
 
-        return $this->queryBodySelection(
-            $callback instanceof ArrowFunction ? [new Return_($callback->expr)] : $callback->stmts,
-            $parameter->name,
-        );
+        return $this->queryBodySelection($callback instanceof ArrowFunction ? [new Return_($callback->expr)] : $callback->stmts, $parameter->name);
     }
 
     private function relationColumnSelection(Type $modelType, string $path): ?bool
@@ -371,12 +359,13 @@ class EloquentRules implements Rule
             $method = $class->getNativeMethod($name);
             $returnType = $method->getVariants()[0]->getReturnType();
 
-            if ($returnType->isNever()->yes() || ! (new ObjectType(Relation::class))->isSuperTypeOf($returnType)->yes()) {
+            if (($returnType instanceof NeverType) || ! (new ObjectType(Relation::class))->isSuperTypeOf($returnType)->yes()) {
                 return null;
             }
 
             if ($index < count($parts) - 1) {
                 $modelType = $returnType->getTemplateType(Relation::class, 'TRelatedModel');
+
                 continue;
             }
 
@@ -388,12 +377,9 @@ class EloquentRules implements Rule
                 return null;
             }
 
-            $methodNode = (new NodeFinder())->findFirst(
-                $this->parser->parseFile($file),
-                static fn (Node $candidate): bool => $candidate instanceof ClassMethod
+            $methodNode = (new NodeFinder)->findFirst($this->parser->parseFile($file), static fn (Node $candidate): bool => $candidate instanceof ClassMethod
                     && $candidate->getStartLine() === $native->getStartLine()
-                    && $candidate->getEndLine() === $native->getEndLine(),
-            );
+                    && $candidate->getEndLine() === $native->getEndLine(), );
 
             return $methodNode instanceof ClassMethod && $methodNode->stmts !== null
                 ? $this->queryBodySelection($methodNode->stmts, null, $class)
@@ -407,7 +393,7 @@ class EloquentRules implements Rule
      * Only straight-line bodies and simple aliases are resolved. Null means
      * unknown; it must never produce a missing-selection diagnostic.
      *
-     * @param list<Node\Stmt> $statements
+     * @param  list<Node\Stmt>  $statements
      */
     private function queryBodySelection(array $statements, ?string $parameter = null, ?ClassReflection $model = null): ?bool
     {
@@ -436,7 +422,7 @@ class EloquentRules implements Rule
             if ($id === null) {
                 // Do not credit unrelated queries or nested callback selections.
                 // Passing a tracked query to an unknown helper is unresolved.
-                $usesQuery = (new NodeFinder())->findFirst($queryExpression, static fn (Node $candidate): bool => $candidate instanceof Variable
+                $usesQuery = (new NodeFinder)->findFirst($queryExpression, static fn (Node $candidate): bool => $candidate instanceof Variable
                     && is_string($candidate->name) && array_key_exists($candidate->name, $aliases));
 
                 if ($usesQuery !== null) {
@@ -461,8 +447,8 @@ class EloquentRules implements Rule
     }
 
     /**
-     * @param array<string, int> $aliases
-     * @param array<int, bool|null> $selections
+     * @param  array<string, int>  $aliases
+     * @param  array<int, bool|null>  $selections
      */
     private function selectedQueryId(Expr $expression, array $aliases, array &$selections, ?ClassReflection $model): ?int
     {
@@ -505,7 +491,7 @@ class EloquentRules implements Rule
         foreach ($calls as $call) {
             // Nested queries do not select the outer query's columns. A callback
             // capturing that outer query, however, can mutate it in unknown ways.
-            $usesQuery = (new NodeFinder())->findFirst($call->getArgs(), static fn (Node $candidate): bool => $candidate instanceof Variable
+            $usesQuery = (new NodeFinder)->findFirst($call->getArgs(), static fn (Node $candidate): bool => $candidate instanceof Variable
                 && is_string($candidate->name) && array_key_exists($candidate->name, $aliases));
 
             if ($usesQuery !== null) {

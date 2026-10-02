@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import type {VariantProps} from "escore-packages/ui/utils"
+import type {VariantProps} from "strata-packages/ui/utils"
 import type { ToggleGroupRootEmits, ToggleGroupRootProps } from "reka-ui"
 import type { HTMLAttributes } from "vue"
-import type { toggleVariants } from 'escore-packages/ui/toggle'
+import type { toggleVariants } from 'strata-packages/ui/toggle'
 import { reactiveOmit } from "@vueuse/core"
 import { ToggleGroupRoot, useForwardPropsEmits } from "reka-ui"
 import { provide } from "vue"
-import { cn } from "escore-packages/ui/utils"
+import { cn } from "strata-packages/ui/utils"
 
 type ToggleGroupVariants = VariantProps<typeof toggleVariants>
 

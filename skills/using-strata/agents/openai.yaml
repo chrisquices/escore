@@ -1,0 +1,3 @@
+interface:
+  display_name: "Using Strata"
+  short_description: "Set up and use Strata packages and tooling."

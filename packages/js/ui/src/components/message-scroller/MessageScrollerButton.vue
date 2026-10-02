@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import type { HTMLAttributes } from "vue"
 import type { MessageScrollerButtonDirection } from "./useMessageScroller"
-import type { ButtonVariants } from 'escore-packages/ui/button'
+import type { ButtonVariants } from 'strata-packages/ui/button'
 import { ArrowDownIcon } from "@lucide/vue"
 import { computed } from "vue"
-import { cn } from "escore-packages/ui/utils"
-import { Button } from 'escore-packages/ui/button'
+import { cn } from "strata-packages/ui/utils"
+import { Button } from 'strata-packages/ui/button'
 import { useMessageScroller, useMessageScrollerScrollable } from "./useMessageScroller"
 
 const props = withDefaults(defineProps<{

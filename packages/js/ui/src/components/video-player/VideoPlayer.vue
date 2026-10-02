@@ -26,24 +26,24 @@ import {
   type VideoError,
   type VideoMediaSession,
   type VideoSource
-} from "escore-packages/ui-interactions/video"
-import {cn} from "escore-packages/ui/utils"
-import {Button} from "escore-packages/ui/button"
-import {Caption} from "escore-packages/ui/caption"
-import {Field, FieldTitle} from "escore-packages/ui/field"
-import {Kbd, KbdGroup} from "escore-packages/ui/kbd"
-import {Label} from "escore-packages/ui/label"
-import {RadioGroup, RadioGroupItem} from "escore-packages/ui/radio-group"
-import {Separator} from "escore-packages/ui/separator"
-import {Slider} from "escore-packages/ui/slider"
-import {Switch} from "escore-packages/ui/switch"
+} from "strata-packages/ui-interactions/video"
+import {cn} from "strata-packages/ui/utils"
+import {Button} from "strata-packages/ui/button"
+import {Caption} from "strata-packages/ui/caption"
+import {Field, FieldTitle} from "strata-packages/ui/field"
+import {Kbd, KbdGroup} from "strata-packages/ui/kbd"
+import {Label} from "strata-packages/ui/label"
+import {RadioGroup, RadioGroupItem} from "strata-packages/ui/radio-group"
+import {Separator} from "strata-packages/ui/separator"
+import {Slider} from "strata-packages/ui/slider"
+import {Switch} from "strata-packages/ui/switch"
 import {
   Sheet,
   SheetContent,
   SheetHeader,
   SheetTitle,
-} from "escore-packages/ui/sheet"
-import {Card, CardContent} from "escore-packages/ui/card"
+} from "strata-packages/ui/sheet"
+import {Card, CardContent} from "strata-packages/ui/card"
 
 defineOptions({
   inheritAttrs: false,

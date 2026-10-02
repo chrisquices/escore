@@ -8,7 +8,7 @@ import {
   DropdownMenuItemIndicator,
   useForwardPropsEmits,
 } from "reka-ui"
-import { cn } from "escore-packages/ui/utils"
+import { cn } from "strata-packages/ui/utils"
 
 const props = defineProps<DropdownMenuCheckboxItemProps & { class?: HTMLAttributes["class"] }>()
 const emits = defineEmits<DropdownMenuCheckboxItemEmits>()

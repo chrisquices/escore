@@ -1,4 +1,4 @@
-# Escore IDE Integration
+# Strata IDE Integration
 
 ## Structure
 
@@ -14,7 +14,7 @@
 
 ## Panel
 
-- Use the native **Escore** tool window, with a small 2:3 portrait default and normal resizing/docking.
+- Use the native **Strata** tool window, with a small 2:3 portrait default and normal resizing/docking.
 - Put the settings cog in the native header; replace it with **X** while Settings is open. Do not duplicate the header inside the panel.
 - Arrange home actions in two columns: **Collapse** first, **Expand** second. Rows are elements, classes, then ARIA.
 

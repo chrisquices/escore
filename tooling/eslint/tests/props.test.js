@@ -8,7 +8,7 @@ import createComponentRules from '../helpers/create-component-rules.js';
 import accordionRules from '../rules/components/accordion.js';
 import sheetRules from '../rules/components/sheet.js';
 
-const projectRequire = createRequire(join(process.env.ESCORE_TEST_PROJECT ?? process.cwd(), 'package.json'));
+const projectRequire = createRequire(join(process.env.STRATA_TEST_PROJECT ?? process.cwd(), 'package.json'));
 const libraryRequire = createRequire(new URL('../../../packages/js/package.json', import.meta.url));
 const {Linter} = projectRequire('eslint');
 const parser = projectRequire('vue-eslint-parser');
@@ -20,9 +20,9 @@ function lint(content, {name = 'Accordion', componentTsconfig, rules, fix = fals
     const config = [{
         files: ['**/*.vue'],
         languageOptions: {parser, parserOptions: {parser: tsParser}, ecmaVersion: 'latest', sourceType: 'module'},
-        settings: {escore: {componentTsconfig}},
-        plugins: {escore: {rules}},
-        rules: {[`escore/${ruleId}`]: 'error'},
+        settings: {strata: {componentTsconfig}},
+        plugins: {strata: {rules}},
+        rules: {[`strata/${ruleId}`]: 'error'},
     }];
     const input = `${script ? `<script setup lang="ts">${script}</script>\n` : ''}<template>\n${content}\n</template>`;
     const linter = new Linter();
@@ -157,7 +157,7 @@ test('prop violations have no guessed fixes', () => {
     assert.deepEqual(result.messages.map((message) => message.messageId), ['propValue', 'propMissing']);
 });
 
-const directory = mkdtempSync(join(tmpdir(), 'escore-props-'));
+const directory = mkdtempSync(join(tmpdir(), 'strata-props-'));
 const componentTsconfig = join(directory, 'tsconfig.json');
 after(() => rmSync(directory, {recursive: true, force: true}));
 writeFileSync(componentTsconfig, JSON.stringify({

@@ -2,7 +2,7 @@ import { unwrapScriptExpression as unwrapExpression } from './script-props.js';
 
 export { unwrapExpression };
 
-const packageName = 'escore-packages/inertia-plus';
+const packageName = 'strata-packages/inertia-plus';
 
 // Openable surfaces share naming and options requirements.
 // AlertDialog is included by its Dialog suffix.

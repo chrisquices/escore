@@ -1,4 +1,4 @@
-import {cva, type VariantProps} from "escore-packages/ui/utils"
+import {cva, type VariantProps} from "strata-packages/ui/utils"
 
 export {default as Bubble} from "./Bubble.vue"
 export {default as BubbleContent} from "./BubbleContent.vue"

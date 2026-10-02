@@ -43,7 +43,7 @@ const template = (content) => `<template>\n${content}\n</template>`;
 const templateContent = (source) => source.match(/<template>([\s\S]*)<\/template>/)[1].trim();
 const fixScript = (rule, source) => lint(rule, source, { fix: true, filename: 'regression.ts' });
 const verifyScript = (source) => lint(forbidHardcodedUrls, source, { filename: 'regression.ts' }).messages;
-const formImport = "import { useInertiaPlusForm } from 'escore-packages/inertia-plus';";
+const formImport = "import { useInertiaPlusForm } from 'strata-packages/inertia-plus';";
 
 test('single-line openings preserve ASI-sensitive option bodies and class/type members', () => {
   const sources = [
@@ -163,7 +163,7 @@ editForm.submit('person', 'Alice');
 alias.submit('person', 'Alice');`;
   assert.deepEqual(verifyScript(source), []);
 
-  const aliasedFactory = `import { useInertiaPlusForm as makeForm } from 'escore-packages/inertia-plus';
+  const aliasedFactory = `import { useInertiaPlusForm as makeForm } from 'strata-packages/inertia-plus';
 const editForm = makeForm({}, { submit(kind, name) {} });
 const alias = editForm;
 alias.submit('person', 'Alice');`;

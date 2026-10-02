@@ -1,6 +1,6 @@
 <?php
 
-namespace Escore\PHPStan;
+namespace Strata\PHPStan;
 
 use Illuminate\Database\Eloquent\Attributes\Scope as LocalScope;
 use Illuminate\Database\Eloquent\Builder;
@@ -19,6 +19,7 @@ use PHPStan\Reflection\MethodReflection;
 use PHPStan\Rules\Rule;
 use PHPStan\Rules\RuleError;
 use PHPStan\Rules\RuleErrorBuilder;
+use PHPStan\Type\NeverType;
 use PHPStan\Type\ObjectType;
 use PHPStan\Type\TypeCombinator;
 
@@ -65,21 +66,13 @@ class GeneralRules implements Rule
         }
 
         $receiverType = TypeCombinator::removeNull($receiverType);
-        $eloquentType = TypeCombinator::union(
-            new ObjectType(Model::class),
-            new ObjectType(Builder::class),
-            new ObjectType(Relation::class),
-        );
+        $eloquentType = TypeCombinator::union(new ObjectType(Model::class), new ObjectType(Builder::class), new ObjectType(Relation::class));
 
         if (! $eloquentType->isSuperTypeOf($receiverType)->yes()) {
             return [];
         }
 
-        $queryType = TypeCombinator::union(
-            new ObjectType(Builder::class),
-            new ObjectType(Relation::class),
-            new ObjectType(QueryBuilder::class),
-        );
+        $queryType = TypeCombinator::union(new ObjectType(Builder::class), new ObjectType(Relation::class), new ObjectType(QueryBuilder::class));
         $constructsQuery = $queryType->isSuperTypeOf(TypeCombinator::removeNull($scope->getType($node)))->yes();
         $retrievesData = false;
         $methodName = $node->name->toString();
@@ -113,7 +106,7 @@ class GeneralRules implements Rule
 
         return [
             RuleErrorBuilder::message("Eloquent queries must run in App\\Services. Move this {$methodName}() call into a service and call that service using an ID, UID, slug, or equivalent identifier. Model relationship and local-scope definitions may construct queries, but must not retrieve data.")
-                ->identifier('escore.general.noEloquentQueriesOutsideServices')
+                ->identifier('strata.general.noEloquentQueriesOutsideServices')
                 ->build(),
         ];
     }
@@ -127,7 +120,7 @@ class GeneralRules implements Rule
 
         return [
             RuleErrorBuilder::message('Use an anonymous function with an explicit return statement. Capture any required outer variables using use (...).')
-                ->identifier('escore.general.noArrowFunctions')
+                ->identifier('strata.general.noArrowFunctions')
                 ->build(),
         ];
     }
@@ -159,7 +152,7 @@ class GeneralRules implements Rule
 
         foreach ([$method->getReturnType(), $method->getNativeReturnType()] as $returnType) {
             // Never is a subtype of every type, but cannot define a relationship.
-            if (! $returnType->isNever()->yes() && $relationType->isSuperTypeOf($returnType)->yes()) {
+            if (! ($returnType instanceof NeverType) && $relationType->isSuperTypeOf($returnType)->yes()) {
                 return true;
             }
         }

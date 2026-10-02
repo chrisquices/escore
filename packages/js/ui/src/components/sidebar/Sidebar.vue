@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { computed } from "vue"
-import { cn } from "escore-packages/ui/utils"
+import { cn } from "strata-packages/ui/utils"
 import {
   Sheet,
   SheetContent,
   SheetDescription,
   SheetHeader,
   SheetTitle,
-} from 'escore-packages/ui/sheet'
+} from 'strata-packages/ui/sheet'
 import { useSidebar } from "./utils"
 import type { SidebarProps } from "."
 

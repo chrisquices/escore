@@ -1,6 +1,6 @@
 # Using Inertia Plus
 
-Import from `escore-packages/inertia-plus`. Reuse its behavior instead of implementing it again.
+Import from `strata-packages/inertia-plus`. Reuse Strata's behavior instead of implementing it again.
 
 ## Organization and Const Names
 

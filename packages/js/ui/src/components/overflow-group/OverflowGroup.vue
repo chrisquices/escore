@@ -1,18 +1,18 @@
 <script setup lang="ts">
-import type {ToggleVariants} from "escore-packages/ui/toggle"
+import type {ToggleVariants} from "strata-packages/ui/toggle"
 import type {HTMLAttributes} from "vue"
 import {Ellipsis} from "@lucide/vue"
 import {computed, nextTick, onBeforeUnmount, onMounted, ref, watch} from "vue"
-import {Button} from "escore-packages/ui/button"
+import {Button} from "strata-packages/ui/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
-} from "escore-packages/ui/dropdown-menu"
-import {ToggleGroup, ToggleGroupItem} from "escore-packages/ui/toggle-group"
-import {cn} from "escore-packages/ui/utils"
+} from "strata-packages/ui/dropdown-menu"
+import {ToggleGroup, ToggleGroupItem} from "strata-packages/ui/toggle-group"
+import {cn} from "strata-packages/ui/utils"
 
 interface OverflowGroupItem {
   value: string

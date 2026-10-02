@@ -1,6 +1,6 @@
-# Setting Up Escore Tooling
+# Setting Up Strata Tooling
 
-For a Laravel project beside the `escore` folder.
+For a Laravel project beside the `strata` folder.
 
 Apply each tool's setup only when its required packages are installed in the project. 
 
@@ -19,8 +19,8 @@ Requires these packages installed in the project:
 Update the `scripts` section in the project's `composer.json`:
 
 ```json
-"lint": "pint --config=../escore/tooling/pint/pint.json",
-"lint:check": "pint --test --config=../escore/tooling/pint/pint.json"
+"lint": "pint --config=../strata/tooling/pint/pint.json",
+"lint:check": "pint --test --config=../strata/tooling/pint/pint.json"
 ```
 
 To check violations:
@@ -50,7 +50,7 @@ Requires these packages installed in the project:
 Update the `scripts` section in the project's `composer.json`:
 
 ```json
-"types:check": "phpstan analyse --configuration=../escore/tooling/phpstan/phpstan.neon.php"
+"types:check": "phpstan analyse --configuration=../strata/tooling/phpstan/phpstan.neon.php"
 ```
 
 To check violations:
@@ -72,8 +72,8 @@ Requires these packages installed in the project:
 Update the `scripts` section in the project's `composer.json`:
 
 ```json
-"refactor": "rector process --config=../escore/tooling/rector/rector.php",
-"refactor:check": "rector process --dry-run --config=../escore/tooling/rector/rector.php"
+"refactor": "rector process --config=../strata/tooling/rector/rector.php",
+"refactor:check": "rector process --dry-run --config=../strata/tooling/rector/rector.php"
 ```
 
 To check violations:
@@ -101,7 +101,7 @@ Requires these packages installed in the project:
 Update the `scripts` section in the project's `composer.json`:
 
 ```json
-"architecture:check": "deptrac analyse --config-file=../escore/tooling/deptrac/deptrac.php"
+"architecture:check": "deptrac analyse --config-file=../strata/tooling/deptrac/deptrac.php"
 ```
 
 To check violations:
@@ -129,8 +129,8 @@ Requires these packages installed in the project:
 Update the `scripts` section in the project's `package.json`:
 
 ```json
-"lint": "eslint . --fix --config=../escore/tooling/eslint/eslint.config.js",
-"lint:check": "eslint . --config=../escore/tooling/eslint/eslint.config.js"
+"lint": "eslint . --fix --config=../strata/tooling/eslint/eslint.config.js",
+"lint:check": "eslint . --config=../strata/tooling/eslint/eslint.config.js"
 ```
 
 To check violations:

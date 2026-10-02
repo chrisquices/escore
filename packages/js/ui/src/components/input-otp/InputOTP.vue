@@ -5,7 +5,7 @@ import { reactiveOmit } from "@vueuse/core"
 import { useForwardPropsEmits } from "reka-ui"
 import { defineComponent, provide, toRef } from "vue"
 import { OTPInput } from "vue-input-otp"
-import { cn } from "escore-packages/ui/utils"
+import { cn } from "strata-packages/ui/utils"
 import { inputOTPSlotsKey } from "./context"
 
 // Keep the library's scoped slot state reactive and available through layout wrappers.

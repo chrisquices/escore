@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import type { HTMLAttributes } from "vue"
 import { computed } from "vue"
-import { cn } from "escore-packages/ui/utils"
-import { Skeleton } from 'escore-packages/ui/skeleton'
+import { cn } from "strata-packages/ui/utils"
+import { Skeleton } from 'strata-packages/ui/skeleton'
 
 const props = defineProps<{
   showIcon?: boolean

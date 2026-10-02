@@ -1,4 +1,4 @@
-package escore.ide.ui;
+package strata.ide.ui;
 
 import com.intellij.icons.AllIcons;
 import com.intellij.openapi.Disposable;
@@ -20,10 +20,10 @@ import com.intellij.ui.TitledSeparator;
 import com.intellij.ui.components.JBCheckBox;
 import com.intellij.ui.content.Content;
 import com.intellij.util.ui.JBUI;
-import escore.ide.folding.CollapsibleHtmlAria;
-import escore.ide.folding.CollapsibleHtmlClasses;
-import escore.ide.folding.CollapsibleHtmlElements;
-import escore.ide.settings.EscoreSettings;
+import strata.ide.folding.CollapsibleHtmlAria;
+import strata.ide.folding.CollapsibleHtmlClasses;
+import strata.ide.folding.CollapsibleHtmlElements;
+import strata.ide.settings.StrataSettings;
 import org.jetbrains.annotations.NotNull;
 
 import javax.swing.JButton;
@@ -36,7 +36,7 @@ import java.awt.Rectangle;
 import java.util.List;
 import java.util.function.Consumer;
 
-public final class EscoreToolWindowFactory implements ToolWindowFactory, DumbAware {
+public final class StrataToolWindowFactory implements ToolWindowFactory, DumbAware {
     @Override
     public void init(@NotNull ToolWindow toolWindow) {
         ToolWindowManager.getInstance(toolWindow.getProject()).invokeLater(() -> {
@@ -54,7 +54,7 @@ public final class EscoreToolWindowFactory implements ToolWindowFactory, DumbAwa
 
     @Override
     public void createToolWindowContent(@NotNull Project project, @NotNull ToolWindow toolWindow) {
-        Disposable disposable = Disposer.newDisposable("Escore panel");
+        Disposable disposable = Disposer.newDisposable("Strata panel");
         Panel panel = new Panel(toolWindow, disposable);
         Content content = toolWindow.getContentManager().getFactory().createContent(panel, "", false);
         content.setDisposer(disposable);
@@ -78,7 +78,7 @@ public final class EscoreToolWindowFactory implements ToolWindowFactory, DumbAwa
             setPreferredSize(JBUI.size(320, 480));
             setMinimumSize(JBUI.size(220, 120));
 
-            EscoreSettings settings = EscoreSettings.getInstance();
+            StrataSettings settings = StrataSettings.getInstance();
             collapsibleClasses = new JBCheckBox("Collapsible HTML Classes", settings.isCollapsibleHtmlClasses());
             collapsibleClasses.addActionListener(event ->
                     settings.setCollapsibleHtmlClasses(collapsibleClasses.isSelected()));
@@ -89,7 +89,7 @@ public final class EscoreToolWindowFactory implements ToolWindowFactory, DumbAwa
             collapsibleAria.addActionListener(event ->
                     settings.setCollapsibleHtmlAria(collapsibleAria.isSelected()));
             ApplicationManager.getApplication().getMessageBus().connect(disposable)
-                    .subscribe(EscoreSettings.CHANGED, () -> {
+                    .subscribe(StrataSettings.CHANGED, () -> {
                         collapsibleClasses.setSelected(settings.isCollapsibleHtmlClasses());
                         collapsibleElements.setSelected(settings.isCollapsibleHtmlElements());
                         collapsibleAria.setSelected(settings.isCollapsibleHtmlAria());

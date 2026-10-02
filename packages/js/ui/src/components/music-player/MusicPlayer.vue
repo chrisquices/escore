@@ -14,10 +14,10 @@ import {
   VolumeX,
 } from "@lucide/vue"
 import {computed, onBeforeUnmount, onMounted, ref, shallowRef, triggerRef, watch} from "vue"
-import {createAudio, type AudioArtwork, type AudioConfig, type AudioError, type AudioSource} from "escore-packages/ui-interactions/audio"
-import {cn} from "escore-packages/ui/utils"
-import {Button} from "escore-packages/ui/button"
-import {Slider} from "escore-packages/ui/slider"
+import {createAudio, type AudioArtwork, type AudioConfig, type AudioError, type AudioSource} from "strata-packages/ui-interactions/audio"
+import {cn} from "strata-packages/ui/utils"
+import {Button} from "strata-packages/ui/button"
+import {Slider} from "strata-packages/ui/slider"
 
 const props = withDefaults(defineProps<{
   size?: "full" | "compact" | "square"

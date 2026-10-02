@@ -7,7 +7,7 @@ import {
   PopoverPortal,
   useForwardPropsEmits
 } from 'reka-ui';
-import { cn } from 'escore-packages/ui/utils';
+import { cn } from 'strata-packages/ui/utils';
 import { Card, CardContent } from '../card';
 
 defineOptions({

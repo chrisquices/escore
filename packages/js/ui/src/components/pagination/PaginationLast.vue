@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import type { PaginationLastProps } from "reka-ui"
 import type { HTMLAttributes } from "vue"
-import type { ButtonVariants } from 'escore-packages/ui/button'
+import type { ButtonVariants } from 'strata-packages/ui/button'
 import { ChevronRightIcon } from "@lucide/vue"
 import { reactiveOmit } from "@vueuse/core"
 import { PaginationLast, useForwardProps } from "reka-ui"
-import { cn } from "escore-packages/ui/utils"
-import { buttonVariants } from 'escore-packages/ui/button'
+import { cn } from "strata-packages/ui/utils"
+import { buttonVariants } from 'strata-packages/ui/button'
 
 const props = withDefaults(defineProps<PaginationLastProps & {
   size?: ButtonVariants["size"]

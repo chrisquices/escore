@@ -1,4 +1,4 @@
-package escore.ide.folding;
+package strata.ide.folding;
 
 import com.intellij.codeInsight.folding.CodeFoldingManager;
 import com.intellij.icons.AllIcons;
@@ -40,7 +40,7 @@ import com.intellij.psi.xml.XmlAttribute;
 import com.intellij.psi.xml.XmlAttributeValue;
 import com.intellij.util.messages.MessageBusConnection;
 import com.intellij.util.ui.JBUI;
-import escore.ide.settings.EscoreSettings;
+import strata.ide.settings.StrataSettings;
 import java.awt.Color;
 import java.awt.Cursor;
 import java.awt.Graphics;
@@ -58,9 +58,9 @@ import org.jetbrains.annotations.NotNull;
 /** Owns HTML and Vue ARIA-value folding, placeholder styling, and inline collapse controls. */
 @Service(Service.Level.APP)
 public final class CollapsibleHtmlAria implements Disposable {
-    private static final String GROUP_NAME = "escore.html.aria";
+    private static final String GROUP_NAME = "strata.html.aria";
     private static final String PLACEHOLDER = "...";
-    private static final Key<Controller> CONTROLLER = Key.create("escore.ariaCollapseButtons");
+    private static final Key<Controller> CONTROLLER = Key.create("strata.ariaCollapseButtons");
 
     static boolean isAriaAttribute(String name) {
         int prefix = name.startsWith("v-bind:") ? "v-bind:".length() : name.startsWith(":") ? 1 : 0;
@@ -75,7 +75,7 @@ public final class CollapsibleHtmlAria implements Disposable {
 
     public static void setAllExpanded(@NotNull Editor editor, boolean expanded) {
         if (editor.isDisposed() || editor.getProject() == null || editor.getProject().isDisposed()
-                || !EscoreSettings.getInstance().isCollapsibleHtmlAria()) return;
+                || !StrataSettings.getInstance().isCollapsibleHtmlAria()) return;
         Controller controller = editor.getUserData(CONTROLLER);
         if (controller == null || controller.disposed) return;
         CodeFoldingManager.getInstance(editor.getProject()).updateFoldRegions(editor);
@@ -103,7 +103,7 @@ public final class CollapsibleHtmlAria implements Disposable {
         }
     }
 
-    /** Tracks only Escore ARIA folds, independently for each editor. */
+    /** Tracks only Strata ARIA folds, independently for each editor. */
     private static final class Controller implements Disposable, EditorMouseListener, EditorMouseMotionListener {
         private final EditorEx editor;
         private final Map<FoldRegion, Inlay<CollapseIcon>> buttons = new IdentityHashMap<>();
@@ -115,7 +115,7 @@ public final class CollapsibleHtmlAria implements Disposable {
 
         private Controller(EditorEx editor) {
             this.editor = editor;
-            ariaEnabled = EscoreSettings.getInstance().isCollapsibleHtmlAria();
+            ariaEnabled = StrataSettings.getInstance().isCollapsibleHtmlAria();
             editor.getFoldingModel().addListener(new FoldingListener() {
                 @Override
                 public void onFoldProcessingEnd() {
@@ -129,8 +129,8 @@ public final class CollapsibleHtmlAria implements Disposable {
                 }
             }, this);
             MessageBusConnection connection = ApplicationManager.getApplication().getMessageBus().connect(this);
-            connection.subscribe(EscoreSettings.CHANGED, () -> {
-                boolean enabled = EscoreSettings.getInstance().isCollapsibleHtmlAria();
+            connection.subscribe(StrataSettings.CHANGED, () -> {
+                boolean enabled = StrataSettings.getInstance().isCollapsibleHtmlAria();
                 if (ariaEnabled == enabled) return;
                 ariaEnabled = enabled;
                 queueRefresh();
@@ -164,7 +164,7 @@ public final class CollapsibleHtmlAria implements Disposable {
         private void refresh() {
             Set<FoldRegion> expanded = Collections.newSetFromMap(new IdentityHashMap<>());
             Set<FoldRegion> collapsed = Collections.newSetFromMap(new IdentityHashMap<>());
-            if (EscoreSettings.getInstance().isCollapsibleHtmlAria()) {
+            if (StrataSettings.getInstance().isCollapsibleHtmlAria()) {
                 for (FoldRegion region : editor.getFoldingModel().getAllFoldRegions()) {
                     if (!isAriaRegion(region)) continue;
                     if (region.isExpanded()) {
@@ -349,7 +349,7 @@ public final class CollapsibleHtmlAria implements Disposable {
         @Override
         public FoldingDescriptor @NotNull [] buildFoldRegions(
                 @NotNull PsiElement root, @NotNull Document document, boolean quick) {
-            if (!EscoreSettings.getInstance().isCollapsibleHtmlAria()) return FoldingDescriptor.EMPTY_ARRAY;
+            if (!StrataSettings.getInstance().isCollapsibleHtmlAria()) return FoldingDescriptor.EMPTY_ARRAY;
 
             List<FoldingDescriptor> folds = new ArrayList<>();
 

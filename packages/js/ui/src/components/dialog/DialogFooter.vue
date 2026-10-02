@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { HTMLAttributes } from "vue"
-import { cn } from "escore-packages/ui/utils"
-import { Button } from 'escore-packages/ui/button'
+import { cn } from "strata-packages/ui/utils"
+import { Button } from 'strata-packages/ui/button'
 import DialogClose from "./DialogClose.vue"
 
 const props = withDefaults(defineProps<{

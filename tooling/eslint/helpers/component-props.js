@@ -276,7 +276,10 @@ export function checkProps(context, instance) {
     if (!bindings) return;
     let project = sources.get(sourceCode);
     if (!project) {
-        project = readProject(resolve(context.settings.escore?.componentTsconfig ?? defaultConfig));
+        project = readProject(resolve(
+            context.settings.strata?.componentTsconfig
+                ?? defaultConfig
+        ));
         sources.set(sourceCode, project);
     }
     const props = readProps(project, instance.entry.name);

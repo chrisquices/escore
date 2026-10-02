@@ -1,6 +1,6 @@
 <?php
 
-namespace Escore\PHPStan;
+namespace Strata\PHPStan;
 
 use Illuminate\Database\Eloquent\Model;
 use PhpParser\Node;
@@ -59,7 +59,7 @@ class ServiceRules implements Rule
                     array_push($types, ...$type->types);
                 } elseif ($type instanceof Name && $modelType->isSuperTypeOf($scope->resolveTypeByName($type))->yes()) {
                     $errors[] = RuleErrorBuilder::message("Service method parameter \${$parameter->var->name} must receive an ID, UID, slug, or equivalent identifier. Look up the Eloquent model inside the service.")
-                        ->identifier('escore.service.noModelUsageInMethodParameters')
+                        ->identifier('strata.service.noModelUsageInMethodParameters')
                         ->line($parameter->getStartLine())
                         ->build();
 

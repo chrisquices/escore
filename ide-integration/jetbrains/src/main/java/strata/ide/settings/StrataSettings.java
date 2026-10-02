@@ -1,4 +1,4 @@
-package escore.ide.settings;
+package strata.ide.settings;
 
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.components.PersistentStateComponent;
@@ -10,17 +10,17 @@ import com.intellij.util.messages.Topic;
 import org.jetbrains.annotations.NotNull;
 
 @Service(Service.Level.APP)
-@State(name = "EscoreIdeSettings", storages = @Storage(
-        value = "escore-ide-integration.xml", roamingType = RoamingType.DISABLED))
-public final class EscoreSettings implements PersistentStateComponent<EscoreSettings.SettingsState> {
-    public static final Topic<Runnable> CHANGED = Topic.create("Escore settings changed", Runnable.class);
+@State(name = "StrataIdeSettings", storages = @Storage(
+        value = "strata-ide-integration.xml", roamingType = RoamingType.DISABLED))
+public final class StrataSettings implements PersistentStateComponent<StrataSettings.SettingsState> {
+    public static final Topic<Runnable> CHANGED = Topic.create("Strata settings changed", Runnable.class);
 
     private volatile boolean collapsibleHtmlClasses = true;
     private volatile boolean collapsibleHtmlElements = true;
     private volatile boolean collapsibleHtmlAria = true;
 
-    public static EscoreSettings getInstance() {
-        return ApplicationManager.getApplication().getService(EscoreSettings.class);
+    public static StrataSettings getInstance() {
+        return ApplicationManager.getApplication().getService(StrataSettings.class);
     }
 
     public boolean isCollapsibleHtmlClasses() {
@@ -54,7 +54,7 @@ public final class EscoreSettings implements PersistentStateComponent<EscoreSett
     }
 
     private void notifyChanged() {
-        // Refresh existing editors as well as any other open Escore panels.
+        // Refresh existing editors as well as any other open Strata panels.
         var application = ApplicationManager.getApplication();
         application.invokeLater(() -> {
             if (application.isDisposed()) return;

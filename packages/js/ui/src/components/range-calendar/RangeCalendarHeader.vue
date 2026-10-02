@@ -3,7 +3,7 @@ import type { RangeCalendarHeaderProps } from "reka-ui"
 import type { HTMLAttributes } from "vue"
 import { reactiveOmit } from "@vueuse/core"
 import { RangeCalendarHeader, useForwardProps } from "reka-ui"
-import { cn } from "escore-packages/ui/utils"
+import { cn } from "strata-packages/ui/utils"
 
 const props = defineProps<RangeCalendarHeaderProps & { class?: HTMLAttributes["class"] }>()
 

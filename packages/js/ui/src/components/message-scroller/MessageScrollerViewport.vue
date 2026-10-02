@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { HTMLAttributes } from "vue"
 import { onBeforeUnmount, onMounted, watch } from "vue"
-import { cn } from "escore-packages/ui/utils"
+import { cn } from "strata-packages/ui/utils"
 import { SCROLL_KEYS, useMessageScrollerContext } from "./useMessageScroller"
 
 const props = withDefaults(defineProps<{

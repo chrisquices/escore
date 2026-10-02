@@ -1,7 +1,7 @@
 <script lang="ts" setup>
 import type { HTMLAttributes } from "vue"
 import { ChevronRight } from "@lucide/vue"
-import { cn } from "escore-packages/ui/utils"
+import { cn } from "strata-packages/ui/utils"
 
 const props = defineProps<{
   class?: HTMLAttributes["class"]

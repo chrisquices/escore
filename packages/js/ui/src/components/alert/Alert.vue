@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { HTMLAttributes } from "vue"
 import type { AlertVariants } from "."
-import { cn } from "escore-packages/ui/utils"
+import { cn } from "strata-packages/ui/utils"
 import { alertVariants } from "."
 
 const props = defineProps<{

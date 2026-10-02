@@ -7,7 +7,7 @@ import {
   DropdownMenuSubTrigger,
   useForwardProps,
 } from "reka-ui"
-import { cn } from "escore-packages/ui/utils"
+import { cn } from "strata-packages/ui/utils"
 
 const props = defineProps<DropdownMenuSubTriggerProps & { class?: HTMLAttributes["class"], inset?: boolean }>()
 

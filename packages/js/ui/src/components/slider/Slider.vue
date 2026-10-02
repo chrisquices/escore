@@ -3,7 +3,7 @@ import type { SliderRootEmits, SliderRootProps } from "reka-ui"
 import type { HTMLAttributes } from "vue"
 import { reactiveOmit } from "@vueuse/core"
 import { SliderRange, SliderRoot, SliderThumb, SliderTrack, useForwardPropsEmits } from "reka-ui"
-import { cn } from "escore-packages/ui/utils"
+import { cn } from "strata-packages/ui/utils"
 
 const props = withDefaults(defineProps<SliderRootProps & {
   class?: HTMLAttributes["class"]

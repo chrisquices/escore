@@ -2,8 +2,8 @@
 import type { HTMLAttributes } from "vue"
 import { useVModel } from "@vueuse/core"
 import { computed, useAttrs } from "vue"
-import { Tooltip, TooltipContent, TooltipTrigger } from "escore-packages/ui/tooltip"
-import { cn } from "escore-packages/ui/utils"
+import { Tooltip, TooltipContent, TooltipTrigger } from "strata-packages/ui/tooltip"
+import { cn } from "strata-packages/ui/utils"
 
 const props = defineProps<{
   defaultValue?: string | number

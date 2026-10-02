@@ -3,7 +3,7 @@ plugins {
     id("org.jetbrains.intellij.platform") version "2.19.0"
 }
 
-group = "escore.ide"
+group = "strata.ide"
 // Keep one development version and replace its archive on rebuild.
 version = "0.1.0"
 
@@ -35,7 +35,7 @@ tasks.withType<JavaCompile>().configureEach {
 
 intellijPlatform {
     pluginConfiguration {
-        name = "Escore IDE Integration"
+        name = "Strata IDE Integration"
         version = project.version.toString()
         ideaVersion {
             sinceBuild = "261"

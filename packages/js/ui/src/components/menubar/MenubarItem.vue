@@ -6,7 +6,7 @@ import {
   MenubarItem,
   useForwardPropsEmits,
 } from "reka-ui"
-import { cn } from "escore-packages/ui/utils"
+import { cn } from "strata-packages/ui/utils"
 
 const props = defineProps<MenubarItemProps & {
   class?: HTMLAttributes["class"]

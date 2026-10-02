@@ -4,7 +4,7 @@ import type { HTMLAttributes } from "vue"
 import { reactiveOmit } from "@vueuse/core"
 import { DialogOverlay } from "reka-ui"
 import { computed, inject } from "vue"
-import { cn } from "escore-packages/ui/utils"
+import { cn } from "strata-packages/ui/utils"
 import { sheetPortalToKey } from "./context"
 
 const props = defineProps<DialogOverlayProps & { class?: HTMLAttributes["class"] }>()

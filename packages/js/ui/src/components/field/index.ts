@@ -1,4 +1,4 @@
-import {cva, type VariantProps} from "escore-packages/ui/utils"
+import {cva, type VariantProps} from "strata-packages/ui/utils"
 
 export const fieldVariants = cva(
   "group/field flex w-full gap-3 data-[invalid=true]:text-destructive",

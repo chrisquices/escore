@@ -3,7 +3,7 @@ import type { TagsInputRootEmits, TagsInputRootProps } from "reka-ui"
 import type { HTMLAttributes } from "vue"
 import { reactiveOmit } from "@vueuse/core"
 import { TagsInputRoot, useForwardPropsEmits } from "reka-ui"
-import { cn } from "escore-packages/ui/utils"
+import { cn } from "strata-packages/ui/utils"
 
 const props = defineProps<TagsInputRootProps & { class?: HTMLAttributes["class"] }>()
 const emits = defineEmits<TagsInputRootEmits>()

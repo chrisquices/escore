@@ -1,4 +1,4 @@
-import {cva, type VariantProps} from "escore-packages/ui/utils"
+import {cva, type VariantProps} from "strata-packages/ui/utils"
 
 export { default as Empty } from "./Empty.vue"
 export { default as EmptyContent } from "./EmptyContent.vue"

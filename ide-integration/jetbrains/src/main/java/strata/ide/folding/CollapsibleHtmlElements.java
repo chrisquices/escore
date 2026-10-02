@@ -1,4 +1,4 @@
-package escore.ide.folding;
+package strata.ide.folding;
 
 import com.intellij.codeInsight.folding.CodeFoldingManager;
 import com.intellij.icons.AllIcons;
@@ -29,7 +29,7 @@ import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.psi.xml.XmlTag;
 import com.intellij.util.ui.JBUI;
 import com.intellij.xml.util.XmlTagUtil;
-import escore.ide.settings.EscoreSettings;
+import strata.ide.settings.StrataSettings;
 import org.jetbrains.annotations.NotNull;
 
 import javax.swing.Icon;
@@ -47,7 +47,7 @@ import java.util.List;
 /** Hover controls for existing HTML element folds. Never creates folds or edits the document. */
 @Service(Service.Level.APP)
 public final class CollapsibleHtmlElements implements Disposable {
-    private static final Key<Controller> CONTROLLER = Key.create("escore.htmlElementFoldControls");
+    private static final Key<Controller> CONTROLLER = Key.create("strata.htmlElementFoldControls");
 
     @Override
     public void dispose() {
@@ -124,7 +124,7 @@ public final class CollapsibleHtmlElements implements Disposable {
             button.addMouseListener(new MouseAdapter() {
                 @Override
                 public void mousePressed(MouseEvent event) {
-                    if (!EscoreSettings.getInstance().isCollapsibleHtmlElements()
+                    if (!StrataSettings.getInstance().isCollapsibleHtmlElements()
                             || !SwingUtilities.isLeftMouseButton(event) || target == null || !target.region().isValid()) return;
                     event.consume();
                     FoldRegion region = target.region();
@@ -140,7 +140,7 @@ public final class CollapsibleHtmlElements implements Disposable {
             // A transparent child overlays existing indentation; it adds no editor columns or source text.
             editor.getContentComponent().add(button);
             ApplicationManager.getApplication().getMessageBus().connect(this)
-                    .subscribe(EscoreSettings.CHANGED, this::queueRefresh);
+                    .subscribe(StrataSettings.CHANGED, this::queueRefresh);
             editor.addEditorMouseListener(this);
             editor.addEditorMouseMotionListener(this);
             editor.getFoldingModel().addListener(new FoldingListener() {
@@ -174,7 +174,7 @@ public final class CollapsibleHtmlElements implements Disposable {
         }
 
         private void refreshAt(Point point) {
-            if (!EscoreSettings.getInstance().isCollapsibleHtmlElements()
+            if (!StrataSettings.getInstance().isCollapsibleHtmlElements()
                     || point == null || !editor.getScrollingModel().getVisibleArea().contains(point)) {
                 hoveredVisualLine = -1;
                 hideButton();

@@ -1,4 +1,4 @@
-package escore.ide.folding;
+package strata.ide.folding;
 
 import com.intellij.codeInsight.folding.CodeFoldingManager;
 import com.intellij.icons.AllIcons;
@@ -40,7 +40,7 @@ import com.intellij.psi.xml.XmlAttribute;
 import com.intellij.psi.xml.XmlAttributeValue;
 import com.intellij.util.messages.MessageBusConnection;
 import com.intellij.util.ui.JBUI;
-import escore.ide.settings.EscoreSettings;
+import strata.ide.settings.StrataSettings;
 import java.awt.Color;
 import java.awt.Cursor;
 import java.awt.Graphics;
@@ -58,9 +58,9 @@ import org.jetbrains.annotations.NotNull;
 /** Owns static HTML class folding, placeholder styling, and inline collapse controls. */
 @Service(Service.Level.APP)
 public final class CollapsibleHtmlClasses implements Disposable {
-    private static final String GROUP_NAME = "escore.html.classes";
+    private static final String GROUP_NAME = "strata.html.classes";
     private static final String PLACEHOLDER = "...";
-    private static final Key<Controller> CONTROLLER = Key.create("escore.classCollapseButtons");
+    private static final Key<Controller> CONTROLLER = Key.create("strata.classCollapseButtons");
 
     @Override
     public void dispose() {
@@ -69,7 +69,7 @@ public final class CollapsibleHtmlClasses implements Disposable {
 
     public static void setAllExpanded(@NotNull Editor editor, boolean expanded) {
         if (editor.isDisposed() || editor.getProject() == null || editor.getProject().isDisposed()
-                || !EscoreSettings.getInstance().isCollapsibleHtmlClasses()) return;
+                || !StrataSettings.getInstance().isCollapsibleHtmlClasses()) return;
         Controller controller = editor.getUserData(CONTROLLER);
         if (controller == null || controller.disposed) return;
         CodeFoldingManager.getInstance(editor.getProject()).updateFoldRegions(editor);
@@ -97,7 +97,7 @@ public final class CollapsibleHtmlClasses implements Disposable {
         }
     }
 
-    /** Tracks only Escore class folds, independently for each editor. */
+    /** Tracks only Strata class folds, independently for each editor. */
     private static final class Controller implements Disposable, EditorMouseListener, EditorMouseMotionListener {
         private final EditorEx editor;
         private final Map<FoldRegion, Inlay<CollapseIcon>> buttons = new IdentityHashMap<>();
@@ -109,7 +109,7 @@ public final class CollapsibleHtmlClasses implements Disposable {
 
         private Controller(EditorEx editor) {
             this.editor = editor;
-            classesEnabled = EscoreSettings.getInstance().isCollapsibleHtmlClasses();
+            classesEnabled = StrataSettings.getInstance().isCollapsibleHtmlClasses();
             editor.getFoldingModel().addListener(new FoldingListener() {
                 @Override
                 public void onFoldProcessingEnd() {
@@ -123,8 +123,8 @@ public final class CollapsibleHtmlClasses implements Disposable {
                 }
             }, this);
             MessageBusConnection connection = ApplicationManager.getApplication().getMessageBus().connect(this);
-            connection.subscribe(EscoreSettings.CHANGED, () -> {
-                boolean enabled = EscoreSettings.getInstance().isCollapsibleHtmlClasses();
+            connection.subscribe(StrataSettings.CHANGED, () -> {
+                boolean enabled = StrataSettings.getInstance().isCollapsibleHtmlClasses();
                 if (classesEnabled == enabled) return;
                 classesEnabled = enabled;
                 queueRefresh();
@@ -158,7 +158,7 @@ public final class CollapsibleHtmlClasses implements Disposable {
         private void refresh() {
             Set<FoldRegion> expanded = Collections.newSetFromMap(new IdentityHashMap<>());
             Set<FoldRegion> collapsed = Collections.newSetFromMap(new IdentityHashMap<>());
-            if (EscoreSettings.getInstance().isCollapsibleHtmlClasses()) {
+            if (StrataSettings.getInstance().isCollapsibleHtmlClasses()) {
                 for (FoldRegion region : editor.getFoldingModel().getAllFoldRegions()) {
                     if (!isClassRegion(region)) continue;
                     if (region.isExpanded()) {
@@ -343,7 +343,7 @@ public final class CollapsibleHtmlClasses implements Disposable {
         @Override
         public FoldingDescriptor @NotNull [] buildFoldRegions(
                 @NotNull PsiElement root, @NotNull Document document, boolean quick) {
-            if (!EscoreSettings.getInstance().isCollapsibleHtmlClasses()) return FoldingDescriptor.EMPTY_ARRAY;
+            if (!StrataSettings.getInstance().isCollapsibleHtmlClasses()) return FoldingDescriptor.EMPTY_ARRAY;
 
             List<FoldingDescriptor> folds = new ArrayList<>();
 

@@ -53,6 +53,8 @@ Within `rules/template/`:
 
 Each `rules/components/<family>.js` contains the family's structure definition and separately named rules. Keep required existence, allowed structure, and spacing independent; shared helpers implement the checks and fixes.
 
+Component prop checks read the consuming project's TypeScript config from `settings.strata.componentTsconfig`.
+
 ## Before creating a rule
 
 Discuss new rules with the user before implementing them. Present each proposal in exactly this format, replacing the example content with the proposed rule:
@@ -78,7 +80,7 @@ Implement after approval. Honor approval already given for the agreed behavior; 
 
 1. Keep rules atomic. Component-family rules share `rules/components/<family>.js`; otherwise create one file per rule. Keep attribute existence, order, and layout separate. Package rules stay flat inside `rules/packages/<package>/`, without script/template subfolders; shared helpers belong in `helpers/`.
 2. Reuse the corresponding helper. Component-specific files supply targets and conditions; shared behavior belongs in the helper. All one-liner rules use the shared one-liner foundations.
-3. Import and register rules in `eslint.config.js`, then enable `escore/<rule-id>` in the appropriate file scope. Use the filename stem as the ID for standalone rules; family files export a map of separate rule IDs. Creating or registering a file alone does not enable it.
+3. Import and register rules in `eslint.config.js`, then enable `strata/<rule-id>` in the appropriate file scope. Use the filename stem as the ID for standalone rules; family files export a map of separate rule IDs. Creating or registering a file alone does not enable it.
 4. Write an actionable violation message: identify what failed, the expected result, and how to repair it. Include actual/expected values when useful; descriptions alone are not enough.
 
 ## Rule boundaries and fixes

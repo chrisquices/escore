@@ -7,7 +7,7 @@ import allMustNotHaveAriaAttributes from '../rules/general/all-must-not-have-ari
 import allMustNotHaveTitleAttribute from '../rules/general/all-must-not-have-title-attribute.js';
 import emptyRules from '../rules/components/empty.js';
 
-const projectRequire = createRequire(join(process.env.ESCORE_TEST_PROJECT ?? process.cwd(), 'package.json'));
+const projectRequire = createRequire(join(process.env.STRATA_TEST_PROJECT ?? process.cwd(), 'package.json'));
 const {Linter} = projectRequire('eslint');
 const vueParser = projectRequire('vue-eslint-parser');
 const tsParser = projectRequire('@typescript-eslint/parser');
@@ -26,8 +26,8 @@ function lint(source, {filename = 'general.js', rules = generalRules, fix = true
     const config = [{
         files: ['**/*.js', '**/*.ts', '**/*.vue'],
         languageOptions,
-        plugins: {escore: {rules}},
-        rules: Object.fromEntries(Object.keys(rules).map((name) => [`escore/${name}`, 'error'])),
+        plugins: {strata: {rules}},
+        rules: Object.fromEntries(Object.keys(rules).map((name) => [`strata/${name}`, 'error'])),
     }];
     const linter = new Linter();
     const result = fix ? linter.verifyAndFix(source, config, {filename}) : {
@@ -178,7 +178,7 @@ test('ARIA attributes are removed from every native element and component', () =
 test('the ARIA diagnostic identifies the attribute and owning element', () => {
     const result = lint(markup('<Button aria-label="Name" />'), {...ariaOptions, fix: false});
     assert.equal(result.messages.length, 1);
-    assert.equal(result.messages[0].ruleId, 'escore/all-must-not-have-aria-attributes');
+    assert.equal(result.messages[0].ruleId, 'strata/all-must-not-have-aria-attributes');
     assert.equal(result.messages[0].message, 'Remove aria-label from <Button>; aria-* attributes are forbidden.');
 });
 
@@ -295,7 +295,7 @@ test('title attributes are removed from native elements and components', () => {
     assert.equal(fixed(source, titleOptions), source.replace('\r\n    title="Name"', ''));
     const result = lint(markup('<Button title="Name" />'), {...titleOptions, fix: false});
     assert.equal(result.messages.length, 1);
-    assert.equal(result.messages[0].ruleId, 'escore/all-must-not-have-title-attribute');
+    assert.equal(result.messages[0].ruleId, 'strata/all-must-not-have-title-attribute');
     assert.equal(result.messages[0].message, 'Remove title from <Button>; title attributes are forbidden.');
 });
 

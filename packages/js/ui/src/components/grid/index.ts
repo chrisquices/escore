@@ -1,4 +1,4 @@
-import {cva, type VariantProps} from "escore-packages/ui/utils"
+import {cva, type VariantProps} from "strata-packages/ui/utils"
 
 export { default as Grid } from "./Grid.vue"
 export { default as GridItem } from "./GridItem.vue"

@@ -79,11 +79,11 @@ This document defines the controlling protocol for every agent action and respon
 
 ---
 
-### Escore UI
+### Strata UI
 
-- When working on UI in a project using `escore-packages`, use Escore’s UI kit, UI interactions, and shared libraries as the default building blocks.
-- Check the relevant implementations in `escore/packages/js` before creating components, interactions, or utilities.
-- Do not hand-roll or duplicate functionality already provided by Escore.
-- You may access the sibling Escore project even when it is outside the current workspace.
+- When working on UI in a project using `strata-packages`, use Strata’s UI kit, UI interactions, and shared libraries as the default building blocks.
+- Check the relevant implementations in `strata/packages/js` before creating components, interactions, or utilities.
+- Do not hand-roll or duplicate functionality already provided by Strata.
+- You may access the sibling Strata project even when it is outside the current workspace.
 
 ---

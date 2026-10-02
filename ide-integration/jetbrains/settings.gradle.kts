@@ -1,1 +1,1 @@
-rootProject.name = "escore-ide-integration"
+rootProject.name = "strata-ide-integration"

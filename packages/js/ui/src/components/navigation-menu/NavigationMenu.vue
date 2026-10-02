@@ -6,7 +6,7 @@ import {
   NavigationMenuRoot,
   useForwardPropsEmits,
 } from "reka-ui"
-import { cn } from "escore-packages/ui/utils"
+import { cn } from "strata-packages/ui/utils"
 import NavigationMenuViewport from "./NavigationMenuViewport.vue"
 
 const props = withDefaults(defineProps<NavigationMenuRootProps & {

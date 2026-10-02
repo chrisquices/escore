@@ -1,4 +1,4 @@
-# Escore IDE Integration
+# Using Laravel with Strata
 
 ## Controllers
 

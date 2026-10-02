@@ -5,10 +5,10 @@ import { getLocalTimeZone, today } from "@internationalized/date"
 import { CalendarDays } from "@lucide/vue"
 import { useDateFormatter } from "reka-ui"
 import { computed } from "vue"
-import { cn } from "escore-packages/ui/utils"
-import { Button } from "escore-packages/ui/button"
-import { Calendar } from "escore-packages/ui/calendar"
-import { Popover, PopoverContent, PopoverTrigger } from "escore-packages/ui/popover"
+import { cn } from "strata-packages/ui/utils"
+import { Button } from "strata-packages/ui/button"
+import { Calendar } from "strata-packages/ui/calendar"
+import { Popover, PopoverContent, PopoverTrigger } from "strata-packages/ui/popover"
 
 const props = withDefaults(defineProps<{
   modelValue?: DateValue

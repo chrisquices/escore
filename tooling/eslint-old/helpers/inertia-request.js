@@ -63,7 +63,7 @@ export const createInertiaReceiverResolver = (sourceCode) => {
     const binding = imported(expression);
 
     return binding && ((binding.name === 'useForm' && inertiaPackages.has(binding.source))
-      || (binding.name === 'useInertiaPlusForm' && binding.source === 'escore-packages/inertia-plus'));
+      || (binding.name === 'useInertiaPlusForm' && binding.source === 'strata-packages/inertia-plus'));
   };
   const hasNativeFormMethod = (call, method) => {
     if (!isFormFactory(call.callee)) return false;

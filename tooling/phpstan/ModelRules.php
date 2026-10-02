@@ -1,13 +1,17 @@
 <?php
 
-namespace Escore\PHPStan;
+namespace Strata\PHPStan;
 
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Guarded;
+use Illuminate\Database\Eloquent\Attributes\Scope as LocalScope;
 use Illuminate\Database\Eloquent\Attributes\Table;
 use Illuminate\Database\Eloquent\Attributes\Unguarded;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Pivot;
+use Illuminate\Database\Eloquent\Relations\Relation;
+use Illuminate\Notifications\Notifiable;
 use PhpParser\Node;
 use PhpParser\Node\Expr;
 use PHPStan\Analyser\Scope;
@@ -20,6 +24,8 @@ use PHPStan\Rules\RuleError;
 use PHPStan\Rules\RuleErrorBuilder;
 use PHPStan\Type\Constant\ConstantArrayType;
 use PHPStan\Type\Constant\ConstantStringType;
+use PHPStan\Type\NeverType;
+use PHPStan\Type\ObjectType;
 use PHPStan\Type\Type;
 use TypeError;
 
@@ -42,6 +48,9 @@ class ModelRules implements Rule
 
         return [
             ...$this->requirePropertiesToBeAllowed($node),
+            ...$this->requireMethodsToBEAllowed($node),
+            ...$this->requireTraitsToBeAllowed($node, $scope),
+            ...$this->requireMemberOrder($node),
             ...$this->noOverlappingFillableAndGuarded($node),
             ...$this->requirePropertyTable($node),
             ...$this->requirePropertyTableToBeProtected($node),
@@ -93,9 +102,137 @@ class ModelRules implements Rule
             }
 
             $errors[] = RuleErrorBuilder::message('Model property $'.$declaration['name'].' is not supported by ModelRules. Keep this property and add support for it in ModelRules.php, including any required dedicated rules. Do not remove the property to silence this violation.')
-                ->identifier('escore.model.requirePropertiesToBeAllowed')
+                ->identifier('strata.model.requirePropertiesToBeAllowed')
                 ->line($declaration['line'])
                 ->build();
+        }
+
+        return $errors;
+    }
+
+    /** @return list<RuleError> */
+    private function requireMethodsToBEAllowed(InClassNode $node): array
+    {
+        $model = $node->getClassReflection();
+        $relationType = new ObjectType(Relation::class);
+        $errors = [];
+
+        foreach ($node->getOriginalNode()->getMethods() as $method) {
+            $name = $method->name->toString();
+
+            if (preg_match('/^scope[A-Z]/', $name) === 1) {
+                continue;
+            }
+
+            $reflection = $model->getNativeMethod($name);
+
+            if (! $reflection->isPrivate()) {
+                foreach ($reflection->getAttributes() as $attribute) {
+                    if ($attribute->getName() === LocalScope::class) {
+                        continue 2;
+                    }
+                }
+            }
+
+            $isRelationship = false;
+
+            foreach ($reflection->getVariants() as $variant) {
+                foreach ([$variant->getReturnType(), $variant->getNativeReturnType()] as $returnType) {
+                    // Never is a subtype of every type, but cannot define a relationship.
+                    if (! ($returnType instanceof NeverType) && $relationType->isSuperTypeOf($returnType)->yes()) {
+                        $isRelationship = true;
+
+                        break 2;
+                    }
+                }
+            }
+
+            if ($isRelationship) {
+                continue;
+            }
+
+            $errors[] = RuleErrorBuilder::message('Model method '.$name.'() is not supported by ModelRules. Use a Relation return type for relationships or declare a local scope. Add explicit support for other legitimate model behavior in ModelRules.php, or move business logic into a service. Preserve required behavior; do not delete it to silence this violation.')
+                ->identifier('strata.model.requireMethodsToBEAllowed')
+                ->line($method->getStartLine())
+                ->build();
+        }
+
+        return $errors;
+    }
+
+    /** @return list<RuleError> */
+    private function requireTraitsToBeAllowed(InClassNode $node, Scope $scope): array
+    {
+        $allowed = [
+            strtolower(HasFactory::class),
+            strtolower(Notifiable::class),
+        ];
+        $errors = [];
+
+        foreach ($node->getOriginalNode()->stmts as $statement) {
+            if (! $statement instanceof Node\Stmt\TraitUse) {
+                continue;
+            }
+
+            foreach ($statement->traits as $trait) {
+                $name = $scope->resolveName($trait);
+
+                if (in_array(strtolower($name), $allowed, true)) {
+                    continue;
+                }
+
+                $errors[] = RuleErrorBuilder::message('Model trait '.$name.' is not supported by ModelRules. Keep this trait and add support for it in ModelRules.php, including any required dedicated rules. Do not remove the trait to silence this violation.')
+                    ->identifier('strata.model.requireTraitsToBeAllowed')
+                    ->line($trait->getStartLine())
+                    ->build();
+            }
+        }
+
+        return $errors;
+    }
+
+    /** @return list<RuleError> */
+    private function requireMemberOrder(InClassNode $node): array
+    {
+        $propertyRanks = ['table' => 1, 'primaryKey' => 2, 'guarded' => 3, 'fillable' => 4, 'hidden' => 5, 'casts' => 6];
+        $declarations = [];
+
+        foreach ($node->getOriginalNode()->stmts as $statement) {
+            if ($statement instanceof Node\Stmt\TraitUse) {
+                $names = [];
+
+                foreach ($statement->traits as $trait) {
+                    $names[] = $trait->toString();
+                }
+
+                $declarations[] = ['name' => 'trait use '.implode(', ', $names), 'rank' => 0, 'line' => $statement->getStartLine()];
+            } elseif ($statement instanceof Node\Stmt\Property) {
+                foreach ($statement->props as $item) {
+                    $name = $item->name->toString();
+
+                    if (! isset($propertyRanks[$name])) {
+                        continue;
+                    }
+
+                    $declarations[] = ['name' => 'property $'.$name, 'rank' => $propertyRanks[$name], 'line' => $item->getStartLine()];
+                }
+            } elseif ($statement instanceof Node\Stmt\ClassMethod) {
+                $declarations[] = ['name' => 'method '.$statement->name->toString().'()', 'rank' => 7, 'line' => $statement->getStartLine()];
+            }
+        }
+
+        $highestRank = -1;
+        $errors = [];
+
+        foreach ($declarations as $declaration) {
+            if ($declaration['rank'] < $highestRank) {
+                $errors[] = RuleErrorBuilder::message('Model '.$declaration['name'].' is out of order. Arrange declared members in this order: direct trait uses, $table, optional $primaryKey, $guarded, $fillable, $hidden, $casts, then all methods in any order. Constants are ignored. Move declarations without removing behavior.')
+                    ->identifier('strata.model.requireMemberOrder')
+                    ->line($declaration['line'])
+                    ->build();
+            }
+
+            $highestRank = max($highestRank, $declaration['rank']);
         }
 
         return $errors;
@@ -142,7 +279,7 @@ class ModelRules implements Rule
             }
 
             $errors[] = RuleErrorBuilder::message('Attribute "'.$column.'" is both fillable and guarded. Laravel allows it through fillable. Remove it from the list that contradicts your intended behavior.')
-                ->identifier('escore.model.noOverlappingFillableAndGuarded')
+                ->identifier('strata.model.noOverlappingFillableAndGuarded')
                 ->line($node->getStartLine())
                 ->build();
         }
@@ -167,7 +304,7 @@ class ModelRules implements Rule
 
         return [
             RuleErrorBuilder::message('Model must explicitly declare a $table property.')
-                ->identifier('escore.model.requirePropertyTable')
+                ->identifier('strata.model.requirePropertyTable')
                 ->line($node->getStartLine())
                 ->build(),
         ];
@@ -195,7 +332,7 @@ class ModelRules implements Rule
 
         return [
             RuleErrorBuilder::message('$table must be protected.')
-                ->identifier('escore.model.requirePropertyTableToBeProtected')
+                ->identifier('strata.model.requirePropertyTableToBeProtected')
                 ->line($property->getStartLine())
                 ->build(),
         ];
@@ -238,7 +375,7 @@ class ModelRules implements Rule
 
         return [
             RuleErrorBuilder::message('$table must have a nonempty string default.')
-                ->identifier('escore.model.requirePropertyTableToBeNonEmptyString')
+                ->identifier('strata.model.requirePropertyTableToBeNonEmptyString')
                 ->line(($default ?? $declaration)->getStartLine())
                 ->build(),
         ];
@@ -261,7 +398,7 @@ class ModelRules implements Rule
 
         return [
             RuleErrorBuilder::message('Model must explicitly declare a $guarded property.')
-                ->identifier('escore.model.requirePropertyGuarded')
+                ->identifier('strata.model.requirePropertyGuarded')
                 ->line($node->getStartLine())
                 ->build(),
         ];
@@ -289,7 +426,7 @@ class ModelRules implements Rule
 
         return [
             RuleErrorBuilder::message('$guarded must be protected.')
-                ->identifier('escore.model.requirePropertyGuardedToBeProtected')
+                ->identifier('strata.model.requirePropertyGuardedToBeProtected')
                 ->line($property->getStartLine())
                 ->build(),
         ];
@@ -401,7 +538,7 @@ class ModelRules implements Rule
 
         return [
             RuleErrorBuilder::message('$guarded must explicitly include the primary-key column "'.$primaryKey.'".')
-                ->identifier('escore.model.requirePropertyGuardedToContainPrimaryKey')
+                ->identifier('strata.model.requirePropertyGuardedToContainPrimaryKey')
                 ->line(($default ?? $declaration)->getStartLine())
                 ->build(),
         ];
@@ -424,7 +561,7 @@ class ModelRules implements Rule
 
         return [
             RuleErrorBuilder::message('Model must explicitly declare a $fillable property.')
-                ->identifier('escore.model.requirePropertyFillable')
+                ->identifier('strata.model.requirePropertyFillable')
                 ->line($node->getStartLine())
                 ->build(),
         ];
@@ -452,7 +589,7 @@ class ModelRules implements Rule
 
         return [
             RuleErrorBuilder::message('$fillable must be protected.')
-                ->identifier('escore.model.requirePropertyFillableToBeProtected')
+                ->identifier('strata.model.requirePropertyFillableToBeProtected')
                 ->line($property->getStartLine())
                 ->build(),
         ];
@@ -495,7 +632,7 @@ class ModelRules implements Rule
 
         return [
             RuleErrorBuilder::message('$fillable must have an array default.')
-                ->identifier('escore.model.requirePropertyFillableToBeArray')
+                ->identifier('strata.model.requirePropertyFillableToBeArray')
                 ->line(($default ?? $declaration)->getStartLine())
                 ->build(),
         ];
@@ -543,7 +680,7 @@ class ModelRules implements Rule
 
         return [
             RuleErrorBuilder::message('$fillable must contain only string values.')
-                ->identifier('escore.model.requirePropertyFillableToContainOnlyStrings')
+                ->identifier('strata.model.requirePropertyFillableToContainOnlyStrings')
                 ->line($default->getStartLine())
                 ->build(),
         ];
@@ -599,7 +736,7 @@ class ModelRules implements Rule
             if (in_array($value, $seen, true)) {
                 return [
                     RuleErrorBuilder::message('$fillable must contain unique values. Remove the repeated "'.$value.'" entry.')
-                        ->identifier('escore.model.requirePropertyFillableToHaveUniqueValues')
+                        ->identifier('strata.model.requirePropertyFillableToHaveUniqueValues')
                         ->line($default->getStartLine())
                         ->build(),
                 ];
@@ -628,7 +765,7 @@ class ModelRules implements Rule
 
         return [
             RuleErrorBuilder::message('Model must explicitly declare a $hidden property.')
-                ->identifier('escore.model.requirePropertyHidden')
+                ->identifier('strata.model.requirePropertyHidden')
                 ->line($node->getStartLine())
                 ->build(),
         ];
@@ -656,7 +793,7 @@ class ModelRules implements Rule
 
         return [
             RuleErrorBuilder::message('$hidden must be protected.')
-                ->identifier('escore.model.requirePropertyHiddenToBeProtected')
+                ->identifier('strata.model.requirePropertyHiddenToBeProtected')
                 ->line($property->getStartLine())
                 ->build(),
         ];
@@ -699,7 +836,7 @@ class ModelRules implements Rule
 
         return [
             RuleErrorBuilder::message('$hidden must have an array default.')
-                ->identifier('escore.model.requirePropertyHiddenToBeArray')
+                ->identifier('strata.model.requirePropertyHiddenToBeArray')
                 ->line(($default ?? $declaration)->getStartLine())
                 ->build(),
         ];
@@ -747,7 +884,7 @@ class ModelRules implements Rule
 
         return [
             RuleErrorBuilder::message('$hidden must contain only string values.')
-                ->identifier('escore.model.requirePropertyHiddenToContainOnlyStrings')
+                ->identifier('strata.model.requirePropertyHiddenToContainOnlyStrings')
                 ->line($default->getStartLine())
                 ->build(),
         ];
@@ -803,7 +940,7 @@ class ModelRules implements Rule
             if (in_array($value, $seen, true)) {
                 return [
                     RuleErrorBuilder::message('$hidden must contain unique values. Remove the repeated "'.$value.'" entry.')
-                        ->identifier('escore.model.requirePropertyHiddenToHaveUniqueValues')
+                        ->identifier('strata.model.requirePropertyHiddenToHaveUniqueValues')
                         ->line($default->getStartLine())
                         ->build(),
                 ];
@@ -832,7 +969,7 @@ class ModelRules implements Rule
 
         return [
             RuleErrorBuilder::message('Model must explicitly declare a $casts property.')
-                ->identifier('escore.model.requirePropertyCasts')
+                ->identifier('strata.model.requirePropertyCasts')
                 ->line($node->getStartLine())
                 ->build(),
         ];
@@ -860,7 +997,7 @@ class ModelRules implements Rule
 
         return [
             RuleErrorBuilder::message('$casts must be protected.')
-                ->identifier('escore.model.requirePropertyCastsToBeProtected')
+                ->identifier('strata.model.requirePropertyCastsToBeProtected')
                 ->line($property->getStartLine())
                 ->build(),
         ];
@@ -903,7 +1040,7 @@ class ModelRules implements Rule
 
         return [
             RuleErrorBuilder::message('$casts must have an array default.')
-                ->identifier('escore.model.requirePropertyCastsToBeArray')
+                ->identifier('strata.model.requirePropertyCastsToBeArray')
                 ->line(($default ?? $declaration)->getStartLine())
                 ->build(),
         ];
@@ -951,7 +1088,7 @@ class ModelRules implements Rule
 
         return [
             RuleErrorBuilder::message('$casts must use string attribute names as array keys.')
-                ->identifier('escore.model.requirePropertyCastsToHaveStringKeys')
+                ->identifier('strata.model.requirePropertyCastsToHaveStringKeys')
                 ->line($default->getStartLine())
                 ->build(),
         ];
@@ -982,7 +1119,7 @@ class ModelRules implements Rule
     }
 
     /**
-     * @param class-string $attributeName
+     * @param  class-string  $attributeName
      * @return array{arguments: array<int|string, Expr>, context: InitializerExprContext}|null
      */
     private function classAttribute(ClassReflection $model, string $attributeName): ?array
@@ -1007,7 +1144,7 @@ class ModelRules implements Rule
     }
 
     /**
-     * @param array{arguments: array<int|string, Expr>, context: InitializerExprContext}|null $attribute
+     * @param  array{arguments: array<int|string, Expr>, context: InitializerExprContext}|null  $attribute
      * @return array<int|string, string>|null
      */
     private function attributeColumns(?array $attribute): ?array

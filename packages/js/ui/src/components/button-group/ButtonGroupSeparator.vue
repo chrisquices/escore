@@ -2,8 +2,8 @@
 import type { SeparatorProps } from "reka-ui"
 import type { HTMLAttributes } from "vue"
 import { reactiveOmit } from "@vueuse/core"
-import { cn } from "escore-packages/ui/utils"
-import { Separator } from 'escore-packages/ui/separator'
+import { cn } from "strata-packages/ui/utils"
+import { Separator } from 'strata-packages/ui/separator'
 
 const props = withDefaults(defineProps<SeparatorProps & { class?: HTMLAttributes["class"] }>(), {
   orientation: "vertical",

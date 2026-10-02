@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { HTMLAttributes } from "vue"
-import { cn } from "escore-packages/ui/utils"
-import { Label } from 'escore-packages/ui/label'
+import { cn } from "strata-packages/ui/utils"
+import { Label } from 'strata-packages/ui/label'
 
 const props = defineProps<{
   for: string

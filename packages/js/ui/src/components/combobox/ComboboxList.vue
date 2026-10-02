@@ -3,7 +3,7 @@ import type {ComboboxContentEmits, ComboboxContentProps} from "reka-ui"
 import type {HTMLAttributes} from "vue"
 import {reactiveOmit} from "@vueuse/core"
 import {ComboboxContent, ComboboxPortal, useForwardPropsEmits} from "reka-ui"
-import {cn} from "escore-packages/ui/utils"
+import {cn} from "strata-packages/ui/utils"
 import { Card, CardContent } from '../card';
 
 defineOptions({

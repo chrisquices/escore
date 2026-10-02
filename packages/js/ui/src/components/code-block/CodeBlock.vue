@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { Check, Copy } from "@lucide/vue"
 import { computed, ref } from "vue"
-import { Button } from "escore-packages/ui/button"
-import { Caption } from "escore-packages/ui/caption"
+import { Button } from "strata-packages/ui/button"
+import { Caption } from "strata-packages/ui/caption"
 
 interface Props {
   code: string

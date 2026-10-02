@@ -2,9 +2,9 @@
 import type {HTMLAttributes} from "vue"
 import type {GridItemLabelVariants} from "."
 import {computed} from "vue"
-import {cn} from "escore-packages/ui/utils"
+import {cn} from "strata-packages/ui/utils"
 import {gridItemLabelVariants} from "."
-import {TruncateMiddle} from "escore-packages/ui/truncate-middle"
+import {TruncateMiddle} from "strata-packages/ui/truncate-middle"
 
 type GridItemLabelTruncate = boolean | "middle" | "end"
 

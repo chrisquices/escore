@@ -1,6 +1,6 @@
 <?php
 
-namespace Escore\PHPStan;
+namespace Strata\PHPStan;
 
 use Illuminate\Contracts\Validation\Factory as ValidationFactory;
 use Illuminate\Contracts\Validation\ValidatesWhenResolved;
@@ -191,7 +191,7 @@ class ControllerRules implements Rule
     private function modelUsageError(Node $node): RuleError
     {
         return RuleErrorBuilder::message('Controllers must obtain models or data through services and only pass them along. Move this model reference or operation into a service.')
-            ->identifier('escore.controller.noModelUsage')
+            ->identifier('strata.controller.noModelUsage')
             ->line($node->getStartLine())
             ->build();
     }
@@ -264,7 +264,7 @@ class ControllerRules implements Rule
 
         return [
             RuleErrorBuilder::message("Controllers must delegate Eloquent queries to services. Move this {$methodName}() call into a service.")
-                ->identifier('escore.controller.noEloquentQueries')
+                ->identifier('strata.controller.noEloquentQueries')
                 ->build(),
         ];
     }
@@ -325,7 +325,7 @@ class ControllerRules implements Rule
 
         return [
             RuleErrorBuilder::message("Move request validation into the action's Form Request and read validated input in the controller with validated() or safe().")
-                ->identifier('escore.controller.noRequestValidation')
+                ->identifier('strata.controller.noRequestValidation')
                 ->build(),
         ];
     }
@@ -395,7 +395,7 @@ class ControllerRules implements Rule
                 || $item->getEndLine() >= $props->getEndLine()) {
                 return [
                     RuleErrorBuilder::message('Put each Inertia prop on its own line between the opening and closing array brackets, with the closing bracket on its own line.')
-                        ->identifier('escore.controller.noInlineInertiaProps')
+                        ->identifier('strata.controller.noInlineInertiaProps')
                         ->line($item->getStartLine())
                         ->build(),
                 ];
@@ -429,7 +429,7 @@ class ControllerRules implements Rule
             }
 
             $errors[] = RuleErrorBuilder::message('Inertia prop values in controllers must be plain named variables. Assign this value to a variable before rendering the Inertia response.')
-                ->identifier('escore.controller.noNonVariableInertiaProps')
+                ->identifier('strata.controller.noNonVariableInertiaProps')
                 ->line($item->value->getStartLine())
                 ->build();
         }
@@ -464,7 +464,7 @@ class ControllerRules implements Rule
             }
 
             $errors[] = RuleErrorBuilder::message("Inertia prop \"{$propName}\" must use the matching local variable \${$propName}. Rename or assign to \${$propName} before rendering, preserving the prop key because it is the frontend contract.")
-                ->identifier('escore.controller.noMismatchedInertiaPropNames')
+                ->identifier('strata.controller.noMismatchedInertiaPropNames')
                 ->line($item->value->getStartLine())
                 ->build();
         }
@@ -499,7 +499,7 @@ class ControllerRules implements Rule
                     array_push($types, ...$type->types);
                 } elseif ($type instanceof Name && $modelType->isSuperTypeOf($scope->resolveTypeByName($type))->yes()) {
                     $errors[] = RuleErrorBuilder::message("Controller action parameter \${$parameter->var->name} must receive a scalar route identifier. Move the Eloquent model lookup to a service.")
-                        ->identifier('escore.controller.noRouteModelBinding')
+                        ->identifier('strata.controller.noRouteModelBinding')
                         ->line($parameter->getStartLine())
                         ->build();
 
@@ -531,7 +531,7 @@ class ControllerRules implements Rule
         }
 
         $error = static fn (string $reason, int $line): RuleError => RuleErrorBuilder::message($reason.' Controller actions must return Symfony\Component\HttpFoundation\Response, Inertia\Response, or Illuminate\Http\Resources\Json\JsonResource (including subclasses and resource collections). Wrap data in an approved response or resource.')
-            ->identifier('escore.controller.allowedReturnTypes')
+            ->identifier('strata.controller.allowedReturnTypes')
             ->line($line)
             ->build();
 
@@ -633,7 +633,7 @@ class ControllerRules implements Rule
 
         return [
             RuleErrorBuilder::message('Controllers must delegate arithmetic operations. Move this calculation into a service or helper.')
-                ->identifier('escore.controller.noArithmeticOperations')
+                ->identifier('strata.controller.noArithmeticOperations')
                 ->line($node->getStartLine())
                 ->build(),
         ];
@@ -651,7 +651,7 @@ class ControllerRules implements Rule
 
         return [
             RuleErrorBuilder::message('Controllers must delegate iteration to a service or helper. Move this loop there and call a single service operation from the controller.')
-                ->identifier('escore.controller.noLoopStatements')
+                ->identifier('strata.controller.noLoopStatements')
                 ->line($node->getStartLine())
                 ->build(),
         ];
@@ -680,7 +680,7 @@ class ControllerRules implements Rule
                 : 'Method calls in controllers must use named arguments. Replace this positional argument with a named argument using the actual declared parameter name.';
 
             $errors[] = RuleErrorBuilder::message($message)
-                ->identifier('escore.controller.noPositionalArguments')
+                ->identifier('strata.controller.noPositionalArguments')
                 ->line($argument->getStartLine())
                 ->build();
         }

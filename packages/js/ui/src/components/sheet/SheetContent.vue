@@ -10,7 +10,7 @@ import {
   useForwardPropsEmits,
 } from "reka-ui"
 import { computed, inject } from "vue"
-import { cn } from "escore-packages/ui/utils"
+import { cn } from "strata-packages/ui/utils"
 import { sheetPortalToKey } from "./context"
 import SheetOverlay from "./SheetOverlay.vue"
 

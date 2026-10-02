@@ -8,11 +8,11 @@ Requires PhpStorm or WebStorm 2026.1 or newer, with the Vue plugin enabled for `
 
 ## Panel
 
-Open **View → Tool Windows → Escore**. It starts as a small floating window; dock or resize it using the IDE's controls.
+Open **View → Tool Windows → Strata**. It starts as a small floating window; dock or resize it using the IDE's controls.
 
 The home panel’s **HTML** buttons collapse or expand all elements, class lists, or ARIA values in the active editor.
 
-Click the cog to open **Settings**. **Collapsible HTML Classes**, **Collapsible HTML Elements**, and **Collapsible HTML ARIA** apply immediately across open projects and are saved for this IDE. Enabling class or ARIA folding collapses all its matching values in open editors. Click **X** to return to the Escore page.
+Click the cog to open **Settings**. **Collapsible HTML Classes**, **Collapsible HTML Elements**, and **Collapsible HTML ARIA** apply immediately across open projects and are saved for this IDE. Enabling class or ARIA folding collapses all its matching values in open editors. Click **X** to return to the Strata page.
 
 ## Build
 

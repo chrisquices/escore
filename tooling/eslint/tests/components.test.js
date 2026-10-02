@@ -27,7 +27,7 @@ import tableRules from '../rules/components/table.js';
 import tooltipRules from '../rules/components/tooltip.js';
 
 // Dependencies belong to the consuming project, as they do in eslint.config.js.
-const projectDirectory = process.env.ESCORE_TEST_PROJECT ?? process.cwd();
+const projectDirectory = process.env.STRATA_TEST_PROJECT ?? process.cwd();
 const projectRequire = createRequire(join(projectDirectory, 'package.json'));
 const {Linter} = projectRequire('eslint');
 const parser = projectRequire('vue-eslint-parser');
@@ -57,8 +57,8 @@ function lint(sourceCode, {rules = emptyRules, only, fix = false} = {}) {
     const config = [{
         files: ['**/*.vue'],
         languageOptions: {parser, ecmaVersion: 'latest', sourceType: 'module'},
-        plugins: {escore: {rules}},
-        rules: Object.fromEntries(enabled.map((name) => [`escore/${name}`, 'error'])),
+        plugins: {strata: {rules}},
+        rules: Object.fromEntries(enabled.map((name) => [`strata/${name}`, 'error'])),
     }];
     const linter = new Linter();
     const result = fix
@@ -86,7 +86,7 @@ test('valid Empty, optional media/content, and unrestricted leaf content', () =>
 test('missing optional parent does not require its children; present parent does', () => {
     const result = lint(empty('\n\n<EmptyContent />'));
     assert.equal(result.messages.length, 1);
-    assert.equal(result.messages[0].ruleId, 'escore/empty-must-follow-structure');
+    assert.equal(result.messages[0].ruleId, 'strata/empty-must-follow-structure');
     assert.equal(result.messages[0].message, 'Add <Button> directly inside <EmptyContent>. Preserve existing content and bindings.');
     assert.equal(lint(empty('\n\n<EmptyContent />'), {fix: true}).fixed, false);
 });
@@ -142,7 +142,7 @@ test('orphaned Alert, Empty, and Accordion children report placement without req
         assert.equal(result.output, sourceCode, 'placement must never invent or move wrappers');
         assert.equal(result.fixed, false);
         assert.deepEqual(result.messages.map(({ruleId, messageId, message}) => ({ruleId, messageId, message})), misplaced.map(([child, parent]) => ({
-            ruleId: `escore/${family}-must-follow-structure`,
+            ruleId: `strata/${family}-must-follow-structure`,
             messageId: 'misplaced',
             message: `Move <${child}> directly inside <${parent}>; currently inside <section>. Preserve its content and bindings.`,
         })));
@@ -236,8 +236,8 @@ test('once-per-file state is isolated between files, lint runs, and component na
         entry('SecondScope', undefined, ['optional', 'once-per-file']),
     ])]);
     const config = [{
-        files: ['**/*.vue'], languageOptions: {parser}, plugins: {escore: {rules}},
-        rules: {'escore/panel-must-follow-structure': 'error'},
+        files: ['**/*.vue'], languageOptions: {parser}, plugins: {strata: {rules}},
+        rules: {'strata/panel-must-follow-structure': 'error'},
     }];
     const linter = new Linter();
     for (const filename of ['Layout.vue', 'Guest.vue', 'Anything.vue', 'Layout.vue']) {
@@ -256,7 +256,7 @@ test('TooltipProvider once-per-file explains shared context and a generic shell 
     const result = lint(markup, {rules: tooltipRules, only, fix: true});
     assert.equal(result.output, markup);
     assert.deepEqual(result.messages.map((message) => message.messageId), ['oncePerFile']);
-    assert.equal(result.messages[0].ruleId, 'escore/tooltipprovider-must-follow-structure');
+    assert.equal(result.messages[0].ruleId, 'strata/tooltipprovider-must-follow-structure');
     assert.equal(result.messages[0].message, 'Use <TooltipProvider> only once per file. Multiple providers create separate tooltip contexts. Consolidate them into one provider, ideally in a top-level shell or layout.');
 });
 
@@ -619,7 +619,7 @@ test('grouped Attachment props are checked once against custom and inherited sou
 </AttachmentGroup>`);
     const result = lint(markup, {rules: attachmentRules});
     assert.deepEqual(result.messages.map((message) => message.messageId), ['propValue', 'propValue', 'propValue']);
-    assert.ok(result.messages.every((message) => message.ruleId === 'escore/attachment-must-have-valid-props'));
+    assert.ok(result.messages.every((message) => message.ruleId === 'strata/attachment-must-have-valid-props'));
     assert.match(result.messages[0].message, /Set state on <Attachment>/);
     assert.match(result.messages[1].message, /Set variant on <AttachmentMedia>/);
     assert.match(result.messages[2].message, /Set size on <AttachmentAction>/);
@@ -636,7 +636,7 @@ test('BubbleGroup validates its own props without reporting nested Bubble props 
     const result = lint(markup, {rules: bubbleRules, only: ['bubblegroup-must-have-valid-props', 'bubble-must-have-valid-props']});
     assert.equal(result.messages.length, 7);
     assert.ok(result.messages.every((message) => message.messageId === 'propValue'));
-    assert.equal(result.messages.filter((message) => message.ruleId === 'escore/bubblegroup-must-have-valid-props').length, 1);
+    assert.equal(result.messages.filter((message) => message.ruleId === 'strata/bubblegroup-must-have-valid-props').length, 1);
     assert.match(result.messages[0].message, /Set as-child on <BubbleGroup> to boolean/);
     assert.equal(new Set(result.messages.map((message) => `${message.line}:${message.column}`)).size, 7);
     assert.throws(() => createComponentRules([entry('Panel')], {propsScope: 'invalid'}), /propsScope must be all, root, or family/);
@@ -658,7 +658,7 @@ test('Button requires content even with a descriptive comment, without inventing
         const sourceCode = template(`<!-- Example of an unlabeled default button. -->\n${markup}`);
         const result = lint(sourceCode, options);
         assert.deepEqual(result.messages.map(({ruleId, messageId, message}) => ({ruleId, messageId, message})), [{
-            ruleId: 'escore/button-must-follow-structure',
+            ruleId: 'strata/button-must-follow-structure',
             messageId: 'empty',
             message: 'Add content inside <Button>: text, an interpolation, or a child element.',
         }]);
@@ -702,7 +702,7 @@ test('ButtonGroup requires a descriptive comment and leaves each Button comment 
     const options = {rules, only: ['buttongroup-must-have-valid-comments', 'button-must-have-valid-comments']};
     const markup = template('<ButtonGroup>\n    <Button>Save</Button>\n    <Button>Cancel</Button>\n</ButtonGroup>');
     const result = lint(markup, {...options, fix: true});
-    assert.deepEqual(result.messages.map((message) => message.ruleId), ['escore/buttongroup-must-have-valid-comments']);
+    assert.deepEqual(result.messages.map((message) => message.ruleId), ['strata/buttongroup-must-have-valid-comments']);
     assert.equal(result.messages[0].messageId, 'commentManual');
     assert.match(result.output, /<!-- Save -->\n    <Button>/);
     assert.match(result.output, /<!-- Cancel -->\n    <Button>/);
@@ -758,8 +758,8 @@ test('ButtonGroup validates family and nested root props once while Button handl
 </ButtonGroup>`), {rules, only: ['buttongroup-must-have-valid-props', 'button-must-have-valid-props']});
     assert.equal(result.messages.length, 6);
     assert.ok(result.messages.every((message) => message.messageId === 'propValue'));
-    assert.equal(result.messages.filter((message) => message.ruleId === 'escore/buttongroup-must-have-valid-props').length, 5);
-    assert.equal(result.messages.filter((message) => message.ruleId === 'escore/button-must-have-valid-props').length, 1);
+    assert.equal(result.messages.filter((message) => message.ruleId === 'strata/buttongroup-must-have-valid-props').length, 5);
+    assert.equal(result.messages.filter((message) => message.ruleId === 'strata/button-must-have-valid-props').length, 1);
 });
 
 test('ButtonGroup comments and text layout apply independently at each nesting level', () => {
@@ -1026,8 +1026,8 @@ test('Empty keeps family prop validation while Button validates its own props on
     const markup = empty('\n\n<EmptyContent><Button variant="invalid" size="giant" loading="yes">Save</Button></EmptyContent>', header().replace('<EmptyHeader>', '<EmptyHeader><EmptyMedia variant="invalid" />'));
     const result = lint(markup, {rules, only: ['empty-must-have-valid-props', 'button-must-have-valid-props']});
     assert.equal(result.messages.length, 4);
-    assert.equal(result.messages.filter((message) => message.ruleId === 'escore/empty-must-have-valid-props').length, 1);
-    assert.equal(result.messages.filter((message) => message.ruleId === 'escore/button-must-have-valid-props').length, 3);
+    assert.equal(result.messages.filter((message) => message.ruleId === 'strata/empty-must-have-valid-props').length, 1);
+    assert.equal(result.messages.filter((message) => message.ruleId === 'strata/button-must-have-valid-props').length, 3);
     assert.ok(result.messages.every((message) => message.messageId === 'propValue'));
 });
 
@@ -1092,7 +1092,7 @@ test('removed Dialog, Drawer, and AlertDialog triggers are forbidden template-wi
                 const markup = template(`<section><${name}${attribute}><button type="button">Open</button></${name}></section>`);
                 const result = lint(markup, {rules, fix: true});
                 assert.equal(result.output, markup);
-                assert.deepEqual(result.messages.map((message) => message.ruleId), [`escore/${root.toLowerCase()}-must-follow-structure`]);
+                assert.deepEqual(result.messages.map((message) => message.ruleId), [`strata/${root.toLowerCase()}-must-follow-structure`]);
                 assert.equal(result.messages[0].messageId, 'forbidden');
                 assert.equal(result.messages[0].message, `Do not use <${name}>. Control <${root}> with v-model:open or :open and @update:open; keep the opener outside <${root}> and preserve its behavior.`);
             }
@@ -1188,7 +1188,7 @@ test('AlertDialog descendants need their declared parents even without the dialo
     const result = lint(markup, {rules: {...alertRules, ...alertDialogRules}, fix: true});
     assert.equal(result.output, markup);
     assert.deepEqual(result.messages.map((message) => message.ruleId), [
-        'escore/alertdialog-must-follow-structure', 'escore/alertdialog-must-follow-structure',
+        'strata/alertdialog-must-follow-structure', 'strata/alertdialog-must-follow-structure',
     ]);
     assert.match(result.messages[0].message, /Move <AlertDialogHeader> directly inside <AlertDialogContent>/);
     assert.match(result.messages[1].message, /Move <AlertDialogAction> directly inside <AlertDialogFooter>/);
@@ -2351,7 +2351,7 @@ test('explicit empty children forbid contents while omitted children allow them'
 
 test('generated rules safely ignore files without a Vue template parser', () => {
     const linter = new Linter();
-    const config = [{plugins: {escore: {rules: emptyRules}}, rules: Object.fromEntries(Object.keys(emptyRules).map((name) => [`escore/${name}`, 'error']))}];
+    const config = [{plugins: {strata: {rules: emptyRules}}, rules: Object.fromEntries(Object.keys(emptyRules).map((name) => [`strata/${name}`, 'error']))}];
     assert.deepEqual(linter.verify('const value = 1;', config), []);
 });
 
@@ -2539,7 +2539,7 @@ test('one-liner fixes the complete EmptyDescription from the supplied example', 
     const sourceCode = empty('', header('No results', '\n    Create a project to collect your work in one place.\n'));
     const expected = empty('', header('No results', 'Create a project to collect your work in one place.'));
     const result = lint(sourceCode);
-    assert.deepEqual(result.messages.map((message) => message.ruleId), ['escore/empty-must-follow-line-layout']);
+    assert.deepEqual(result.messages.map((message) => message.ruleId), ['strata/empty-must-follow-line-layout']);
     assert.equal(fixed(sourceCode), expected);
 });
 
@@ -2654,17 +2654,17 @@ test('the shared configuration enables general rules globally and family rules f
     const configUrl = new URL('../eslint.config.js', import.meta.url).href;
     const output = execFileSync(process.execPath, ['--input-type=module', '-e', `
         const {default: config} = await import(${JSON.stringify(configUrl)});
-        const registered = new Set(config.flatMap((item) => Object.keys(item.plugins?.escore?.rules ?? {})));
-        const enabled = new Set(config.flatMap((item) => Object.keys(item.rules ?? {}).filter((name) => name.startsWith('escore/'))));
+        const registered = new Set(config.flatMap((item) => Object.keys(item.plugins?.strata?.rules ?? {})));
+        const enabled = new Set(config.flatMap((item) => Object.keys(item.rules ?? {}).filter((name) => name.startsWith('strata/'))));
         const generalScope = ['comment-must-have-blank-line-above', 'all-must-not-have-aria-attributes', 'all-must-not-have-title-attribute']
-            .every((name) => config.some((item) => !item.files && item.rules?.['escore/' + name] === 'error'));
-        const componentScope = ['empty', 'accordion', 'alert', 'alertdialog', 'aspectratio', 'attachment', 'attachmentgroup', 'avatar', 'badge', 'breadcrumb', 'bubble', 'bubblegroup', 'button', 'buttongroup', 'calendar', 'caption', 'card', 'checkbox'].every((family) => config.some((item) => item.files?.includes('**/*.vue') && item.rules?.['escore/' + family + '-must-follow-structure'] === 'error'));
+            .every((name) => config.some((item) => !item.files && item.rules?.['strata/' + name] === 'error'));
+        const componentScope = ['empty', 'accordion', 'alert', 'alertdialog', 'aspectratio', 'attachment', 'attachmentgroup', 'avatar', 'badge', 'breadcrumb', 'bubble', 'bubblegroup', 'button', 'buttongroup', 'calendar', 'caption', 'card', 'checkbox'].every((family) => config.some((item) => item.files?.includes('**/*.vue') && item.rules?.['strata/' + family + '-must-follow-structure'] === 'error'));
         console.log(JSON.stringify({registered: [...registered].sort(), enabled: [...enabled].sort(), generalScope, componentScope}));
     `], {cwd: projectDirectory, encoding: 'utf8'});
     const result = JSON.parse(output);
     const expected = [...Object.keys(emptyRules), ...Object.keys(accordionRules), ...Object.keys(alertRules), ...Object.keys(alertDialogRules), ...Object.keys(aspectRatioRules), ...Object.keys(attachmentRules), ...Object.keys(avatarRules), ...Object.keys(badgeRules), ...Object.keys(breadcrumbRules), ...Object.keys(bubbleRules), ...Object.keys(buttonRules), ...Object.keys(buttonGroupRules), ...Object.keys(calendarRules), ...Object.keys(captionRules), ...Object.keys(cardRules), ...Object.keys(checkboxRules), 'comment-must-have-blank-line-above', 'all-must-not-have-aria-attributes', 'all-must-not-have-title-attribute'].sort();
     assert.deepEqual(result.registered, expected);
-    assert.deepEqual(result.enabled, expected.map((name) => `escore/${name}`));
+    assert.deepEqual(result.enabled, expected.map((name) => `strata/${name}`));
     assert.equal(result.generalScope, true);
     assert.equal(result.componentScope, true);
 });

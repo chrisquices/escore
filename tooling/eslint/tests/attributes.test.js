@@ -5,7 +5,7 @@ import test from 'node:test';
 import createComponentRules from '../helpers/create-component-rules.js';
 import radioGroupRules from '../rules/components/radio-group.js';
 
-const projectRequire = createRequire(join(process.env.ESCORE_TEST_PROJECT ?? process.cwd(), 'package.json'));
+const projectRequire = createRequire(join(process.env.STRATA_TEST_PROJECT ?? process.cwd(), 'package.json'));
 const {Linter} = projectRequire('eslint');
 const parser = projectRequire('vue-eslint-parser');
 const tsParser = projectRequire('@typescript-eslint/parser');
@@ -25,9 +25,9 @@ function lint(markup, {rules = optionRules, only, script = ''} = {}) {
     const config = [{
         files: ['**/*.vue'],
         languageOptions: {parser, parserOptions: {parser: tsParser}, ecmaVersion: 'latest', sourceType: 'module'},
-        plugins: {escore: {rules}},
+        plugins: {strata: {rules}},
         rules: Object.fromEntries((only ?? Object.keys(rules).filter((name) => name.endsWith('-must-have-valid-attributes')))
-            .map((name) => [`escore/${name}`, 'error'])),
+            .map((name) => [`strata/${name}`, 'error'])),
     }];
     const input = `${script ? `<script setup lang="ts">${script}</script>\n` : ''}<template>\n${markup}\n</template>`;
     const result = new Linter().verifyAndFix(input, config, {filename: 'attributes.vue'});

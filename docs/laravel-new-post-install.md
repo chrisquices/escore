@@ -1,30 +1,33 @@
 # Laravel New Post-Install
 
-The user creates the application under apps/ using Laravel’s installer and chooses all installer options themselves.
+This guide applies after a brand new Laravel installation, when the user asks the agent to complete setup for a standalone application using a separate local Strata checkout.
 
-This guide applies after installation, when the user asks the agent to complete the remaining workspace setup.
+Apply the dependencies, configurations, and edits below to the existing application. Preserve the user’s installer choices.
 
-Apply the dependencies, configurations, edits, and cleanup below to the existing application. Preserve the user’s installer choices. Do not create or recreate the application or run the Laravel installer.
+Do not create or recreate the application or run the Laravel installer.
 
 Merge configuration examples into existing files, preserving other entries. Apply conditional sections only when the application uses the relevant technology.
 
-## Package identity
+Examples assume this sibling layout:
 
-Give the application a unique workspace package name in its `package.json`:
-
-```json
-{
-  "name": "@workspace/example",
-  "private": true
-}
+```text
+parent/
+├── application/
+└── strata/
+    ├── tooling/
+    └── packages/js/
 ```
+
+Run commands from the application root. Paths such as `../strata/tooling/` refer to the separate Strata checkout; adjust them if it lives elsewhere. The `npm --prefix` command below explicitly targets Strata’s JavaScript package directory.
+
+Examples use npm. If the application already uses another package manager, translate the commands and preserve its existing lockfile and package manager choice.
 
 ## Vue Icons
 
-For a Vue application, install Lucide as an application dependency. Run from the application directory:
+For a Vue application, install Lucide as an application dependency.
 
 ```sh
-pnpm add @lucide/vue
+npm add @lucide/vue
 ```
 
 ## Vue Quality Tools
@@ -32,7 +35,7 @@ pnpm add @lucide/vue
 For a Vue application, install the dependencies required by the shared ESLint configuration and TypeScript checks:
 
 ```sh
-pnpm add --save-dev eslint @stylistic/eslint-plugin @vue/eslint-config-typescript eslint-import-resolver-typescript eslint-plugin-import eslint-plugin-vue typescript typescript-eslint vue-tsc
+npm install --save-dev eslint @stylistic/eslint-plugin @vue/eslint-config-typescript eslint-import-resolver-typescript eslint-plugin-import-x eslint-plugin-vue typescript typescript-eslint vue-tsc
 ```
 
 Point the application's package scripts at the shared configurations:
@@ -40,15 +43,16 @@ Point the application's package scripts at the shared configurations:
 ```json
 {
   "scripts": {
-    "lint:check": "eslint --config ../../tooling/eslint/eslint.config.js .",
-    "lint:fix": "eslint --config ../../tooling/eslint/eslint.config.js . --fix",
+    "lint:check": "eslint --config ../strata/tooling/eslint/eslint.config.js .",
+    "lint:fix": "eslint --config ../strata/tooling/eslint/eslint.config.js . --fix",
     "types:check": "vue-tsc --noEmit",
-    "quality:check": "pnpm run lint:check && pnpm run types:check"
+    "quality:check": "npm run lint:check && npm run types:check",
+    "quality:fix": "npm run lint:fix"
   }
 }
 ```
 
-## PHP quality tools
+## PHP Quality Tools
 
 Install the tools in the application:
 
@@ -56,119 +60,112 @@ Install the tools in the application:
 composer require --dev deptrac/deptrac larastan/larastan laravel/pint rector/rector
 ```
 
+For applications using Pest, also install its PHPStan plugin so PHPStan can analyze Pest tests:
+
+```sh
+composer require --dev pestphp/pest-plugin-phpstan
+```
+
+The shared PHPStan configuration loads this extension when it is installed.
+
 Point the application's Composer scripts at the shared configurations:
 
 ```json
 {
   "scripts": {
     "lint": [
-      "pint --config=../../tooling/pint/pint.json"
+      "pint --config=../strata/tooling/pint/pint.json"
     ],
     "lint:check": [
-      "pint --config=../../tooling/pint/pint.json --test"
+      "pint --config=../strata/tooling/pint/pint.json --test"
     ],
     "architecture:check": [
-      "deptrac analyse --config-file=../../tooling/deptrac/deptrac.php"
+      "deptrac analyse --config-file=../strata/tooling/deptrac/deptrac.php"
+    ],
+    "refactor": [
+      "rector process --config=../strata/tooling/rector/rector.php"
     ],
     "refactor:check": [
-      "rector process --config=../../tooling/rector/rector.php --dry-run"
+      "rector process --config=../strata/tooling/rector/rector.php --dry-run"
     ],
     "types:check": [
-      "phpstan analyse --configuration=../../tooling/phpstan/phpstan.neon.php"
+      "phpstan analyse --configuration=../strata/tooling/phpstan/phpstan.neon.php"
+    ],
+    "quality:check": [
+      "@lint:check",
+      "@types:check",
+      "@refactor:check",
+      "@architecture:check",
+      "npm run quality:check"
+    ],
+    "quality:fix": [
+      "@refactor",
+      "@lint",
+      "npm run quality:fix"
     ]
   }
 }
 ```
 
-## TypeScript Config
+The Composer quality scripts use the npm quality scripts from the Vue section above. For applications without Vue, omit those npm entries. Run `composer quality:check` to check PHP and Vue code, or `composer quality:fix` to apply the supported fixes. Type and architecture checks do not have automatic fixes.
 
-The application's `tsconfig.json` can inherit the workspace defaults while retaining its app-specific paths and included files:
+## Local Strata Packages
 
-```json
-{
-  "extends": "../../tsconfig.base.json",
-  "compilerOptions": {
-    "paths": {
-      "@/*": ["./resources/js/*"]
-    },
-    "types": ["vite/client"]
-  },
-  "include": [
-    "resources/js/**/*.ts",
-    "resources/js/**/*.d.ts",
-    "resources/js/**/*.tsx",
-    "resources/js/**/*.vue"
-  ]
-}
-```
-
-## Workspace Packages
-
-Add only the workspace packages the application uses:
+For applications using Strata’s Vue components or other JavaScript exports, add the local package to the application’s dependencies:
 
 ```json
 {
   "dependencies": {
-    "@workspace/date": "workspace:*",
-    "@workspace/ui": "workspace:*",
-    "@workspace/inertia-plus": "workspace:*"
+    "strata-packages": "file:../strata/packages/js"
   }
 }
 ```
 
-Run `pnpm install` from the workspace root after adding the application or changing workspace dependencies.
+From the application root, install the external package’s dependencies and link its sources into the application:
 
-## App-local files
+```sh
+npm --prefix ../strata/packages/js install --ignore-scripts
+npm install --install-links=false --ignore-scripts
+```
 
-Keep these files inside each Laravel application:
+The first command installs dependencies inside Strata’s JavaScript package directory. The second links the local `file:` dependency so the application uses that checkout’s sources.
 
-- `.env` and `.env.example`
-- `composer.json` and `composer.lock`
-- `package.json`
-- `phpunit.xml`
-- `tsconfig.json`
-- `vite.config.ts`
-- Laravel Boost and agent MCP configuration generated for that application
+Follow [Setting Up Strata Packages](../skills/using-strata/references/setting-up-strata-packages.md) for the remaining Vite configuration, source access, dependency deduplication, and styles setup.
 
 ## Laravel Boost
 
-If the application uses Laravel Boost, install it in the application, then generate `config/boost.php` by running this command from the application directory. Do not create the config file manually.
+If the application uses Laravel Boost and it is not already installed, install it in the application:
+
+```sh
+composer require --dev laravel/boost
+```
+
+Publish `config/boost.php` before running the installer. Do not create the config file manually:
 
 ```sh
 php artisan vendor:publish --tag=boost-config
 ```
 
-Add the following `agents` entry to the array returned by `config/boost.php`:
+Preserve existing application-specific configuration unless a migration requires changes. In the published `config/boost.php`, add or merge these entries under `agents` so Boost writes agent guidelines to Strata’s shared guidelines file:
 
 ```php
 'agents' => [
     'codex' => [
-        'guidelines_path' => base_path('../../docs/laravel-boost.md'),
+        'guidelines_path' => base_path('../strata/docs/laravel-boost-guidelines.md'),
     ],
     'claude_code' => [
-        'guidelines_path' => base_path('../../docs/laravel-boost.md'),
+        'guidelines_path' => base_path('../strata/docs/laravel-boost-guidelines.md'),
     ],
     'cursor' => [
-        'guidelines_path' => base_path('../../docs/laravel-boost.md'),
+        'guidelines_path' => base_path('../strata/docs/laravel-boost-guidelines.md'),
     ],
 ],
 ```
+
+This path follows the sibling layout above; adjust it to the actual Strata checkout location. Keep MCP configuration and skills application-local.
 
 Then run:
 
 ```sh
 php artisan boost:install
 ```
-
-## Generated file cleanup
-
-After creating the application and running any setup generators, delete these files from the application root if present:
-
-- `AGENTS.md` and `CLAUDE.md` (including lowercase `agents.md` and `claude.md` variants)
-- `.editorconfig`
-- `.gitattributes`
-- `.gitignore`
-- `.npmrc`
-- `.phpunit.result.cache`
-
-New Laravel applications must not retain these files, even when they are automatically generated. Delete them again if a later setup or test command recreates them.

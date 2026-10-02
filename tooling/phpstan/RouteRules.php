@@ -1,6 +1,6 @@
 <?php
 
-namespace Escore\PHPStan;
+namespace Strata\PHPStan;
 
 use Illuminate\Routing\RouteRegistrar;
 use Illuminate\Routing\Router;
@@ -600,7 +600,7 @@ class RouteRules implements Rule
     private function error(Node $node, string $method, string $message): RuleError
     {
         return RuleErrorBuilder::message($message)
-            ->identifier('escore.route.'.$method)
+            ->identifier('strata.route.'.$method)
             ->line($node->getStartLine())
             ->build();
     }

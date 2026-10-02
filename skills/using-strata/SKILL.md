@@ -1,0 +1,28 @@
+---
+name: using-strata
+description: "Use when setting up Strata, working on Strata's ESLint tooling, or developing Vue/Inertia features in projects using strata-packages. Covers shared packages, tooling, reactive state, forms, reloads, and toast feedback."
+---
+
+## Required Docs
+
+- None
+
+## Instructions
+
+Read and apply only the files relevant to the current task in hand, do not read all of them.
+
+- If the current task involves setting up Strata Packages (`strata-packages`) in a project:
+    - Read and apply [Setting Up Strata Packages](references/setting-up-strata-packages.md) completely.
+
+- If the current task involves setting up Strata Tooling in a project:
+    - Read and apply [Setting Up Strata Tooling](references/setting-up-strata-tooling.md) completely.
+
+- If the current task involves adding, editing, refactoring, or reading Strata's ESLint tooling files (`tooling/eslint/`) to work on the tooling itself:
+    - Read and apply [ESLint](references/tooling/eslint.md) completely.
+
+- If the current task involves building or editing UI using Strata components:
+    - Read and apply the relevant `<family>.js` under [Component Families](../../tooling/eslint/rules/components/) when present. This does not require loading the ESLint tooling reference or unrelated families.
+
+- If the current task involves implementing reactive state, Inertia forms, reload actions, or toast feedback in a Vue/Inertia project using
+  `strata-packages`:
+    - Read and apply [Using Inertia Plus](references/packages/using-inertia-plus.md) completely.

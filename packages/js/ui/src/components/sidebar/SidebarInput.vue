@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { HTMLAttributes } from "vue"
-import { cn } from "escore-packages/ui/utils"
-import { Input } from 'escore-packages/ui/input'
+import { cn } from "strata-packages/ui/utils"
+import { Input } from 'strata-packages/ui/input'
 
 const props = defineProps<{
   class?: HTMLAttributes["class"]

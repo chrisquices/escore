@@ -5,7 +5,7 @@ import { reactiveOmit } from "@vueuse/core"
 import {
   ContextMenuSeparator,
 } from "reka-ui"
-import { cn } from "escore-packages/ui/utils"
+import { cn } from "strata-packages/ui/utils"
 
 const props = defineProps<ContextMenuSeparatorProps & { class?: HTMLAttributes["class"] }>()
 

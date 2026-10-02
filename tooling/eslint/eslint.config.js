@@ -30,7 +30,7 @@ for (const file of componentFiles) {
     }
 }
 
-const escore = {rules: {...generalRules, ...componentRules}};
+const strata = {rules: {...generalRules, ...componentRules}};
 
 const projectDirectory = process.cwd();
 
@@ -97,7 +97,7 @@ export default defineConfigWithVueTs(
     {
         plugins: {
             'import-x': importPlugin,
-            escore
+            strata
         },
         settings: {
             'import-x/resolver-next': [
@@ -109,7 +109,7 @@ export default defineConfigWithVueTs(
             ]
         },
         rules: {
-            ...Object.fromEntries(Object.keys(generalRules).map((name) => [`escore/${name}`, 'error'])),
+            ...Object.fromEntries(Object.keys(generalRules).map((name) => [`strata/${name}`, 'error'])),
             'vue/multi-word-component-names': 'off',
             '@typescript-eslint/no-explicit-any': 'off',
             '@typescript-eslint/no-unused-expressions': ['error', {allowTernary: true}],
@@ -136,9 +136,9 @@ export default defineConfigWithVueTs(
     {
         files: ['**/*.vue'],
         plugins: {
-            escore
+            strata
         },
-        rules: Object.fromEntries(Object.keys(componentRules).map((name) => [`escore/${name}`, 'error']))
+        rules: Object.fromEntries(Object.keys(componentRules).map((name) => [`strata/${name}`, 'error']))
     },
     {
         plugins: {
