@@ -11,11 +11,8 @@ description: "Use when setting up Strata, working on Strata's ESLint tooling, or
 
 Read and apply only the files relevant to the current task in hand, do not read all of them.
 
-- If the current task involves setting up Strata Packages (`strata-packages`) in a project:
-    - Read and apply [Setting Up Strata Packages](references/setting-up-strata-packages.md) completely.
-
-- If the current task involves setting up Strata Tooling in a project:
-    - Read and apply [Setting Up Strata Tooling](references/setting-up-strata-tooling.md) completely.
+- If the current task involves setting up Strata (Strata Packages, Strata Tooling, or any other Strata-related flow):
+    - Read and apply [Setting Up Strata](references/setting-up-strata.md) completely.
 
 - If the current task involves adding, editing, refactoring, or reading Strata's ESLint tooling files (`tooling/eslint/`) to work on the tooling itself:
     - Read and apply [ESLint](references/tooling/eslint.md) completely.

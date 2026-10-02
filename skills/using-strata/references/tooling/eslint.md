@@ -4,19 +4,20 @@ Shared tooling lives in `tooling/eslint`. Dependencies and quality commands belo
 
 ## Naming
 
-Use kebab-case: **prefix → thing → subject → detail**, where applicable.
+Use kebab-case rule IDs: `<subject>-must-<requirement>` or `<subject>-must-not-<prohibition>`.
 
-| Prefix | Use when | Example |
-| --- | --- | --- |
-| `require` | Something must exist or be used. | `require-attribute-input-type.js` |
-| `enforce` | Something must follow a specific format, order, or structure. | `enforce-attribute-order-dialog.js` |
-| `forbid` | Something must not be used or occur. | `forbid-one-liner-button.js` |
+Examples:
 
-Keep the thing before the subject: `require-comment-alert.js`, `enforce-one-liner-dialog-description.js`. These are the only prefixes for new rules.
+- `comment-must-have-blank-line-above`
+- `all-must-not-have-aria-attributes`
+- `button-must-have-valid-props`
+- `button-must-follow-structure`
 
-Prefixes describe intent. Severity (`warn`/`error`) and autofix support are separate decisions; none of these prefixes guarantees an autofix.
+Standalone filenames match their rule IDs. Component-family files use the family name, such as `button.js`, and export separate rule IDs.
 
-For component relationship rule IDs, use `require-<parent>-to-directly-have-<child>` for immediate children, or `to-have` for descendants at any depth. Keep each component name together, without internal hyphens.
+Component relationships belong to `<family>-must-follow-structure`.
+
+Severity (`warn`/`error`) and autofix support are separate decisions.
 
 ## Structure
 
@@ -26,45 +27,25 @@ Paths below are relative to `tooling/eslint`.
 | --- | --- |
 | `eslint.config.js` | Entry point for loading, registering, and configuring shared ESLint tooling. Keep rule implementations out of it. |
 | `helpers/` | Reusable logic shared by rule implementations. |
-| `rules/general/` | Rules spanning multiple code contexts or governing a file as a whole. |
-| `rules/script/` | Rules applying only inside Vue `<script>` and `<script setup>` sections. |
-| `rules/packages/` | Rules governing the use of specific packages and their APIs. |
+| `rules/general/` | Standalone rules that apply across component families or to the file as a whole. |
 | `rules/components/<family>.js` | A component family's structure and independent Vue template rules in one file. |
-| `rules/template/` | Rules applying only inside Vue `<template>` sections, grouped by concern. |
 | `tests/` | Validation of rule behavior and autofix correctness. |
-
-Within `rules/template/`:
-
-| Folder | Purpose |
-| --- | --- |
-| `element-attributes/` | Attribute presence, values, and permitted usage. |
-| `element-attributes-order/` | Ordering of attributes within an element's opening tag. |
-| `element-attributes-layout/` | Layout and formatting of attributes within an opening tag. |
-| `element-comments/` | Requirements and conventions for comments associated with elements. |
-| `element-native/` | Rules governing the use of native HTML elements. |
-| `element-one-liners/` | Whether an element and its content stay on one line or wrap across lines. |
-| `element-placement/` | Structural placement and nesting of elements within a template. |
-| `element-spacing/` | Whitespace and separation around elements. |
-| `element-association/` | Required relationships and consistency between related elements. |
-| `element-icons/` | Rules governing icons used within elements. |
-| `element-event-handlers/` | Rules governing event handlers declared on template elements. |
 
 ### Component families
 
-Each `rules/components/<family>.js` contains the family's structure definition and separately named rules. Keep required existence, allowed structure, and spacing independent; shared helpers implement the checks and fixes.
+Each `rules/components/<family>.js` contains the family's structure definition and separately named rules. Required children, allowed children, nesting, and child order belong to the structure rule. Keep spacing checks separate; shared helpers implement the checks and fixes.
 
-Component prop checks read the consuming project's TypeScript config from `settings.strata.componentTsconfig`.
+Component prop checks use Strata's `packages/js/ui/tsconfig.json` by default. Set `settings.strata.componentTsconfig` to override that path.
 
 ## Before creating a rule
 
 Discuss new rules with the user before implementing them. Present each proposal in exactly this format, replacing the example content with the proposed rule:
 
 ```markdown
-**`forbid-native-button.js`**
+**`native-button-must-not-be-used.js`**
 
-- **Folder:** `tooling/eslint/rules/template/element-native/`
+- **Folder:** `tooling/eslint/rules/general/`
 - **Behavior:** Flag every native `<button>` in Vue templates. Require the UI kit’s `<Button>`.
-- **Prefix:** `forbid` because it bans an element.
 - **Report-only:** Replacing it requires choosing appropriate component props and imports.
 
 Violation message:
@@ -78,9 +59,9 @@ Implement after approval. Honor approval already given for the agreed behavior; 
 
 ## Adding a rule
 
-1. Keep rules atomic. Component-family rules share `rules/components/<family>.js`; otherwise create one file per rule. Keep attribute existence, order, and layout separate. Package rules stay flat inside `rules/packages/<package>/`, without script/template subfolders; shared helpers belong in `helpers/`.
-2. Reuse the corresponding helper. Component-specific files supply targets and conditions; shared behavior belongs in the helper. All one-liner rules use the shared one-liner foundations.
-3. Import and register rules in `eslint.config.js`, then enable `strata/<rule-id>` in the appropriate file scope. Use the filename stem as the ID for standalone rules; family files export a map of separate rule IDs. Creating or registering a file alone does not enable it.
+1. Keep rules atomic. Component-family rules share `rules/components/<family>.js`; otherwise create one file per rule in `rules/general/`. Keep attribute existence, order, and layout separate; shared helpers belong in `helpers/`.
+2. Reuse the corresponding helper. Component-specific files supply targets and conditions; shared behavior belongs in the helper. Component layout checks use `helpers/component-layout.js`.
+3. For standalone rules, import the rule into `eslint.config.js` and add it to `generalRules`, using its filename stem as the ID. All entries are automatically enabled. Component-family files in `rules/components/` are automatically loaded, and their exported rule IDs are automatically enabled for Vue files.
 4. Write an actionable violation message: identify what failed, the expected result, and how to repair it. Include actual/expected values when useful; descriptions alone are not enough.
 
 ## Rule boundaries and fixes
