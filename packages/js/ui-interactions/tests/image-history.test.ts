@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {createFixture, addTestLayer, createOperation, modifiers} from './helpers/image.js';
+import {createFixture, addTestLayer, createOperation, modifiers} from './helpers/image.ts';
 
 test("global undo/redo restores document state without restoring view navigation", function (t) {
     const f = createFixture(t);

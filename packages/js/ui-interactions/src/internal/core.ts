@@ -1,15 +1,12 @@
-// core.js
+
+
+// core.ts
 // Shared primitives every engine (video, dropzone, …) is built on. No shared module-level mutable
 // state lives here — factories may keep per-instance state in their own closures.
 
 // Invoke a consumer-supplied callback in isolation: one that throws can't abort an in-progress
 // update or starve the other subscribers. The error surfaces to the console rather than vanishing.
-/**
- * @template T
- * @param {(argument: T) => unknown} callback
- * @param {T} argument
- */
-export function callConsumer(callback, argument) {
+export function callConsumer<T>(callback: (argument: T) => unknown, argument: T) {
     try {
         callback(argument);
     } catch (error) {
@@ -18,12 +15,7 @@ export function callConsumer(callback, argument) {
 }
 
 // Per-instance state delivery, immediate or coalesced into one animation frame. Callers signal changes.
-/**
- * @template T, F
- * @param {() => T} getState
- * @param {{ requestFrame?: (callback: () => void) => F, cancelFrame?: (frame: F) => void }} [config={}]
- */
-export function createNotifier(getState, config = {}) {
+export function createNotifier<T, F>(getState: () => T, config: {requestFrame?: (callback: () => void) => F, cancelFrame?: (frame: F) => void} = {}) {
     if (typeof getState !== "function") {
         throw new TypeError("createNotifier: 'getState' must be a function.");
     }
@@ -42,18 +34,14 @@ export function createNotifier(getState, config = {}) {
         throw new TypeError("createNotifier: the 'cancelFrame' option must be a function when provided.");
     }
 
-    const listeners = new Set();
+    const listeners = new Set<(state: T) => unknown>();
 
     let destroyed = false;
     let revision = 0;
     let emittedRevision = -1;
-    /** @type {F | null} */
-    let frame = null;
+    let frame: F | null = null;
 
-    /**
-     * @param {(state: T) => unknown} listener
-     */
-    function subscribe(listener) {
+    function subscribe(listener: (state: T) => unknown) {
         if (typeof listener !== "function") {
             throw new TypeError("createNotifier: 'listener' must be a function.");
         }
@@ -135,16 +123,8 @@ export function createNotifier(getState, config = {}) {
 
 // Per-instance fire-and-forget error reporter, shared by every engine: fires {id, message, metadata} at the consumer's onError.
 // The engine stores nothing — keeping, toasting, or ignoring an error is entirely the consumer's job.
-/**
- * @param {((error: { id: string, message: string, metadata: unknown }) => void) | null | undefined} onError
- */
-export function createErrorReporter(onError) {
-    /**
-     * @param {string} id
-     * @param {string} text
-     * @param {unknown} [metadata=null]
-     */
-    return function reportError(id, text, metadata = null) {
+export function createErrorReporter<TMetadata = unknown>(onError: ((error: {id: string, message: string, metadata: TMetadata | null}) => void) | null | undefined) {
+    return function reportError(id: string, text: string, metadata: TMetadata | null = null) {
         if (onError) {
             callConsumer(onError, {id: id, message: text, metadata: metadata});
         }

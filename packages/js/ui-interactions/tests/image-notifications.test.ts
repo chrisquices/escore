@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {createImage} from '../src/image.js';
-import {createFixture, addTestLayer, createOperation, modifiers, validateFrozen, validatePoint} from './helpers/image.js';
+import {createImage} from '../src/image.ts';
+import {createFixture, addTestLayer, createOperation, modifiers, validateFrozen, validatePoint} from './helpers/image.ts';
 
 const changes = [
     ["canvas size", function (f) { f.engine.setCanvasSize(600, 400); }],

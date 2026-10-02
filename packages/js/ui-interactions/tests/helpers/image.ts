@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
-import {createImage} from '../../src/image.js';
+import {createImage} from 'strata-packages/ui-interactions/image';
 
 const require = createRequire(import.meta.url);
 const {createCanvas} = require("@napi-rs/canvas");

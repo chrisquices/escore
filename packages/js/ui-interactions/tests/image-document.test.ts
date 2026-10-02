@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {createFixture, addTestLayer, createOperation, modifiers, validatePoint} from './helpers/image.js';
+import {createFixture, addTestLayer, createOperation, modifiers, validatePoint} from './helpers/image.ts';
 
 test("canvas dimensions, source resolution and viewport size remain independent", function (t) {
     const f = createFixture(t, {canvasWidth: 1080, canvasHeight: 1920});

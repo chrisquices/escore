@@ -1,6 +1,43 @@
-import {callConsumer, createErrorReporter} from './internal/core.js';
+import {callConsumer, createErrorReporter} from 'strata-packages/ui-interactions/internal/core';
 
-export function createDroppable(config = {}) {
+export interface DroppablePoint {
+    x: number
+    y: number
+}
+
+export interface DroppableState<TPayload = unknown, TTarget = unknown> {
+    dragging: boolean
+    payload: TPayload | null
+    point: DroppablePoint | null
+    origin: DroppablePoint | null
+    activeTarget: TTarget | null
+    canDropHere: boolean
+}
+
+export interface DroppableError {
+    id: string
+    message: string
+    metadata: unknown
+}
+
+export interface DroppableConfig<TPayload = unknown, TTarget = unknown> {
+    onChange?: (state: DroppableState<TPayload, TTarget>) => void
+    onError?: (error: DroppableError) => void
+    onDrop?: (payload: TPayload, target: TTarget) => void
+    container: HTMLElement
+    getPayload?: (event: PointerEvent) => TPayload | null | undefined
+    canDrop?: (payload: TPayload, target: TTarget) => boolean
+    dragThreshold?: number
+}
+
+export interface DroppableEngine<TPayload = unknown, TTarget = unknown> {
+    getState(): DroppableState<TPayload, TTarget>
+    subscribe(listener: (state: DroppableState<TPayload, TTarget>) => void): () => void
+    registerTarget(element: HTMLElement, data: TTarget): () => void
+    destroy(): void
+}
+
+export function createDroppable<TPayload = unknown, TTarget = unknown>(config: DroppableConfig<TPayload, TTarget>): DroppableEngine<TPayload, TTarget> {
     if (!config || typeof config !== "object") {
         throw new TypeError("createDroppable: 'config' must be an options object.");
     }
@@ -9,8 +46,8 @@ export function createDroppable(config = {}) {
     const {
         onChange, onError, onDrop,
         container,
-        getPayload = function () { return null; },
-        canDrop = function () { return true; },
+        getPayload = function () {return null;},
+        canDrop = function () {return true;},
         dragThreshold = 4
     } = config;
 
@@ -73,14 +110,14 @@ export function createDroppable(config = {}) {
     // endregion
 
     // region ===== Event Listeners ====================================================================================
-    const listeners = new Set(); // change subscribers — each gets the full state on every change
-    const cleanups = []; // teardown functions, collected so everything can be undone at once
+    const listeners = new Set<(state: DroppableState<TPayload, TTarget>) => void>(); // change subscribers — each gets the full state on every change
+    const cleanups: (() => void)[] = []; // teardown functions, collected so everything can be undone at once
 
-    function registerEventListener(target, type, handler, options) {
-        target.addEventListener(type, handler, options);
+    function registerEventListener<K extends keyof HTMLElementEventMap>(target: EventTarget, type: K, handler: (event: HTMLElementEventMap[K]) => void, options?: AddEventListenerOptions) {
+        target.addEventListener(type, handler as EventListener, options);
 
         cleanups.push(function () {
-            target.removeEventListener(type, handler, options); // detach the exact listener that was registered
+            target.removeEventListener(type, handler as EventListener, options); // detach the exact listener that was registered
         });
     }
 
@@ -103,15 +140,15 @@ export function createDroppable(config = {}) {
 
     // region ===== State ==============================================================================================
     let dragging = false; // true once a press has moved past the threshold
-    let payload = null; // the opaque thing being dragged (from getPayload), or null
-    let point = null; // {x, y} current pointer in client coords, for the ghost
-    let origin = null; // {x, y} where the drag started, in client coords
-    let activeTarget = null; // the zone data currently under the pointer, or null
+    let payload: TPayload | null = null; // the opaque thing being dragged (from getPayload), or null
+    let point: DroppablePoint | null = null; // {x, y} current pointer in client coords, for the ghost
+    let origin: {x: number; y: number} | null = null; // {x, y} where the drag started, in client coords
+    let activeTarget: TTarget | null = null; // the zone data currently under the pointer, or null
     let canDropHere = false; // whether activeTarget accepts the payload (the canDrop result)
     let lastStateSignature = ""; // last emitted state fingerprint, used to avoid duplicate echoes
 
     // Subscribe to changes. The listener gets state on every change (not immediately — read getState() for the first paint). Returns an unsubscribe function.
-    function subscribe(listener) {
+    function subscribe(listener: (state: DroppableState<TPayload, TTarget>) => void): () => void {
         if (destroyed) return function unsubscribe() {};
 
         listeners.add(listener);
@@ -135,7 +172,7 @@ export function createDroppable(config = {}) {
         }
     }
 
-    function getState() {
+    function getState(): DroppableState<TPayload, TTarget> {
         return {
             dragging: dragging,
             payload: payload,
@@ -149,10 +186,10 @@ export function createDroppable(config = {}) {
     // endregion
 
     // region ===== Targets ============================================================================================
-    const targets = new Map(); // registered drop zones, element → opaque data
+    const targets = new Map<HTMLElement, TTarget>(); // registered drop zones, element → opaque data
 
     // Register a drop zone. Returns an unregister function (like subscribe). The data rides in getState() + onDrop.
-    function registerTarget(element, data) {
+    function registerTarget(element: HTMLElement, data: TTarget): () => void {
         if (destroyed) return function unregister() {};
         if (!element || typeof element.getBoundingClientRect !== "function") {
             throw new TypeError("registerTarget: 'element' must be a DOM element.");
@@ -169,7 +206,7 @@ export function createDroppable(config = {}) {
 
     // region ===== Hit-Testing ========================================================================================
     // The drop zone under a point — the smallest-area match, so nested zones resolve to the innermost. Null if none.
-    function findTargetAtPoint(clientX, clientY) {
+    function findTargetAtPoint(clientX: number, clientY: number) {
         let bestEntry = null;
         let bestArea = Infinity;
         for (const [element, data] of targets) {
@@ -190,14 +227,14 @@ export function createDroppable(config = {}) {
     // endregion
 
     // region ===== Drag Gesture =======================================================================================
-    let activePointerId = null; // the pointer we're tracking through the gesture
+    let activePointerId: number | null = null; // the pointer we're tracking through the gesture
     let pressStartX = 0; // where the press began (client coords), for the threshold check
     let pressStartY = 0;
-    let pressPayload = null; // payload resolved at pointerdown, held until the drag actually starts
+    let pressPayload: (TPayload & {}) | null = null; // payload resolved at pointerdown, held until the drag actually starts
     let pressed = false; // armed by a payload-bearing pointerdown, but not yet past the threshold
 
     // A payload-bearing press arms the gesture; empty space returns null so selection's marquee can handle it instead.
-    function handlePointerDown(event) {
+    function handlePointerDown(event: PointerEvent) {
         if (destroyed || pressed || dragging) return;
 
         const resolved = getPayload(event);
@@ -210,7 +247,7 @@ export function createDroppable(config = {}) {
         pressPayload = resolved;
     }
 
-    function handlePointerMove(event) {
+    function handlePointerMove(event: PointerEvent) {
         if (destroyed || event.pointerId !== activePointerId) return;
 
         // Below the threshold it's still just a press — leave a plain click alone.
@@ -227,12 +264,12 @@ export function createDroppable(config = {}) {
         // Recompute the zone under the pointer and whether it accepts the payload.
         const entry = findTargetAtPoint(event.clientX, event.clientY);
         activeTarget = entry ? entry.data : null;
-        canDropHere = entry !== null && Boolean(canDrop(payload, entry.data));
+        canDropHere = entry !== null && Boolean(canDrop(payload!, entry.data));
 
         notify();
     }
 
-    function handlePointerUp(event) {
+    function handlePointerUp(event: PointerEvent) {
         if (destroyed || event.pointerId !== activePointerId) return;
 
         const droppedPayload = payload;
@@ -244,11 +281,11 @@ export function createDroppable(config = {}) {
 
         // Fire the action callback in isolation, after state has already settled back to idle.
         if (accepted && onDrop) {
-            callConsumer(function () { onDrop(droppedPayload, droppedTarget); });
+            callConsumer(function () {onDrop(droppedPayload!, droppedTarget!);}, undefined);
         }
     }
 
-    function handlePointerCancel(event) {
+    function handlePointerCancel(event: PointerEvent) {
         if (destroyed || event.pointerId !== activePointerId) return;
 
         resetDrag();
@@ -262,7 +299,7 @@ export function createDroppable(config = {}) {
         payload = pressPayload;
         origin = {x: pressStartX, y: pressStartY};
 
-        if (container.setPointerCapture) container.setPointerCapture(activePointerId);
+        if (container.setPointerCapture) container.setPointerCapture(activePointerId!);
     }
 
     // Release the pointer and wipe every drag field back to idle.
@@ -287,7 +324,7 @@ export function createDroppable(config = {}) {
     // endregion
 
     // region ===== Tear Down ==========================================================================================
-    function destroy() {
+    function destroy(): void {
         if (destroyed) return;
 
         destroyed = true; // make future work and future destroy calls harmless

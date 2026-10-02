@@ -1,15 +1,61 @@
+import type {UnwrapNestedRefs} from 'vue';
 import {router, useForm} from '@inertiajs/vue3';
 import {onUnmounted, reactive, ref} from 'vue';
 import {toast} from 'vue-sonner';
+import type {InertiaForm} from '@inertiajs/vue3';
+import type {ErrorValue, Method, UseFormSubmitOptions} from '@inertiajs/core';
 
-/** @import {InertiaForm} from '@inertiajs/vue3' */
-/** @import {ErrorValue, Method, UseFormSubmitOptions} from '@inertiajs/core' */
-/** @import {InertiaPlus, InertiaPlusForm, InertiaPlusFormOptions, InertiaPlusToastResponse, OpenableInertiaPlusForm} from './index.d.ts' */
+type ReloadOptions = Parameters<typeof router.reload>[0];
+
+export type InertiaPlusToastResponse = {
+  props: {
+    flash?: {
+      success?: string;
+      error?: string;
+    };
+  };
+};
+
+export type InertiaPlusFormOptions = {
+  openable?: boolean;
+  minimumLoading: boolean;
+  minimumLoadingDuration?: number;
+};
+
+export type OpenableInertiaPlusForm<TData extends object> = {
+  isOpen: boolean;
+  show(values?: Partial<TData>): void;
+  hide(): void;
+  setOpen(open: boolean): void;
+};
+
+type FormData<T extends object> = {
+  [K in keyof T as T[K] extends (...args: never[]) => unknown ? never : K]: T[K];
+};
+
+type FormMethods<T extends object> = {
+  [K in keyof T as T[K] extends (...args: never[]) => unknown ? K : never]: T[K];
+};
+
+type WithOpenable<TOptions extends InertiaPlusFormOptions, TData extends object> = TOptions extends {openable: true}
+  ? OpenableInertiaPlusForm<TData>
+  : object;
+
+export type InertiaPlusForm<TOptions extends InertiaPlusFormOptions, TDefinition extends object> = UnwrapNestedRefs<
+  Omit<InertiaForm<FormData<TDefinition>>, keyof FormMethods<TDefinition>> &
+  FormMethods<TDefinition> &
+  WithOpenable<TOptions, FormData<TDefinition>>
+>;
+
+export type InertiaPlus<T extends object> = UnwrapNestedRefs<
+  T & {
+    reload(options?: ReloadOptions): void;
+  }
+>;
 
 const defaultMinimumLoadingDuration = 1000;
 
-/** @param {InertiaPlusToastResponse} response */
-export function toastFlashMessages(response) {
+export function toastFlashMessages(response: InertiaPlusToastResponse): void {
   const success = response.props.flash?.success;
   const error = response.props.flash?.error;
 
@@ -17,18 +63,13 @@ export function toastFlashMessages(response) {
   if (error) toast.error(error);
 }
 
-/** @param {Record<string, string>} errors */
-export function toastFirstValidationError(errors) {
+export function toastFirstValidationError(errors: Record<string, string>): void {
   const message = Object.values(errors)[0];
 
   if (message) toast.error(String(message));
 }
 
-/**
- * @param {object} data
- * @param {number} minimumLoadingDuration
- */
-function useSmoothForm(data, minimumLoadingDuration) {
+function useSmoothForm(data: object, minimumLoadingDuration: number) {
   const form = useForm(data);
   const processing = ref(false);
   const inertiaMethods = {
@@ -39,10 +80,8 @@ function useSmoothForm(data, minimumLoadingDuration) {
     patch: form.patch,
     delete: form.delete,
   };
-  /** @type {ReturnType<typeof setTimeout> | null} */
-  let timeout = null;
-  /** @type {(() => void) | null} */
-  let pending = null;
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+  let pending: (() => void) | null = null;
 
   function flushPending() {
     if (pending !== null) {
@@ -61,8 +100,7 @@ function useSmoothForm(data, minimumLoadingDuration) {
     flushPending();
   }
 
-  /** @param {number} startedAt @param {() => void} callback */
-  function afterMinimumDuration(startedAt, callback) {
+  function afterMinimumDuration(startedAt: number, callback: () => void) {
     const remaining = Math.max(0, minimumLoadingDuration - (Date.now() - startedAt));
     cancelPending();
 
@@ -79,13 +117,11 @@ function useSmoothForm(data, minimumLoadingDuration) {
     }, remaining);
   }
 
-  /** @param {number} startedAt @returns {Promise<void>} */
-  function waitForMinimumDuration(startedAt) {
+  function waitForMinimumDuration(startedAt: number): Promise<void> {
     return new Promise((resolve) => afterMinimumDuration(startedAt, resolve));
   }
 
-  /** @param {Record<string, ErrorValue>} errors */
-  function replaceErrors(errors) {
+  function replaceErrors(errors: Record<string, ErrorValue>) {
     form.clearErrors();
 
     if (Object.keys(errors).length > 0) {
@@ -93,8 +129,7 @@ function useSmoothForm(data, minimumLoadingDuration) {
     }
   }
 
-  /** @param {Method} method @param {string} url @param {UseFormSubmitOptions} [visitOptions] */
-  function submit(method, url, visitOptions = {}) {
+  function submit(method: Method, url: string, visitOptions: UseFormSubmitOptions = {}) {
     if (processing.value) {
       return;
     }
@@ -139,11 +174,11 @@ function useSmoothForm(data, minimumLoadingDuration) {
     get(target, property, receiver) {
       if (property === 'processing') return processing.value;
       if (property === 'submit' && Reflect.get(target, property, receiver) === inertiaMethods.submit) return submit;
-      if (property === 'get' && Reflect.get(target, property, receiver) === inertiaMethods.get) return /** @type {InertiaForm<object>['get']} */ ((url, options = {}) => submit('get', url, options));
-      if (property === 'post' && Reflect.get(target, property, receiver) === inertiaMethods.post) return /** @type {InertiaForm<object>['post']} */ ((url, options = {}) => submit('post', url, options));
-      if (property === 'put' && Reflect.get(target, property, receiver) === inertiaMethods.put) return /** @type {InertiaForm<object>['put']} */ ((url, options = {}) => submit('put', url, options));
-      if (property === 'patch' && Reflect.get(target, property, receiver) === inertiaMethods.patch) return /** @type {InertiaForm<object>['patch']} */ ((url, options = {}) => submit('patch', url, options));
-      if (property === 'delete' && Reflect.get(target, property, receiver) === inertiaMethods.delete) return /** @type {InertiaForm<object>['delete']} */ ((url, options = {}) => submit('delete', url, options));
+      if (property === 'get' && Reflect.get(target, property, receiver) === inertiaMethods.get) return (((url, options = {}) => submit('get', url, options)) as InertiaForm<object>['get']);
+      if (property === 'post' && Reflect.get(target, property, receiver) === inertiaMethods.post) return (((url, options = {}) => submit('post', url, options)) as InertiaForm<object>['post']);
+      if (property === 'put' && Reflect.get(target, property, receiver) === inertiaMethods.put) return (((url, options = {}) => submit('put', url, options)) as InertiaForm<object>['put']);
+      if (property === 'patch' && Reflect.get(target, property, receiver) === inertiaMethods.patch) return (((url, options = {}) => submit('patch', url, options)) as InertiaForm<object>['patch']);
+      if (property === 'delete' && Reflect.get(target, property, receiver) === inertiaMethods.delete) return (((url, options = {}) => submit('delete', url, options)) as InertiaForm<object>['delete']);
 
       return Reflect.get(target, property, receiver);
     },
@@ -159,44 +194,29 @@ function useSmoothForm(data, minimumLoadingDuration) {
   });
 }
 
-/**
- * @template {object} T
- * @param {T & ThisType<InertiaPlus<T>>} definition
- * @returns {InertiaPlus<T>}
- */
-export function useInertiaPlus(definition) {
+export function useInertiaPlus<T extends object>(definition: T & ThisType<InertiaPlus<T>>): InertiaPlus<T> {
   if (Object.hasOwn(definition, 'reload')) {
     throw new TypeError('InertiaPlus member "reload" is managed.');
   }
 
   Object.defineProperty(definition, 'reload', {
     enumerable: false,
-    /** @param {Parameters<typeof router.reload>[0]} [options] */
-    value(options = {}) {
+    value(options: Parameters<typeof router.reload>[0] = {}) {
       router.reload(options);
     },
   });
 
   // defineProperty adds the managed member without changing the input's inferred type.
-  return /** @type {InertiaPlus<T>} */ (reactive(definition));
+  return ((reactive(definition)) as InertiaPlus<T>);
 }
 
-/**
- * @template {InertiaPlusFormOptions} TOptions
- * @template {object} TDefinition
- * @param {TOptions} options
- * @param {TDefinition & ThisType<InertiaPlusForm<TOptions, TDefinition>>} definition
- * @returns {InertiaPlusForm<TOptions, TDefinition>}
- */
-export function useInertiaPlusForm(options, definition) {
+export function useInertiaPlusForm<TOptions extends InertiaPlusFormOptions, TDefinition extends object>(options: TOptions, definition: TDefinition & ThisType<InertiaPlusForm<TOptions, TDefinition>>): InertiaPlusForm<TOptions, TDefinition> {
   if (typeof options.minimumLoading !== 'boolean') {
     throw new TypeError('InertiaPlus form option "minimumLoading" must be a boolean.');
   }
 
-  /** @type {Record<string, PropertyDescriptor>} */
-  const descriptors = Object.getOwnPropertyDescriptors(definition);
-  /** @type {Record<string, unknown>} */
-  const data = {};
+  const descriptors: Record<string, PropertyDescriptor> = Object.getOwnPropertyDescriptors(definition);
+  const data: Record<string, unknown> = {};
 
   for (const [member, descriptor] of Object.entries(descriptors)) {
     if (typeof descriptor.value === 'function' || descriptor.get || descriptor.set) {
@@ -217,7 +237,7 @@ export function useInertiaPlusForm(options, definition) {
 
   const form = options.minimumLoading
     ? useSmoothForm(data, options.minimumLoadingDuration ?? defaultMinimumLoadingDuration)
-    : useForm(/** @type {object} */ (data));
+    : useForm((data as object));
 
   if (!options.minimumLoading && Object.hasOwn(descriptors, 'submit')) {
     const inertiaSubmit = form.submit.bind(form);
@@ -239,7 +259,7 @@ export function useInertiaPlusForm(options, definition) {
 
   if (options.openable) {
     // These managed members are installed together when openable is enabled.
-    const openableForm = /** @type {InertiaForm<object> & OpenableInertiaPlusForm<object>} */ (form);
+    const openableForm = (form as InertiaForm<object> & OpenableInertiaPlusForm<object>);
     openableForm.isOpen = false;
     openableForm.show = (values) => {
       if (values !== undefined) {
@@ -258,5 +278,5 @@ export function useInertiaPlusForm(options, definition) {
   }
 
   // Descriptor installation and conditional members implement the public mapped type.
-  return /** @type {InertiaPlusForm<TOptions, TDefinition>} */ (/** @type {unknown} */ (form));
+  return (((form as unknown)) as InertiaPlusForm<TOptions, TDefinition>);
 }

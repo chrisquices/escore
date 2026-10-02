@@ -1,12 +1,59 @@
-import {callConsumer, createErrorReporter} from './internal/core.js';
+import {callConsumer, createErrorReporter} from 'strata-packages/ui-interactions/internal/core';
 
-function roundTo(value, places) {
+export type VirtualizerStrategy = "css" | "virtual" | "auto";
+
+export type VirtualizerItem = {
+    key: string | number;
+    index: number;
+    start: number | null;
+    size: number | null;
+    style: Record<string, string | number>;
+};
+
+export type VirtualizerState = {
+    strategy: "css" | "virtual";
+    items: VirtualizerItem[];
+    totalSize: number | null;
+    containerStyle: Record<string, string | number>;
+    columns: number;
+    cellWidth: number;
+    cellHeight: number;
+    count: number;
+    range?: {
+        startIndex: number;
+        endIndex: number;
+    };
+};
+
+export type VirtualizerConfig = {
+    onChange?: (state: VirtualizerState) => void;
+    onError?: (error: {id: string; message: string}) => void;
+    gridElement: HTMLElement;
+    count?: number;
+    getItemKey?: (index: number) => string | number;
+    strategy?: VirtualizerStrategy;
+    threshold?: number;
+    scrollElement?: HTMLElement;
+    overscan?: number;
+};
+
+export type VirtualizerEngine = {
+    getState: () => VirtualizerState;
+    subscribe: (listener: (state: VirtualizerState) => void) => () => void;
+    scrollToIndex: (index: number) => void;
+    scrollToOffset: (offset: number) => void;
+    getItemRect: (index: number) => {top: number; left: number; width: number; height: number};
+    getIndicesInRect: (rect: {x: number; y: number; width: number; height: number}) => number[];
+    destroy: () => void;
+};
+
+function roundTo(value: number, places: number) {
     const factor = Math.pow(10, places);
 
     return Math.round(value * factor) / factor;
 }
 
-export function createVirtualizer(config = {}) {
+export function createVirtualizer(config: VirtualizerConfig): VirtualizerEngine {
     if (!config || typeof config !== "object") {
         throw new TypeError("createVirtualizer: 'config' must be an options object.");
     }
@@ -16,7 +63,7 @@ export function createVirtualizer(config = {}) {
         onChange, onError,
         gridElement,
         count = 0,
-        getItemKey = function (index) { return index; },
+        getItemKey = function (index) {return index;},
         strategy = "auto",
         threshold = 1500,
         scrollElement = gridElement,
@@ -77,7 +124,7 @@ export function createVirtualizer(config = {}) {
 
     // region ===== Init ===============================================================================================
     const ownerDocument = gridElement.ownerDocument; // the grid's own document, so reads work across realms/iframes
-    const defaultView = ownerDocument.defaultView; // the window: for ResizeObserver + scroll reads later
+    const defaultView = ownerDocument.defaultView!; // the window: for ResizeObserver + scroll reads later
     let destroyed = false; // late scroll/resize events must not still fire callbacks after teardown
 
     function init() {
@@ -97,14 +144,14 @@ export function createVirtualizer(config = {}) {
     // endregion
 
     // region ===== Event Listeners ====================================================================================
-    const listeners = new Set(); // change subscribers — each gets the full state on every change
-    const cleanups = []; // teardown functions, collected so everything can be undone at once
+    const listeners = new Set<(state: VirtualizerState) => void>(); // change subscribers — each gets the full state on every change
+    const cleanups: {(): void; (): void;}[] = []; // teardown functions, collected so everything can be undone at once
 
-    function registerEventListener(target, type, handler, options) {
-        target.addEventListener(type, handler, options);
+    function registerEventListener<K extends keyof HTMLElementEventMap>(target: EventTarget, type: K, handler: (event: HTMLElementEventMap[K]) => void, options?: AddEventListenerOptions) {
+        target.addEventListener(type, handler as EventListener, options);
 
         cleanups.push(function () {
-            target.removeEventListener(type, handler, options); // detach the exact listener that was registered
+            target.removeEventListener(type, handler as EventListener, options); // detach the exact listener that was registered
         });
     }
 
@@ -119,7 +166,7 @@ export function createVirtualizer(config = {}) {
             resizeObserver.observe(gridElement);
 
             cleanups.push(function () {
-                resizeObserver.disconnect();
+                resizeObserver!.disconnect();
             });
         }
 
@@ -140,7 +187,7 @@ export function createVirtualizer(config = {}) {
     let lastStateSignature = ""; // last emitted state fingerprint, used to avoid duplicate echoes
 
     // Subscribe to changes. The listener gets state on every change (not immediately — read getState() for the first paint). Returns an unsubscribe function.
-    function subscribe(listener) {
+    function subscribe(listener: (state: VirtualizerState) => void): () => void {
         if (destroyed) return function unsubscribe() {};
 
         listeners.add(listener);
@@ -164,7 +211,7 @@ export function createVirtualizer(config = {}) {
         }
     }
 
-    function getState() {
+    function getState(): VirtualizerState {
         return resolvedStrategy() === "virtual" ? buildVirtualState() : buildCssState();
     }
 
@@ -179,12 +226,12 @@ export function createVirtualizer(config = {}) {
     let colGap = 0; // the gap between columns
     let scrollTop = 0; // the scroll container's current scroll position (virtual strategy)
     let scrollScheduled = false; // coalesces a burst of scroll events into one per frame
-    let resizeObserver = null; // re-reads geometry when the container width changes
+    let resizeObserver: ResizeObserver | null = null; // re-reads geometry when the container width changes
 
     // Read the browser's RESOLVED grid: columns + track width from computed style; cell aspect measured once.
     function readGeometry() {
         const computed = defaultView.getComputedStyle(gridElement);
-        const tracks = computed.gridTemplateColumns.split(" ").filter(function (token) { return token.indexOf("px") !== -1; });
+        const tracks = computed.gridTemplateColumns.split(" ").filter(function (token) {return token.indexOf("px") !== -1;});
         columns = Math.max(1, tracks.length);
         rowGap = parseFloat(computed.rowGap) || 0;
         colGap = parseFloat(computed.columnGap) || 0;
@@ -226,11 +273,11 @@ export function createVirtualizer(config = {}) {
     // endregion
 
     // region ===== CSS Strategy =======================================================================================
-    function buildCssState() {
-        const itemStyle = cellWidth && cellHeight ? {contentVisibility: "auto", containIntrinsicSize: roundTo(cellWidth, 2) + "px " + roundTo(cellHeight, 2) + "px"} : {contentVisibility: "auto"};
+    function buildCssState(): VirtualizerState {
+        const itemStyle: Record<string, string | number> = cellWidth && cellHeight ? {contentVisibility: "auto", containIntrinsicSize: roundTo(cellWidth, 2) + "px " + roundTo(cellHeight, 2) + "px"} : {contentVisibility: "auto"};
 
         // Pin the grid's row height so off-screen (size-contained) rows can't collapse and overlap.
-        const containerStyle = cellAspect && cellHeight ? {gridAutoRows: roundTo(cellHeight, 2) + "px"} : {};
+        const containerStyle: Record<string, string | number> = cellAspect && cellHeight ? {gridAutoRows: roundTo(cellHeight, 2) + "px"} : {};
         const items = [];
         for (let index = 0; index < count; index++) {
             items.push({key: getItemKey(index), index: index, start: null, size: null, style: itemStyle});
@@ -257,7 +304,7 @@ export function createVirtualizer(config = {}) {
         return count > threshold ? "virtual" : "css";
     }
 
-    function buildVirtualState() {
+    function buildVirtualState(): VirtualizerState {
         const rowHeight = cellHeight + rowGap;
         const totalRows = Math.ceil(count / columns);
         const viewportHeight = scrollElement.clientHeight;
@@ -288,7 +335,7 @@ export function createVirtualizer(config = {}) {
     // endregion
 
     // region ===== Scroll Controls ====================================================================================
-    function scrollToOffset(offset) {
+    function scrollToOffset(offset: number): void {
         if (destroyed) return;
         if (typeof offset !== "number" || !Number.isFinite(offset)) {
             throw new TypeError("scrollToOffset: 'offset' must be a finite number.");
@@ -297,7 +344,7 @@ export function createVirtualizer(config = {}) {
         scrollElement.scrollTop = Math.max(0, offset); // the browser clamps the upper bound
     }
 
-    function scrollToIndex(index) {
+    function scrollToIndex(index: number): void {
         if (destroyed) return;
         if (!Number.isInteger(index) || index < 0) {
             throw new TypeError("scrollToIndex: 'index' must be a non-negative integer.");
@@ -310,14 +357,14 @@ export function createVirtualizer(config = {}) {
     // endregion
 
     // region ===== Positioning ========================================================================================
-    function getItemRect(index) {
+    function getItemRect(index: number): {top: number; left: number; width: number; height: number} {
         const rowHeight = cellHeight + rowGap;
         const colWidth = cellWidth + colGap;
 
         return {top: Math.floor(index / columns) * rowHeight, left: (index % columns) * colWidth, width: cellWidth, height: cellHeight};
     }
 
-    function getIndicesInRect(rect) {
+    function getIndicesInRect(rect: {x: number; y: number; width: number; height: number}): number[] {
         const rowHeight = cellHeight + rowGap;
         const colWidth = cellWidth + colGap;
         if (rowHeight <= 0 || colWidth <= 0) return [];
@@ -340,7 +387,7 @@ export function createVirtualizer(config = {}) {
     // endregion
 
     // region ===== Tear Down ==========================================================================================
-    function destroy() {
+    function destroy(): void {
         if (destroyed) return;
 
         destroyed = true; // make future work and future destroy calls harmless

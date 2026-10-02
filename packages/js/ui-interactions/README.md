@@ -1,12 +1,14 @@
 # Headless Package Conventions
 
-This document defines package integration and implementation rules for framework-independent controllers under `packages/ui-interactions`.
+This document defines package integration and implementation rules for framework-independent controllers under `packages/js/ui-interactions`.
+
+Public package subpaths resolve directly to TypeScript source. Consumers keep the same `strata-packages/ui-interactions/*` imports and use their existing TypeScript-capable bundler; no Strata build or watch process is required. Public types are exported from the implementation modules.
 
 ---
 
 ## File Location and Naming
 
-`packages/ui-interactions/src/{controller-name}.js`
+`packages/js/ui-interactions/src/{controller-name}.ts`
 
 - Name engine folders in kebab-case.
 - Name public engine entry files after the engine subject when the package contains multiple entry points.
@@ -41,10 +43,10 @@ Use this shared engine implementation shape:
 
 ## Atelier Package Integration
 
-1. Treat `packages/ui-interactions` as the canonical source for shared, framework-independent controllers.
-2. Import controllers through explicit `strata-packages/ui-interactions/*` package subpaths. Never use filesystem aliases or copy controllers into an app.
-3. Make reusable controller changes directly in `packages/ui-interactions`.
-4. Keep app-specific orchestration and UI outside `packages/ui-interactions`; move code into the package only when it is genuinely reusable behavior.
+1. Treat `packages/js/ui-interactions` as the canonical source for shared, framework-independent controllers.
+2. Import controllers through explicit `strata-packages/js/ui-interactions/*` package subpaths. Never use filesystem aliases or copy controllers into an app.
+3. Make reusable controller changes directly in `packages/js/ui-interactions`.
+4. Keep app-specific orchestration and UI outside `packages/js/ui-interactions`; move code into the package only when it is genuinely reusable behavior.
 5. Before inspecting, creating, editing, or reviewing engine code, read and follow the complete implementation contract below.
 
 ---
@@ -188,7 +190,7 @@ function registerAllEventListeners() {
 
 ## Audio Video Parity
 
-- Keep `audio.js` and `video.js` in sync. They are deliberate near-clones over the same `HTMLMediaElement` core, with most regions differing only in the element they drive.
+- Keep `audio.ts` and `video.ts` in sync. They are deliberate near-clones over the same `HTMLMediaElement` core, with most regions differing only in the element they drive.
 - When a change touches one file, inspect the matching region in the paired file and apply the same change when the code matches.
 - If the change does not carry over, state why.
 - Treat drift between these two files as a defect.

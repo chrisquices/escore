@@ -1,22 +1,436 @@
-import {createNotifier, createErrorReporter} from './internal/core.js';
+import {createNotifier, createErrorReporter} from 'strata-packages/ui-interactions/internal/core';
+import type * as ImageInternal from 'strata-packages/ui-interactions/internal/image-types';
+import type * as ImageRender from 'strata-packages/ui-interactions/internal/image-render-types';
 
-/** @import * as ImageTypes from './image.d.ts' */
-/** @import * as ImageInternal from './internal/image-types.d.ts' */
-/** @import * as ImageRender from './internal/image-render-types.d.ts' */
+export type ImageFitMode = "contain" | "cover" | "actual"
+export type ImageMinZoom = "fit" | number
+export type ImagePanBounds = "contain" | "free"
+/** Image assets only. SVG files use HTMLImageElement; direct SVG nodes and video sources are unsupported. */
+export type ImageLayerSource = string | HTMLImageElement | HTMLCanvasElement | OffscreenCanvas | ImageBitmap
+export type ImageLayerPaintOperation = ImageLayerPaintBrushOperation | ImageLayerPaintPencilOperation | ImageLayerPaintFillOperation | ImageLayerPaintGradientOperation
+export type ImageSelection = ImageRectangleSelection | ImageLassoSelection
 
-/** @param {number} value @param {number} places */
-function roundTo(value, places) {
+export interface ImageLayerTransform {
+    x: number
+    y: number
+    scaleX: number
+    scaleY: number
+    rotation: number
+    flipX: boolean
+    flipY: boolean
+    perspective: ImageLayerPerspective | null
+}
+
+export interface ImageLayerPerspective {
+    topLeft: {x: number; y: number}
+    topRight: {x: number; y: number}
+    bottomRight: {x: number; y: number}
+    bottomLeft: {x: number; y: number}
+}
+
+export interface ImageLayerMaskOperation {
+    type: "erase" | "restore"
+    points: {x: number; y: number}[]
+    size: number
+    hardness: number
+    opacity: number
+    /** Layer coordinates; omitted uses the document selection, null is unrestricted. */
+    selection?: ImageSelection | null
+}
+
+export interface ImageLayerMask {
+    enabled: boolean
+    operations: ImageLayerMaskOperation[]
+    canUndo: boolean
+    canRedo: boolean
+}
+
+export interface ImageLayerAdjustmentValues {
+    exposure: number
+    brightness: number
+    contrast: number
+    highlights: number
+    shadows: number
+    temperature: number
+    tint: number
+    saturation: number
+    vibrance: number
+    clarity: number
+    sharpness: number
+}
+
+export interface ImageLayerAdjustments {
+    enabled: boolean
+    values: ImageLayerAdjustmentValues
+}
+
+export interface ImageLayerLiquifyOperation {
+    type: "push" | "restore" | "shrink" | "bloat" | "twirl"
+    points: {x: number; y: number}[]
+    size: number
+    strength: number
+    density: number
+    rate: number
+    /** Layer coordinates; omitted uses the document selection, null is unrestricted. */
+    selection?: ImageSelection | null
+}
+
+export interface ImageLayerLiquify {
+    enabled: boolean
+    operations: ImageLayerLiquifyOperation[]
+    canUndo: boolean
+    canRedo: boolean
+}
+
+export interface ImageLayerPaintBrushOperation {
+    type: "brush"
+    points: {x: number; y: number}[]
+    size: number
+    hardness: number
+    opacity: number
+    color: string
+    /** Layer coordinates; omitted uses the document selection, null is unrestricted. */
+    selection?: ImageSelection | null
+}
+
+export interface ImageLayerPaintPencilOperation {
+    type: "pencil"
+    points: {x: number; y: number}[]
+    size: number
+    opacity: number
+    color: string
+    /** Layer coordinates; omitted uses the document selection, null is unrestricted. */
+    selection?: ImageSelection | null
+}
+
+export interface ImageLayerPaintFillOperation {
+    type: "fill"
+    x: number
+    y: number
+    color: string
+    opacity: number
+    tolerance: number
+    /** Layer coordinates; omitted uses the document selection, null is unrestricted. */
+    selection?: ImageSelection | null
+}
+
+export interface ImageLayerPaintGradientOperation {
+    type: "gradient"
+    startX: number
+    startY: number
+    endX: number
+    endY: number
+    startColor: string
+    endColor: string
+    opacity: number
+    /** Layer coordinates; omitted uses the document selection, null is unrestricted. */
+    selection?: ImageSelection | null
+}
+
+export interface ImageLayerPaint {
+    enabled: boolean
+    operations: ImageLayerPaintOperation[]
+    canUndo: boolean
+    canRedo: boolean
+}
+
+export interface ImageLayerRetouchOperation {
+    type: "clone" | "heal"
+    sourceX: number
+    sourceY: number
+    points: {x: number; y: number}[]
+    size: number
+    hardness: number
+    opacity: number
+    /** Layer coordinates; omitted uses the document selection, null is unrestricted. */
+    selection?: ImageSelection | null
+}
+
+export interface ImageLayerRetouch {
+    enabled: boolean
+    operations: ImageLayerRetouchOperation[]
+    canUndo: boolean
+    canRedo: boolean
+}
+
+export interface ImageLayer {
+    id: string
+    source: ImageLayerSource
+    sourceReference: string | null
+    name: string
+    visible: boolean
+    opacity: number
+    transform: ImageLayerTransform
+    mask: ImageLayerMask | null
+    adjustments: ImageLayerAdjustments | null
+    liquify: ImageLayerLiquify | null
+    paint: ImageLayerPaint | null
+    retouch: ImageLayerRetouch | null
+}
+
+export interface ImageLayerConfig {
+    source: ImageLayerSource
+    sourceReference?: string
+    name?: string
+    visible?: boolean
+    opacity?: number
+}
+
+export interface ImageRectangleSelection {
+    type: "rectangle"
+    x: number
+    y: number
+    width: number
+    height: number
+}
+
+export interface ImageLassoSelection {
+    type: "lasso"
+    points: {x: number; y: number}[]
+}
+
+export interface ImageCrop {
+    x: number
+    y: number
+    width: number
+    height: number
+}
+
+export interface ImageSerializedLayerMask {
+    enabled: boolean
+    operations: ImageLayerMaskOperation[]
+    operationIndex: number
+}
+
+export interface ImageSerializedLayerLiquify {
+    enabled: boolean
+    operations: ImageLayerLiquifyOperation[]
+    historyIndex: number
+}
+
+export interface ImageSerializedLayerPaint {
+    enabled: boolean
+    operations: ImageLayerPaintOperation[]
+    historyIndex: number
+}
+
+export interface ImageSerializedLayerRetouch {
+    enabled: boolean
+    operations: ImageLayerRetouchOperation[]
+    historyIndex: number
+}
+
+export interface ImageSerializedLayer {
+    id: string
+    source: string
+    name: string
+    visible: boolean
+    opacity: number
+    transform: ImageLayerTransform
+    mask: ImageSerializedLayerMask | null
+    adjustments: ImageLayerAdjustments | null
+    liquify: ImageSerializedLayerLiquify | null
+    paint: ImageSerializedLayerPaint | null
+    retouch: ImageSerializedLayerRetouch | null
+}
+
+export interface ImageSerializedDocument {
+    canvasWidth: number
+    canvasHeight: number
+    canvasBackground: string
+    layers: ImageSerializedLayer[]
+    selection: ImageSelection | null
+    crop: ImageCrop | null
+    straighten: number
+}
+
+export interface ImageState {
+    src: string
+    loading: boolean
+    loaded: boolean
+    error: string | null
+    naturalWidth: number
+    naturalHeight: number
+    canvasWidth: number
+    canvasHeight: number
+    canvasBackground: string
+    layers: ImageLayer[]
+    selection: ImageSelection | null
+    crop: ImageCrop | null
+    straighten: number
+    viewportWidth: number
+    viewportHeight: number
+    scale: number
+    fitScale: number
+    fillScale: number
+    minScale: number
+    maxScale: number
+    zoomPercent: number
+    offsetX: number
+    offsetY: number
+    rotation: number
+    flipX: boolean
+    flipY: boolean
+    fitMode: ImageFitMode
+    transform: string
+    isFitted: boolean
+    isActualSize: boolean
+    isZoomed: boolean
+    canUndo: boolean
+    canRedo: boolean
+    canZoomIn: boolean
+    canZoomOut: boolean
+    canPan: boolean
+    isFullscreen: boolean
+    fullscreenSupported: boolean
+}
+
+export interface ImageError {
+    id: string
+    message: string
+    metadata: unknown
+}
+
+export interface ImageShortcut {
+    id: string
+    keys: string[]
+    message: string
+}
+
+export interface ImageExportOptions {
+    type?: "image/png" | "image/jpeg" | "image/webp"
+    quality?: number
+}
+
+export interface ImageConfig {
+    onChange?: (state: ImageState) => void
+    onError?: (error: ImageError) => void
+    viewport?: HTMLElement
+    src?: string
+    canvasWidth?: number
+    canvasHeight?: number
+    canvasBackground?: string
+    fitMode?: ImageFitMode
+    minZoom?: ImageMinZoom
+    maxZoom?: number
+    zoomStep?: number
+    panBounds?: ImagePanBounds
+    rotationStep?: number
+    wheelZoom?: boolean
+    dragPan?: boolean
+    pinchZoom?: boolean
+    doubleClickZoom?: boolean
+    keyboardShortcuts?: boolean
+}
+
+export interface ImageEngine {
+    getState(): ImageState
+    subscribe(listener: (state: ImageState) => void): () => void
+    retry(): boolean
+    setCanvasSize(width: number, height: number): boolean
+    resizeDocument(width: number, height: number): boolean
+    setCanvasBackground(background: string): boolean
+    addLayer(layer: ImageLayerConfig): string | false
+    resolveLayerSource(id: string, source: Exclude<ImageLayerSource, string>): boolean
+    removeLayer(id: string): boolean
+    rasterizeLayer(id: string): boolean
+    setLayerVisibility(id: string, visible: boolean): boolean
+    setLayerOpacity(id: string, opacity: number): boolean
+    setLayerTransform(id: string, transform: Partial<ImageLayerTransform>): boolean
+    resizeLayer(id: string, width: number, height: number, preserveAspectRatio?: boolean): boolean
+    setLayerPerspective(id: string, perspective: ImageLayerPerspective): boolean
+    clearLayerPerspective(id: string): boolean
+    createLayerMask(id: string): boolean
+    removeLayerMask(id: string): boolean
+    setLayerMaskEnabled(id: string, enabled: boolean): boolean
+    addLayerMaskOperation(id: string, operation: ImageLayerMaskOperation): boolean
+    undoLayerMask(id: string): boolean
+    redoLayerMask(id: string): boolean
+    canUndoLayerMask(id: string): boolean
+    canRedoLayerMask(id: string): boolean
+    createLayerAdjustments(id: string): boolean
+    removeLayerAdjustments(id: string): boolean
+    setLayerAdjustment(id: string, name: keyof ImageLayerAdjustmentValues, value: number): boolean
+    setLayerAdjustmentsEnabled(id: string, enabled: boolean): boolean
+    createLayerLiquify(id: string): boolean
+    removeLayerLiquify(id: string): boolean
+    setLayerLiquifyEnabled(id: string, enabled: boolean): boolean
+    addLayerLiquifyOperation(id: string, operation: ImageLayerLiquifyOperation): boolean
+    undoLayerLiquify(id: string): boolean
+    redoLayerLiquify(id: string): boolean
+    canUndoLayerLiquify(id: string): boolean
+    canRedoLayerLiquify(id: string): boolean
+    createLayerPaint(id: string): boolean
+    removeLayerPaint(id: string): boolean
+    setLayerPaintEnabled(id: string, enabled: boolean): boolean
+    addLayerPaintOperation(id: string, operation: ImageLayerPaintOperation): boolean
+    undoLayerPaint(id: string): boolean
+    redoLayerPaint(id: string): boolean
+    canUndoLayerPaint(id: string): boolean
+    canRedoLayerPaint(id: string): boolean
+    createLayerRetouch(id: string): boolean
+    removeLayerRetouch(id: string): boolean
+    setLayerRetouchEnabled(id: string, enabled: boolean): boolean
+    addLayerRetouchOperation(id: string, operation: ImageLayerRetouchOperation): boolean
+    undoLayerRetouch(id: string): boolean
+    redoLayerRetouch(id: string): boolean
+    canUndoLayerRetouch(id: string): boolean
+    canRedoLayerRetouch(id: string): boolean
+    moveLayer(id: string, index: number): boolean
+    setSelection(selection: ImageSelection): boolean
+    clearSelection(): boolean
+    setCrop(crop: ImageCrop): boolean
+    clearCrop(): boolean
+    setStraighten(degrees: number): boolean
+    resetStraighten(): boolean
+    undo(): boolean
+    redo(): boolean
+    canUndo(): boolean
+    canRedo(): boolean
+    beginTransaction(): boolean
+    commitTransaction(): boolean
+    cancelTransaction(): boolean
+    serialize(): ImageSerializedDocument
+    load(serialized: ImageSerializedDocument): boolean
+    render(target: HTMLCanvasElement): boolean
+    /** Bounds must be finite and at least 1 pixel; fractional bounds use their whole-pixel portion. */
+    renderPreview(target: HTMLCanvasElement, maxWidth: number, maxHeight: number): boolean
+    exportImage(options?: ImageExportOptions): Promise<Blob>
+    pickColor(x: number, y: number): {r: number; g: number; b: number; a: number; hex: string} | null | false
+    viewportToCanvas(x: number, y: number): {x: number; y: number}
+    canvasToViewport(x: number, y: number): {x: number; y: number}
+    canvasToLayer(id: string, x: number, y: number): {x: number; y: number} | false
+    layerToCanvas(id: string, x: number, y: number): {x: number; y: number} | false
+    setZoom(value: number): boolean
+    zoomIn(factor?: number): boolean
+    zoomOut(factor?: number): boolean
+    zoomToPoint(value: number, clientX: number, clientY: number): boolean
+    setFitMode(mode: ImageFitMode): boolean
+    actualSize(): boolean
+    reset(): boolean
+    setPan(x: number, y: number): boolean
+    setRotation(degrees: number): boolean
+    rotateClockwise(): boolean
+    rotateCounterClockwise(): boolean
+    setFlipHorizontal(enabled: boolean): boolean
+    setFlipVertical(enabled: boolean): boolean
+    toggleFlipHorizontal(): boolean
+    toggleFlipVertical(): boolean
+    enterFullscreen(): Promise<boolean>
+    exitFullscreen(): Promise<boolean>
+    toggleFullscreen(): void
+    setKeyboardShortcuts(enabled: boolean): boolean
+    listKeyboardShortcuts(): ImageShortcut[]
+    destroy(): void
+}
+
+function roundTo(value: number, places: number) {
     const factor = Math.pow(10, places);
 
     return Math.round(value * factor) / factor;
 }
 
-/**
- * @param {HTMLImageElement} image
- * @param {ImageTypes.ImageConfig} [config]
- * @returns {ImageTypes.ImageEngine}
- */
-export function createImage(image, config = {}) {
+export function createImage(image: HTMLImageElement, config: ImageConfig = {}): ImageEngine {
     if (!image || typeof image.addEventListener !== "function" || typeof image.getBoundingClientRect !== "function" || !("naturalWidth" in image)) {
         throw new TypeError("createImage: 'image' must be an <img> element.");
     }
@@ -37,7 +451,7 @@ export function createImage(image, config = {}) {
         keyboardShortcuts = true
     } = config;
 
-    const viewport = /** @type {ImageInternal.FullscreenViewport} */ (configuredViewport);
+    const viewport = (configuredViewport as ImageInternal.FullscreenViewport);
     validateConfig();
 
     function validateConfig() {
@@ -141,8 +555,7 @@ export function createImage(image, config = {}) {
     // endregion
 
     // region ===== Init ===============================================================================================
-    /** @type {ImageInternal.ImageDocument} */
-    const ownerDocument = image.ownerDocument; // the image's own document, so reads work across realms/iframes
+    const ownerDocument: ImageInternal.ImageDocument = image.ownerDocument; // the image's own document, so reads work across realms/iframes
     let destroyed = false; // late load/resize events must not still fire callbacks after teardown
 
     function init() {
@@ -180,23 +593,14 @@ export function createImage(image, config = {}) {
     // endregion
 
     // region ===== Event Listeners ====================================================================================
-    /** @type {Array<() => void>} */
-    const cleanups = []; // teardown functions, collected so everything can be undone at once
-    /** @type {ResizeObserver | null} */
-    let resizeObserver = null; // watches the viewport so the fit recomputes when its box changes
+    const cleanups: Array<() => void> = []; // teardown functions, collected so everything can be undone at once
+    let resizeObserver: ResizeObserver | null = null; // watches the viewport so the fit recomputes when its box changes
 
-    /**
-     * @template {keyof HTMLElementEventMap | "webkitfullscreenchange"} K
-     * @param {EventTarget} target
-     * @param {K} type
-     * @param {(event: K extends keyof HTMLElementEventMap ? HTMLElementEventMap[K] : Event) => void} handler
-     * @param {AddEventListenerOptions} [options]
-     */
-    function registerEventListener(target, type, handler, options) {
-        target.addEventListener(type, /** @type {EventListener} */ (handler), options);
+    function registerEventListener<K extends keyof HTMLElementEventMap | "webkitfullscreenchange">(target: EventTarget, type: K, handler: (event: K extends keyof HTMLElementEventMap ? HTMLElementEventMap[K] : Event) => void, options?: AddEventListenerOptions) {
+        target.addEventListener(type, (handler as EventListener), options);
 
         cleanups.push(function () {
-            target.removeEventListener(type, /** @type {EventListener} */ (handler), options); // detach the exact listener that was registered
+            target.removeEventListener(type, (handler as EventListener), options); // detach the exact listener that was registered
         });
     }
 
@@ -303,7 +707,7 @@ export function createImage(image, config = {}) {
         const state = getStateSnapshot(getCachedDocumentSnapshot());
         const previous = lastNotificationState;
 
-        if (!previous || /** @type {Array<keyof ImageTypes.ImageState>} */ (Object.keys(state)).some(function (key) {
+        if (!previous || ((Object.keys(state)) as Array<keyof ImageState>).some(function (key) {
             return !Object.is(state[key], previous[key]);
         })) notify();
     }
@@ -333,26 +737,21 @@ export function createImage(image, config = {}) {
     // region ===== State ==============================================================================================
     let documentRevision = 0;
     let cachedDocumentRevision = -1;
-    /** @type {ImageInternal.DocumentSnapshot | null} */
-    let cachedDocumentSnapshot = null;
-    /** @type {WeakMap<object, object>} */
-    let cachedOperationSnapshots = new WeakMap();
-    /** @type {ImageTypes.ImageState | null} */
-    let lastNotificationState = null;
+    let cachedDocumentSnapshot: ImageInternal.DocumentSnapshot | null = null;
+    let cachedOperationSnapshots: WeakMap<object, object> = new WeakMap();
+    let lastNotificationState: ImageState | null = null;
 
     const notifier = createNotifier(getNotificationState, {
         requestFrame: typeof ownerDocument.defaultView?.requestAnimationFrame === "function" ? ownerDocument.defaultView.requestAnimationFrame.bind(ownerDocument.defaultView) : undefined,
         cancelFrame: typeof ownerDocument.defaultView?.cancelAnimationFrame === "function" ? ownerDocument.defaultView.cancelAnimationFrame.bind(ownerDocument.defaultView) : undefined
     });
 
-    /** @type {Map<(state: ImageTypes.ImageState) => void, () => void>} */
-    const subscriptions = new Map();
+    const subscriptions: Map<(state: ImageState) => void, () => void> = new Map();
     const notify = notifier.notify;
     const notifyFrame = notifier.notifyFrame;
 
     // Compare per listener so a reentrant change cannot starve subscribers still awaiting this snapshot.
-    /** @type {ImageTypes.ImageEngine['subscribe']} */
-    function subscribe(listener) {
+    function subscribe(listener: (state: ImageState) => void) {
         if (typeof listener !== "function") {
             throw new TypeError("createImage: 'listener' must be a function.");
         }
@@ -363,7 +762,7 @@ export function createImage(image, config = {}) {
 
         let previous = getStateSnapshot(getCachedDocumentSnapshot());
         const detach = notifier.subscribe(function (state) {
-            if (/** @type {Array<keyof ImageTypes.ImageState>} */ (Object.keys(state)).every(function (key) {
+            if (((Object.keys(state)) as Array<keyof ImageState>).every(function (key) {
                 return Object.is(state[key], previous[key]);
             })) return;
 
@@ -380,8 +779,7 @@ export function createImage(image, config = {}) {
         return unsubscribe;
     }
 
-    /** @param {number} canvasWidth @param {number} canvasHeight @param {ImageInternal.ViewportSize} viewportSize */
-    function canPan(canvasWidth, canvasHeight, viewportSize) {
+    function canPan(canvasWidth: number, canvasHeight: number, viewportSize: ImageInternal.ViewportSize) {
         if (panBounds === "free") return canvasWidth > 0 && canvasHeight > 0;
 
         const bounds = getContainPanBounds(canvasWidth, canvasHeight, viewportSize);
@@ -402,8 +800,7 @@ export function createImage(image, config = {}) {
         return cachedDocumentSnapshot;
     }
 
-    /** @template {object} T @param {T} operation @param {(operation: T) => T} getSnapshot @returns {T} */
-    function getCachedOperationSnapshot(operation, getSnapshot) {
+    function getCachedOperationSnapshot<T extends object>(operation: T, getSnapshot: (operation: T) => T): T {
         let snapshot = cachedOperationSnapshots.get(operation);
 
         if (!snapshot) {
@@ -411,24 +808,22 @@ export function createImage(image, config = {}) {
             cachedOperationSnapshots.set(operation, snapshot);
         }
 
-        return /** @type {T} */ (snapshot);
+        return (snapshot as T);
     }
 
-    /** @template {object} T @param {T} snapshot @returns {T} */
-    function freezeDocumentSnapshot(snapshot) {
+    function freezeDocumentSnapshot<T extends object>(snapshot: T): T {
         if (Object.isFrozen(snapshot)) return snapshot;
 
         // Sources remain runtime references; only copied document data is frozen.
         for (const name of Object.keys(snapshot)) {
-            const value = /** @type {Record<string, unknown>} */ (snapshot)[name];
+            const value = (snapshot as Record<string, unknown>)[name];
             if (name !== "source" && value && typeof value === "object") freezeDocumentSnapshot(value);
         }
 
         return Object.freeze(snapshot);
     }
 
-    /** @param {boolean} [cacheOperations] @returns {ImageInternal.DocumentSnapshot} */
-    function getDocumentSnapshot(cacheOperations = false) {
+    function getDocumentSnapshot(cacheOperations: boolean = false): ImageInternal.DocumentSnapshot {
         return {
             canvasWidth: getCanvasWidth(),
             canvasHeight: getCanvasHeight(),
@@ -498,13 +893,11 @@ export function createImage(image, config = {}) {
         return state;
     }
 
-    /** @type {ImageTypes.ImageEngine["getState"]} */
     function getState() {
         return getStateSnapshot(getDocumentSnapshot());
     }
 
-    /** @param {ImageInternal.DocumentSnapshot} document @returns {ImageTypes.ImageState} */
-    function getStateSnapshot(document) {
+    function getStateSnapshot(document: ImageInternal.DocumentSnapshot): ImageState {
         const naturalWidth = getNaturalWidth();
         const naturalHeight = getNaturalHeight();
         const viewportSize = getViewportSize();
@@ -574,8 +967,7 @@ export function createImage(image, config = {}) {
         return canvasBackgroundState;
     }
 
-    /** @type {ImageTypes.ImageEngine["setCanvasSize"]} */
-    function setCanvasSize(width, height) {
+    function setCanvasSize(width: number, height: number) {
         if (destroyed) return false;
 
         const nextWidth = Number(width);
@@ -598,8 +990,7 @@ export function createImage(image, config = {}) {
         return true;
     }
 
-    /** @type {ImageTypes.ImageEngine["resizeDocument"]} */
-    function resizeDocument(width, height) {
+    function resizeDocument(width: number, height: number) {
         if (destroyed) return false;
 
         if (typeof width !== "number" || !Number.isFinite(width) || width <= 0 || typeof height !== "number" || !Number.isFinite(height) || height <= 0) {
@@ -711,8 +1102,7 @@ export function createImage(image, config = {}) {
         return true;
     }
 
-    /** @type {ImageTypes.ImageEngine["setCanvasBackground"]} */
-    function setCanvasBackground(background) {
+    function setCanvasBackground(background: string) {
         if (destroyed) return false;
 
         if (typeof background !== "string") {
@@ -732,12 +1122,10 @@ export function createImage(image, config = {}) {
     // endregion
 
     // region ===== Layer Controls =====================================================================================
-    /** @type {ImageInternal.LayerState[]} */
-    const layers = [];
+    const layers: ImageInternal.LayerState[] = [];
     let nextLayerId = 1;
 
-    /** @type {ImageTypes.ImageEngine['addLayer']} */
-    function addLayer(layer) {
+    function addLayer(layer: ImageLayerConfig) {
         if (destroyed) return false;
 
         if (!layer || typeof layer !== "object" || Array.isArray(layer)) {
@@ -818,8 +1206,7 @@ export function createImage(image, config = {}) {
         return id;
     }
 
-    /** @type {ImageTypes.ImageEngine['resolveLayerSource']} */
-    function resolveLayerSource(id, source) {
+    function resolveLayerSource(id: string, source: HTMLImageElement | HTMLCanvasElement | OffscreenCanvas | ImageBitmap) {
         if (destroyed) return false;
 
         const layer = layers.find(function (layer) {
@@ -875,8 +1262,7 @@ export function createImage(image, config = {}) {
         return true;
     }
 
-    /** @type {ImageTypes.ImageEngine['removeLayer']} */
-    function removeLayer(id) {
+    function removeLayer(id: string) {
         if (destroyed) return false;
 
         const index = layers.findIndex(function (layer) {
@@ -893,8 +1279,7 @@ export function createImage(image, config = {}) {
         return true;
     }
 
-    /** @type {ImageTypes.ImageEngine['rasterizeLayer']} */
-    function rasterizeLayer(id) {
+    function rasterizeLayer(id: string) {
         if (destroyed) return false;
 
         const layer = layers.find(function (layer) {
@@ -960,8 +1345,7 @@ export function createImage(image, config = {}) {
         return true;
     }
 
-    /** @type {ImageTypes.ImageEngine['setLayerVisibility']} */
-    function setLayerVisibility(id, visible) {
+    function setLayerVisibility(id: string, visible: boolean) {
         if (destroyed) return false;
 
         const layer = layers.find(function (layer) {
@@ -983,8 +1367,7 @@ export function createImage(image, config = {}) {
         return true;
     }
 
-    /** @type {ImageTypes.ImageEngine['setLayerOpacity']} */
-    function setLayerOpacity(id, opacity) {
+    function setLayerOpacity(id: string, opacity: number) {
         if (destroyed) return false;
 
         const layer = layers.find(function (layer) {
@@ -1006,8 +1389,7 @@ export function createImage(image, config = {}) {
         return true;
     }
 
-    /** @type {ImageTypes.ImageEngine['setLayerTransform']} */
-    function setLayerTransform(id, transform) {
+    function setLayerTransform(id: string, transform: Partial<ImageLayerTransform>) {
         if (destroyed) return false;
 
         const layer = layers.find(function (layer) {
@@ -1057,7 +1439,7 @@ export function createImage(image, config = {}) {
                 throw new TypeError("createImage: layer perspective must be an object or null.");
             }
 
-            for (const name of /** @type {const} */ (["topLeft", "topRight", "bottomRight", "bottomLeft"])) {
+            for (const name of ((["topLeft", "topRight", "bottomRight", "bottomLeft"]) as const)) {
                 const point = perspective[name];
                 if (!point || typeof point !== "object" || Array.isArray(point) || typeof point.x !== "number" || !Number.isFinite(point.x) || typeof point.y !== "number" || !Number.isFinite(point.y)) {
                     throw new TypeError("createImage: layer perspective corners must contain finite coordinates.");
@@ -1086,17 +1468,11 @@ export function createImage(image, config = {}) {
         return true;
     }
 
-    /**
-     * @param {ImageTypes.ImageLayerTransform} transform
-     * @param {ImageTypes.ImageLayerTransform} previous
-     * @returns {boolean}
-     */
-    function isLayerTransformEqual(transform, previous) {
+    function isLayerTransformEqual(transform: ImageLayerTransform, previous: ImageLayerTransform): boolean {
         return transform.x === previous.x && transform.y === previous.y && transform.scaleX === previous.scaleX && transform.scaleY === previous.scaleY && transform.rotation === previous.rotation && transform.flipX === previous.flipX && transform.flipY === previous.flipY && isLayerPerspectiveEqual(transform.perspective, previous.perspective);
     }
 
-    /** @type {ImageTypes.ImageEngine['resizeLayer']} */
-    function resizeLayer(id, width, height, preserveAspectRatio = false) {
+    function resizeLayer(id: string, width: number, height: number, preserveAspectRatio: boolean | undefined = false) {
         if (destroyed) return false;
 
         const layer = layers.find(function (layer) {
@@ -1134,8 +1510,7 @@ export function createImage(image, config = {}) {
         });
     }
 
-    /** @type {ImageTypes.ImageEngine['setLayerPerspective']} */
-    function setLayerPerspective(id, perspective) {
+    function setLayerPerspective(id: string, perspective: ImageLayerPerspective) {
         if (destroyed) return false;
 
         const layer = layers.find(function (layer) {
@@ -1147,7 +1522,7 @@ export function createImage(image, config = {}) {
             throw new TypeError("createImage: layer perspective must be an object.");
         }
 
-        for (const name of /** @type {const} */ (["topLeft", "topRight", "bottomRight", "bottomLeft"])) {
+        for (const name of ((["topLeft", "topRight", "bottomRight", "bottomLeft"]) as const)) {
             const point = perspective[name];
             if (!point || typeof point !== "object" || Array.isArray(point) || typeof point.x !== "number" || !Number.isFinite(point.x) || typeof point.y !== "number" || !Number.isFinite(point.y)) {
                 throw new TypeError("createImage: layer perspective corners must contain finite coordinates.");
@@ -1164,8 +1539,7 @@ export function createImage(image, config = {}) {
         return true;
     }
 
-    /** @type {ImageTypes.ImageEngine['clearLayerPerspective']} */
-    function clearLayerPerspective(id) {
+    function clearLayerPerspective(id: string) {
         if (destroyed) return false;
 
         const layer = layers.find(function (layer) {
@@ -1181,11 +1555,7 @@ export function createImage(image, config = {}) {
         return true;
     }
 
-    /**
-     * @param {ImageTypes.ImageLayerPerspective | null | undefined} perspective
-     * @returns {ImageTypes.ImageLayerPerspective | null}
-     */
-    function getLayerPerspectiveState(perspective) {
+    function getLayerPerspectiveState(perspective: ImageLayerPerspective | null | undefined): ImageLayerPerspective | null {
         if (!perspective) return null;
 
         return {
@@ -1196,21 +1566,15 @@ export function createImage(image, config = {}) {
         };
     }
 
-    /**
-     * @param {ImageTypes.ImageLayerPerspective | null | undefined} perspective
-     * @param {ImageTypes.ImageLayerPerspective | null | undefined} previous
-     * @returns {boolean}
-     */
-    function isLayerPerspectiveEqual(perspective, previous) {
+    function isLayerPerspectiveEqual(perspective: ImageLayerPerspective | null | undefined, previous: ImageLayerPerspective | null | undefined): boolean {
         if (!perspective || !previous) return perspective === previous;
 
-        return /** @type {const} */ (["topLeft", "topRight", "bottomRight", "bottomLeft"]).every(function (name) {
+        return ((["topLeft", "topRight", "bottomRight", "bottomLeft"]) as const).every(function (name) {
             return perspective[name].x === previous[name].x && perspective[name].y === previous[name].y;
         });
     }
 
-    /** @type {ImageTypes.ImageEngine['createLayerMask']} */
-    function createLayerMask(id) {
+    function createLayerMask(id: string) {
         if (destroyed) return false;
 
         const layer = layers.find(function (layer) {
@@ -1230,8 +1594,7 @@ export function createImage(image, config = {}) {
         return true;
     }
 
-    /** @type {ImageTypes.ImageEngine['removeLayerMask']} */
-    function removeLayerMask(id) {
+    function removeLayerMask(id: string) {
         if (destroyed) return false;
 
         const layer = layers.find(function (layer) {
@@ -1247,8 +1610,7 @@ export function createImage(image, config = {}) {
         return true;
     }
 
-    /** @type {ImageTypes.ImageEngine['setLayerMaskEnabled']} */
-    function setLayerMaskEnabled(id, enabled) {
+    function setLayerMaskEnabled(id: string, enabled: boolean) {
         if (destroyed) return false;
 
         const layer = layers.find(function (layer) {
@@ -1270,13 +1632,7 @@ export function createImage(image, config = {}) {
         return true;
     }
 
-    /**
-     * @param {ImageTypes.ImageSerializedLayerMask | null} mask
-     * @param {ImageTypes.ImageSerializedLayerMask | null} previous
-     * @param {boolean} activeOnly
-     * @returns {boolean}
-     */
-    function isLayerMaskEqual(mask, previous, activeOnly = false) {
+    function isLayerMaskEqual(mask: ImageSerializedLayerMask | null, previous: ImageSerializedLayerMask | null, activeOnly: boolean = false): boolean {
         if (!mask || !previous) return mask === previous;
 
         return mask.enabled === previous.enabled && mask.operationIndex === previous.operationIndex && (activeOnly ? (mask.operationIndex < mask.operations.length) === (previous.operationIndex < previous.operations.length) : mask.operations.length === previous.operations.length) && mask.operations.every(function (operation, index) {
@@ -1284,8 +1640,7 @@ export function createImage(image, config = {}) {
         });
     }
 
-    /** @type {ImageTypes.ImageEngine['addLayerMaskOperation']} */
-    function addLayerMaskOperation(id, operation) {
+    function addLayerMaskOperation(id: string, operation: ImageLayerMaskOperation) {
         if (destroyed) return false;
 
         const layer = layers.find(function (layer) {
@@ -1337,15 +1692,14 @@ export function createImage(image, config = {}) {
         };
         if (next.selection === false) return false;
 
-        layer.mask.operations = layer.mask.operations.slice(0, layer.mask.operationIndex).concat(/** @type {ImageTypes.ImageLayerMaskOperation} */ (next));
+        layer.mask.operations = layer.mask.operations.slice(0, layer.mask.operationIndex).concat((next as ImageLayerMaskOperation));
         layer.mask.operationIndex = layer.mask.operations.length;
         markDocumentChanged();
         notify();
         return true;
     }
 
-    /** @type {ImageTypes.ImageEngine['undoLayerMask']} */
-    function undoLayerMask(id) {
+    function undoLayerMask(id: string) {
         if (destroyed) return false;
 
         const layer = layers.find(function (layer) {
@@ -1359,8 +1713,7 @@ export function createImage(image, config = {}) {
         return true;
     }
 
-    /** @type {ImageTypes.ImageEngine['redoLayerMask']} */
-    function redoLayerMask(id) {
+    function redoLayerMask(id: string) {
         if (destroyed) return false;
 
         const layer = layers.find(function (layer) {
@@ -1374,8 +1727,7 @@ export function createImage(image, config = {}) {
         return true;
     }
 
-    /** @type {ImageTypes.ImageEngine['canUndoLayerMask']} */
-    function canUndoLayerMask(id) {
+    function canUndoLayerMask(id: string) {
         if (destroyed) return false;
 
         const layer = layers.find(function (layer) {
@@ -1385,8 +1737,7 @@ export function createImage(image, config = {}) {
         return Boolean(layer && layer.mask && layer.mask.operationIndex > 0);
     }
 
-    /** @type {ImageTypes.ImageEngine['canRedoLayerMask']} */
-    function canRedoLayerMask(id) {
+    function canRedoLayerMask(id: string) {
         if (destroyed) return false;
 
         const layer = layers.find(function (layer) {
@@ -1396,11 +1747,7 @@ export function createImage(image, config = {}) {
         return Boolean(layer && layer.mask && layer.mask.operationIndex < layer.mask.operations.length);
     }
 
-    /**
-     * @param {ImageTypes.ImageLayerMaskOperation} operation
-     * @returns {ImageTypes.ImageLayerMaskOperation}
-     */
-    function getLayerMaskOperationState(operation) {
+    function getLayerMaskOperationState(operation: ImageLayerMaskOperation): ImageLayerMaskOperation {
         return {
             type: operation.type,
             points: operation.points.map(function (point) {
@@ -1413,12 +1760,7 @@ export function createImage(image, config = {}) {
         };
     }
 
-    /**
-     * @param {ImageTypes.ImageLayerMaskOperation} operation
-     * @param {ImageTypes.ImageLayerMaskOperation} previous
-     * @returns {boolean}
-     */
-    function isLayerMaskOperationEqual(operation, previous) {
+    function isLayerMaskOperationEqual(operation: ImageLayerMaskOperation, previous: ImageLayerMaskOperation): boolean {
         if (!isSelectionEqual(operation.selection, previous.selection)) return false;
 
         return operation.type === previous.type && operation.size === previous.size && operation.hardness === previous.hardness && operation.opacity === previous.opacity && operation.points.length === previous.points.length && operation.points.every(function (point, index) {
@@ -1426,8 +1768,7 @@ export function createImage(image, config = {}) {
         });
     }
 
-    /** @type {ImageTypes.ImageEngine['createLayerAdjustments']} */
-    function createLayerAdjustments(id) {
+    function createLayerAdjustments(id: string) {
         if (destroyed) return false;
 
         const layer = layers.find(function (layer) {
@@ -1458,8 +1799,7 @@ export function createImage(image, config = {}) {
         return true;
     }
 
-    /** @type {ImageTypes.ImageEngine['removeLayerAdjustments']} */
-    function removeLayerAdjustments(id) {
+    function removeLayerAdjustments(id: string) {
         if (destroyed) return false;
 
         const layer = layers.find(function (layer) {
@@ -1475,8 +1815,7 @@ export function createImage(image, config = {}) {
         return true;
     }
 
-    /** @type {ImageTypes.ImageEngine['setLayerAdjustment']} */
-    function setLayerAdjustment(id, name, value) {
+    function setLayerAdjustment(id: string, name: keyof ImageLayerAdjustmentValues, value: number) {
         if (destroyed) return false;
 
         const layer = layers.find(function (layer) {
@@ -1521,8 +1860,7 @@ export function createImage(image, config = {}) {
         return true;
     }
 
-    /** @type {ImageTypes.ImageEngine['setLayerAdjustmentsEnabled']} */
-    function setLayerAdjustmentsEnabled(id, enabled) {
+    function setLayerAdjustmentsEnabled(id: string, enabled: boolean) {
         if (destroyed) return false;
 
         const layer = layers.find(function (layer) {
@@ -1544,11 +1882,7 @@ export function createImage(image, config = {}) {
         return true;
     }
 
-    /**
-     * @param {ImageTypes.ImageLayerAdjustments} adjustments
-     * @returns {ImageTypes.ImageLayerAdjustments}
-     */
-    function getLayerAdjustmentsState(adjustments) {
+    function getLayerAdjustmentsState(adjustments: ImageLayerAdjustments): ImageLayerAdjustments {
         return {
             enabled: adjustments.enabled,
             values: {
@@ -1567,21 +1901,15 @@ export function createImage(image, config = {}) {
         };
     }
 
-    /**
-     * @param {ImageTypes.ImageLayerAdjustments | null} adjustments
-     * @param {ImageTypes.ImageLayerAdjustments | null} previous
-     * @returns {boolean}
-     */
-    function isLayerAdjustmentsEqual(adjustments, previous) {
+    function isLayerAdjustmentsEqual(adjustments: ImageLayerAdjustments | null, previous: ImageLayerAdjustments | null): boolean {
         if (!adjustments || !previous) return adjustments === previous;
 
-        return adjustments.enabled === previous.enabled && /** @type {(keyof ImageTypes.ImageLayerAdjustmentValues)[]} */ (Object.keys(adjustments.values)).every(function (name) {
+        return adjustments.enabled === previous.enabled && ((Object.keys(adjustments.values)) as (keyof ImageLayerAdjustmentValues)[]).every(function (name) {
             return adjustments.values[name] === previous.values[name];
         });
     }
 
-    /** @type {ImageTypes.ImageEngine['createLayerLiquify']} */
-    function createLayerLiquify(id) {
+    function createLayerLiquify(id: string) {
         if (destroyed) return false;
 
         const layer = layers.find(function (layer) {
@@ -1601,8 +1929,7 @@ export function createImage(image, config = {}) {
         return true;
     }
 
-    /** @type {ImageTypes.ImageEngine['removeLayerLiquify']} */
-    function removeLayerLiquify(id) {
+    function removeLayerLiquify(id: string) {
         if (destroyed) return false;
 
         const layer = layers.find(function (layer) {
@@ -1618,8 +1945,7 @@ export function createImage(image, config = {}) {
         return true;
     }
 
-    /** @type {ImageTypes.ImageEngine['setLayerLiquifyEnabled']} */
-    function setLayerLiquifyEnabled(id, enabled) {
+    function setLayerLiquifyEnabled(id: string, enabled: boolean) {
         if (destroyed) return false;
 
         const layer = layers.find(function (layer) {
@@ -1641,13 +1967,7 @@ export function createImage(image, config = {}) {
         return true;
     }
 
-    /**
-     * @param {ImageTypes.ImageSerializedLayerLiquify | null} liquify
-     * @param {ImageTypes.ImageSerializedLayerLiquify | null} previous
-     * @param {boolean} activeOnly
-     * @returns {boolean}
-     */
-    function isLayerLiquifyEqual(liquify, previous, activeOnly = false) {
+    function isLayerLiquifyEqual(liquify: ImageSerializedLayerLiquify | null, previous: ImageSerializedLayerLiquify | null, activeOnly: boolean = false): boolean {
         if (!liquify || !previous) return liquify === previous;
 
         return liquify.enabled === previous.enabled && liquify.historyIndex === previous.historyIndex && (activeOnly ? (liquify.historyIndex < liquify.operations.length) === (previous.historyIndex < previous.operations.length) : liquify.operations.length === previous.operations.length) && liquify.operations.every(function (operation, index) {
@@ -1655,8 +1975,7 @@ export function createImage(image, config = {}) {
         });
     }
 
-    /** @type {ImageTypes.ImageEngine['addLayerLiquifyOperation']} */
-    function addLayerLiquifyOperation(id, operation) {
+    function addLayerLiquifyOperation(id: string, operation: ImageLayerLiquifyOperation) {
         if (destroyed) return false;
 
         const layer = layers.find(function (layer) {
@@ -1721,15 +2040,14 @@ export function createImage(image, config = {}) {
             };
         }
 
-        layer.liquify.operations = layer.liquify.operations.slice(0, layer.liquify.historyIndex).concat(/** @type {ImageTypes.ImageLayerLiquifyOperation} */ (next));
+        layer.liquify.operations = layer.liquify.operations.slice(0, layer.liquify.historyIndex).concat((next as ImageLayerLiquifyOperation));
         layer.liquify.historyIndex = layer.liquify.operations.length;
         markDocumentChanged();
         notify();
         return true;
     }
 
-    /** @type {ImageTypes.ImageEngine['undoLayerLiquify']} */
-    function undoLayerLiquify(id) {
+    function undoLayerLiquify(id: string) {
         if (destroyed) return false;
 
         const layer = layers.find(function (layer) {
@@ -1743,8 +2061,7 @@ export function createImage(image, config = {}) {
         return true;
     }
 
-    /** @type {ImageTypes.ImageEngine['redoLayerLiquify']} */
-    function redoLayerLiquify(id) {
+    function redoLayerLiquify(id: string) {
         if (destroyed) return false;
 
         const layer = layers.find(function (layer) {
@@ -1758,8 +2075,7 @@ export function createImage(image, config = {}) {
         return true;
     }
 
-    /** @type {ImageTypes.ImageEngine['canUndoLayerLiquify']} */
-    function canUndoLayerLiquify(id) {
+    function canUndoLayerLiquify(id: string) {
         if (destroyed) return false;
 
         const layer = layers.find(function (layer) {
@@ -1769,8 +2085,7 @@ export function createImage(image, config = {}) {
         return Boolean(layer && layer.liquify && layer.liquify.historyIndex > 0);
     }
 
-    /** @type {ImageTypes.ImageEngine['canRedoLayerLiquify']} */
-    function canRedoLayerLiquify(id) {
+    function canRedoLayerLiquify(id: string) {
         if (destroyed) return false;
 
         const layer = layers.find(function (layer) {
@@ -1780,11 +2095,7 @@ export function createImage(image, config = {}) {
         return Boolean(layer && layer.liquify && layer.liquify.historyIndex < layer.liquify.operations.length);
     }
 
-    /**
-     * @param {ImageTypes.ImageLayerLiquifyOperation} operation
-     * @returns {ImageTypes.ImageLayerLiquifyOperation}
-     */
-    function getLayerLiquifyOperationState(operation) {
+    function getLayerLiquifyOperationState(operation: ImageLayerLiquifyOperation): ImageLayerLiquifyOperation {
         return {
             type: operation.type,
             points: operation.points.map(function (point) {
@@ -1798,12 +2109,7 @@ export function createImage(image, config = {}) {
         };
     }
 
-    /**
-     * @param {ImageTypes.ImageLayerLiquifyOperation} operation
-     * @param {ImageTypes.ImageLayerLiquifyOperation} previous
-     * @returns {boolean}
-     */
-    function isLayerLiquifyOperationEqual(operation, previous) {
+    function isLayerLiquifyOperationEqual(operation: ImageLayerLiquifyOperation, previous: ImageLayerLiquifyOperation): boolean {
         if (!isSelectionEqual(operation.selection, previous.selection)) return false;
 
         return operation.type === previous.type && operation.size === previous.size && operation.strength === previous.strength && operation.density === previous.density && operation.rate === previous.rate && operation.points.length === previous.points.length && operation.points.every(function (point, index) {
@@ -1811,8 +2117,7 @@ export function createImage(image, config = {}) {
         });
     }
 
-    /** @type {ImageTypes.ImageEngine['createLayerPaint']} */
-    function createLayerPaint(id) {
+    function createLayerPaint(id: string) {
         if (destroyed) return false;
 
         const layer = layers.find(function (layer) {
@@ -1832,8 +2137,7 @@ export function createImage(image, config = {}) {
         return true;
     }
 
-    /** @type {ImageTypes.ImageEngine['removeLayerPaint']} */
-    function removeLayerPaint(id) {
+    function removeLayerPaint(id: string) {
         if (destroyed) return false;
 
         const layer = layers.find(function (layer) {
@@ -1849,8 +2153,7 @@ export function createImage(image, config = {}) {
         return true;
     }
 
-    /** @type {ImageTypes.ImageEngine['setLayerPaintEnabled']} */
-    function setLayerPaintEnabled(id, enabled) {
+    function setLayerPaintEnabled(id: string, enabled: boolean) {
         if (destroyed) return false;
 
         const layer = layers.find(function (layer) {
@@ -1872,13 +2175,7 @@ export function createImage(image, config = {}) {
         return true;
     }
 
-    /**
-     * @param {ImageTypes.ImageSerializedLayerPaint | null} paint
-     * @param {ImageTypes.ImageSerializedLayerPaint | null} previous
-     * @param {boolean} activeOnly
-     * @returns {boolean}
-     */
-    function isLayerPaintEqual(paint, previous, activeOnly = false) {
+    function isLayerPaintEqual(paint: ImageSerializedLayerPaint | null, previous: ImageSerializedLayerPaint | null, activeOnly: boolean = false): boolean {
         if (!paint || !previous) return paint === previous;
 
         return paint.enabled === previous.enabled && paint.historyIndex === previous.historyIndex && (activeOnly ? (paint.historyIndex < paint.operations.length) === (previous.historyIndex < previous.operations.length) : paint.operations.length === previous.operations.length) && paint.operations.every(function (operation, index) {
@@ -1886,8 +2183,7 @@ export function createImage(image, config = {}) {
         });
     }
 
-    /** @type {ImageTypes.ImageEngine['addLayerPaintOperation']} */
-    function addLayerPaintOperation(id, operation) {
+    function addLayerPaintOperation(id: string, operation: ImageLayerPaintOperation) {
         if (destroyed) return false;
 
         const layer = layers.find(function (layer) {
@@ -1905,8 +2201,7 @@ export function createImage(image, config = {}) {
             throw new TypeError("createImage: layer paint operation type must be 'brush', 'pencil', 'fill', or 'gradient'.");
         }
 
-        /** @type {ImageTypes.ImageLayerPaintOperation | null} */
-        let next = null;
+        let next: ImageLayerPaintOperation | null = null;
 
         if (type === "brush") {
             const {points, size, hardness, opacity, color} = operation;
@@ -2058,8 +2353,7 @@ export function createImage(image, config = {}) {
         return true;
     }
 
-    /** @type {ImageTypes.ImageEngine['undoLayerPaint']} */
-    function undoLayerPaint(id) {
+    function undoLayerPaint(id: string) {
         if (destroyed) return false;
 
         const layer = layers.find(function (layer) {
@@ -2073,8 +2367,7 @@ export function createImage(image, config = {}) {
         return true;
     }
 
-    /** @type {ImageTypes.ImageEngine['redoLayerPaint']} */
-    function redoLayerPaint(id) {
+    function redoLayerPaint(id: string) {
         if (destroyed) return false;
 
         const layer = layers.find(function (layer) {
@@ -2088,8 +2381,7 @@ export function createImage(image, config = {}) {
         return true;
     }
 
-    /** @type {ImageTypes.ImageEngine['canUndoLayerPaint']} */
-    function canUndoLayerPaint(id) {
+    function canUndoLayerPaint(id: string) {
         if (destroyed) return false;
 
         const layer = layers.find(function (layer) {
@@ -2099,8 +2391,7 @@ export function createImage(image, config = {}) {
         return Boolean(layer && layer.paint && layer.paint.historyIndex > 0);
     }
 
-    /** @type {ImageTypes.ImageEngine['canRedoLayerPaint']} */
-    function canRedoLayerPaint(id) {
+    function canRedoLayerPaint(id: string) {
         if (destroyed) return false;
 
         const layer = layers.find(function (layer) {
@@ -2110,11 +2401,7 @@ export function createImage(image, config = {}) {
         return Boolean(layer && layer.paint && layer.paint.historyIndex < layer.paint.operations.length);
     }
 
-    /**
-     * @param {ImageTypes.ImageLayerPaintOperation} operation
-     * @returns {ImageTypes.ImageLayerPaintOperation}
-     */
-    function getLayerPaintOperationState(operation) {
+    function getLayerPaintOperationState(operation: ImageLayerPaintOperation): ImageLayerPaintOperation {
         if (operation.type === "pencil") {
             return {
                 type: operation.type,
@@ -2167,12 +2454,7 @@ export function createImage(image, config = {}) {
         };
     }
 
-    /**
-     * @param {ImageTypes.ImageLayerPaintOperation} operation
-     * @param {ImageTypes.ImageLayerPaintOperation} previous
-     * @returns {boolean}
-     */
-    function isLayerPaintOperationEqual(operation, previous) {
+    function isLayerPaintOperationEqual(operation: ImageLayerPaintOperation, previous: ImageLayerPaintOperation): boolean {
         if (!isSelectionEqual(operation.selection, previous.selection)) return false;
 
         if (operation.type === "pencil") {
@@ -2194,8 +2476,7 @@ export function createImage(image, config = {}) {
         });
     }
 
-    /** @type {ImageTypes.ImageEngine['createLayerRetouch']} */
-    function createLayerRetouch(id) {
+    function createLayerRetouch(id: string) {
         if (destroyed) return false;
 
         const layer = layers.find(function (layer) {
@@ -2215,8 +2496,7 @@ export function createImage(image, config = {}) {
         return true;
     }
 
-    /** @type {ImageTypes.ImageEngine['removeLayerRetouch']} */
-    function removeLayerRetouch(id) {
+    function removeLayerRetouch(id: string) {
         if (destroyed) return false;
 
         const layer = layers.find(function (layer) {
@@ -2232,8 +2512,7 @@ export function createImage(image, config = {}) {
         return true;
     }
 
-    /** @type {ImageTypes.ImageEngine['setLayerRetouchEnabled']} */
-    function setLayerRetouchEnabled(id, enabled) {
+    function setLayerRetouchEnabled(id: string, enabled: boolean) {
         if (destroyed) return false;
 
         const layer = layers.find(function (layer) {
@@ -2255,13 +2534,7 @@ export function createImage(image, config = {}) {
         return true;
     }
 
-    /**
-     * @param {ImageTypes.ImageSerializedLayerRetouch | null} retouch
-     * @param {ImageTypes.ImageSerializedLayerRetouch | null} previous
-     * @param {boolean} activeOnly
-     * @returns {boolean}
-     */
-    function isLayerRetouchEqual(retouch, previous, activeOnly = false) {
+    function isLayerRetouchEqual(retouch: ImageSerializedLayerRetouch | null, previous: ImageSerializedLayerRetouch | null, activeOnly: boolean = false): boolean {
         if (!retouch || !previous) return retouch === previous;
 
         return retouch.enabled === previous.enabled && retouch.historyIndex === previous.historyIndex && (activeOnly ? (retouch.historyIndex < retouch.operations.length) === (previous.historyIndex < previous.operations.length) : retouch.operations.length === previous.operations.length) && retouch.operations.every(function (operation, index) {
@@ -2269,8 +2542,7 @@ export function createImage(image, config = {}) {
         });
     }
 
-    /** @type {ImageTypes.ImageEngine['addLayerRetouchOperation']} */
-    function addLayerRetouchOperation(id, operation) {
+    function addLayerRetouchOperation(id: string, operation: ImageLayerRetouchOperation) {
         if (destroyed) return false;
 
         const layer = layers.find(function (layer) {
@@ -2336,15 +2608,14 @@ export function createImage(image, config = {}) {
             };
         }
 
-        layer.retouch.operations = layer.retouch.operations.slice(0, layer.retouch.historyIndex).concat(/** @type {ImageTypes.ImageLayerRetouchOperation} */ (next));
+        layer.retouch.operations = layer.retouch.operations.slice(0, layer.retouch.historyIndex).concat((next as ImageLayerRetouchOperation));
         layer.retouch.historyIndex = layer.retouch.operations.length;
         markDocumentChanged();
         notify();
         return true;
     }
 
-    /** @type {ImageTypes.ImageEngine['undoLayerRetouch']} */
-    function undoLayerRetouch(id) {
+    function undoLayerRetouch(id: string) {
         if (destroyed) return false;
 
         const layer = layers.find(function (layer) {
@@ -2358,8 +2629,7 @@ export function createImage(image, config = {}) {
         return true;
     }
 
-    /** @type {ImageTypes.ImageEngine['redoLayerRetouch']} */
-    function redoLayerRetouch(id) {
+    function redoLayerRetouch(id: string) {
         if (destroyed) return false;
 
         const layer = layers.find(function (layer) {
@@ -2373,8 +2643,7 @@ export function createImage(image, config = {}) {
         return true;
     }
 
-    /** @type {ImageTypes.ImageEngine['canUndoLayerRetouch']} */
-    function canUndoLayerRetouch(id) {
+    function canUndoLayerRetouch(id: string) {
         if (destroyed) return false;
 
         const layer = layers.find(function (layer) {
@@ -2384,8 +2653,7 @@ export function createImage(image, config = {}) {
         return Boolean(layer && layer.retouch && layer.retouch.historyIndex > 0);
     }
 
-    /** @type {ImageTypes.ImageEngine['canRedoLayerRetouch']} */
-    function canRedoLayerRetouch(id) {
+    function canRedoLayerRetouch(id: string) {
         if (destroyed) return false;
 
         const layer = layers.find(function (layer) {
@@ -2395,11 +2663,7 @@ export function createImage(image, config = {}) {
         return Boolean(layer && layer.retouch && layer.retouch.historyIndex < layer.retouch.operations.length);
     }
 
-    /**
-     * @param {ImageTypes.ImageLayerRetouchOperation} operation
-     * @returns {ImageTypes.ImageLayerRetouchOperation}
-     */
-    function getLayerRetouchOperationState(operation) {
+    function getLayerRetouchOperationState(operation: ImageLayerRetouchOperation): ImageLayerRetouchOperation {
         return {
             type: operation.type,
             sourceX: operation.sourceX,
@@ -2414,12 +2678,7 @@ export function createImage(image, config = {}) {
         };
     }
 
-    /**
-     * @param {ImageTypes.ImageLayerRetouchOperation} operation
-     * @param {ImageTypes.ImageLayerRetouchOperation} previous
-     * @returns {boolean}
-     */
-    function isLayerRetouchOperationEqual(operation, previous) {
+    function isLayerRetouchOperationEqual(operation: ImageLayerRetouchOperation, previous: ImageLayerRetouchOperation): boolean {
         if (!isSelectionEqual(operation.selection, previous.selection)) return false;
 
         return operation.type === previous.type && operation.sourceX === previous.sourceX && operation.sourceY === previous.sourceY && operation.size === previous.size && operation.hardness === previous.hardness && operation.opacity === previous.opacity && operation.points.length === previous.points.length && operation.points.every(function (point, index) {
@@ -2427,8 +2686,7 @@ export function createImage(image, config = {}) {
         });
     }
 
-    /** @type {ImageTypes.ImageEngine['moveLayer']} */
-    function moveLayer(id, index) {
+    function moveLayer(id: string, index: number) {
         if (destroyed) return false;
 
         const currentIndex = layers.findIndex(function (layer) {
@@ -2454,11 +2712,9 @@ export function createImage(image, config = {}) {
     // endregion
 
     // region ===== Selection Controls =================================================================================
-    /** @type {ImageTypes.ImageSelection | null} */
-    let selection = null;
+    let selection: ImageSelection | null = null;
 
-    /** @type {ImageTypes.ImageEngine['setSelection']} */
-    function setSelection(value) {
+    function setSelection(value: ImageSelection) {
         if (destroyed) return false;
 
         if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -2522,7 +2778,6 @@ export function createImage(image, config = {}) {
         return true;
     }
 
-    /** @type {ImageTypes.ImageEngine['clearSelection']} */
     function clearSelection() {
         if (destroyed) return false;
         if (!selection) return false;
@@ -2535,11 +2790,7 @@ export function createImage(image, config = {}) {
         return true;
     }
 
-    /**
-     * @param {ImageTypes.ImageSelection | null | undefined} selection
-     * @returns {ImageTypes.ImageSelection | null}
-     */
-    function getSelectionState(selection) {
+    function getSelectionState(selection: ImageSelection | null | undefined): ImageSelection | null {
         if (!selection) return null;
 
         if (selection.type === "rectangle") {
@@ -2560,13 +2811,7 @@ export function createImage(image, config = {}) {
         };
     }
 
-    /**
-     * @param {ImageTypes.ImageSelection | null | undefined} selection
-     * @param {number} scaleX
-     * @param {number} scaleY
-     * @returns {ImageTypes.ImageSelection | null}
-     */
-    function getResizedSelectionState(selection, scaleX, scaleY) {
+    function getResizedSelectionState(selection: ImageSelection | null | undefined, scaleX: number, scaleY: number): ImageSelection | null {
         const next = getSelectionState(selection);
         if (!next) return null;
 
@@ -2597,24 +2842,14 @@ export function createImage(image, config = {}) {
         return next;
     }
 
-    /**
-     * @param {string} id
-     * @param {ImageTypes.ImageSelection | null | undefined} value
-     * @returns {ImageTypes.ImageSelection | null | false}
-     */
-    function getOperationSelectionState(id, value) {
+    function getOperationSelectionState(id: string, value: ImageSelection | null | undefined): ImageSelection | null | false {
         if (value === undefined) return getLayerSelectionState(id, selection);
 
         validateOperationSelection(value);
         return getSelectionState(value);
     }
 
-    /**
-     * @param {string} id
-     * @param {ImageTypes.ImageSelection | null} selection
-     * @returns {ImageTypes.ImageLassoSelection | null | false}
-     */
-    function getLayerSelectionState(id, selection) {
+    function getLayerSelectionState(id: string, selection: ImageSelection | null): ImageLassoSelection | null | false {
         if (!selection) return null;
 
         const points = selection.type === "rectangle" ? [
@@ -2623,8 +2858,7 @@ export function createImage(image, config = {}) {
             {x: selection.x + selection.width, y: selection.y + selection.height},
             {x: selection.x, y: selection.y + selection.height}
         ] : selection.points;
-        /** @type {ImageTypes.ImageLassoSelection} */
-        const next = {type: "lasso", points: []};
+        const next: ImageLassoSelection = {type: "lasso", points: []};
 
         for (const point of points) {
             const local = canvasToLayer(id, point.x, point.y);
@@ -2636,12 +2870,7 @@ export function createImage(image, config = {}) {
         return next;
     }
 
-    /**
-     * @param {ImageTypes.ImageSelection | null | undefined} selection
-     * @param {ImageTypes.ImageSelection | null | undefined} previous
-     * @returns {boolean}
-     */
-    function isSelectionEqual(selection, previous) {
+    function isSelectionEqual(selection: ImageSelection | null | undefined, previous: ImageSelection | null | undefined): boolean {
         if (!selection || !previous) return selection === previous;
         if (selection.type === "rectangle") {
             return previous.type === "rectangle" && selection.x === previous.x && selection.y === previous.y && selection.width === previous.width && selection.height === previous.height;
@@ -2652,13 +2881,7 @@ export function createImage(image, config = {}) {
         });
     }
 
-    /**
-     * @param {ImageTypes.ImageSelection | null | undefined} selection
-     * @param {number} x
-     * @param {number} y
-     * @returns {boolean}
-     */
-    function isSelectionPoint(selection, x, y) {
+    function isSelectionPoint(selection: ImageSelection | null | undefined, x: number, y: number): boolean {
         if (!selection) return true;
 
         if (selection.type === "rectangle") {
@@ -2679,11 +2902,7 @@ export function createImage(image, config = {}) {
         return inside;
     }
 
-    /**
-     * @param {ImageTypes.ImageSelection | null | undefined} selection
-     * @returns {void}
-     */
-    function validateOperationSelection(selection) {
+    function validateOperationSelection(selection: ImageSelection | null | undefined): void {
         if (selection === undefined || selection === null) return;
 
         if (!selection || typeof selection !== "object" || Array.isArray(selection)) {
@@ -2724,11 +2943,9 @@ export function createImage(image, config = {}) {
     // endregion
 
     // region ===== Crop Controls ======================================================================================
-    /** @type {ImageTypes.ImageCrop | null} */
-    let crop = null;
+    let crop: ImageCrop | null = null;
 
-    /** @type {ImageTypes.ImageEngine['setCrop']} */
-    function setCrop(value) {
+    function setCrop(value: ImageCrop) {
         if (destroyed) return false;
 
         if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -2762,7 +2979,6 @@ export function createImage(image, config = {}) {
         return true;
     }
 
-    /** @type {ImageTypes.ImageEngine['clearCrop']} */
     function clearCrop() {
         if (destroyed) return false;
         if (!crop) return false;
@@ -2775,11 +2991,7 @@ export function createImage(image, config = {}) {
         return true;
     }
 
-    /**
-     * @param {ImageTypes.ImageCrop | null} crop
-     * @returns {ImageTypes.ImageCrop | null}
-     */
-    function getCropState(crop) {
+    function getCropState(crop: ImageCrop | null): ImageCrop | null {
         if (!crop) return null;
 
         return {
@@ -2790,12 +3002,7 @@ export function createImage(image, config = {}) {
         };
     }
 
-    /**
-     * @param {ImageTypes.ImageCrop | null} crop
-     * @param {ImageTypes.ImageCrop | null} previous
-     * @returns {boolean}
-     */
-    function isCropEqual(crop, previous) {
+    function isCropEqual(crop: ImageCrop | null, previous: ImageCrop | null): boolean {
         if (!crop || !previous) return crop === previous;
 
         return crop.x === previous.x && crop.y === previous.y && crop.width === previous.width && crop.height === previous.height;
@@ -2806,8 +3013,7 @@ export function createImage(image, config = {}) {
     // region ===== Straighten Controls ================================================================================
     let straighten = 0;
 
-    /** @type {ImageTypes.ImageEngine['setStraighten']} */
-    function setStraighten(degrees) {
+    function setStraighten(degrees: number) {
         if (destroyed) return false;
 
         if (typeof degrees !== "number" || !Number.isFinite(degrees)) {
@@ -2824,7 +3030,6 @@ export function createImage(image, config = {}) {
         return true;
     }
 
-    /** @type {ImageTypes.ImageEngine['resetStraighten']} */
     function resetStraighten() {
         if (destroyed) return false;
         if (straighten === 0) return false;
@@ -2840,15 +3045,11 @@ export function createImage(image, config = {}) {
     // endregion
 
     // region ===== History Controls ===================================================================================
-    /** @type {ImageInternal.DocumentState[]} */
-    const undoStack = [];
-    /** @type {ImageInternal.DocumentState[]} */
-    const redoStack = [];
-    /** @type {ImageInternal.DocumentState | null} */
-    let transactionState = null;
+    const undoStack: ImageInternal.DocumentState[] = [];
+    const redoStack: ImageInternal.DocumentState[] = [];
+    let transactionState: ImageInternal.DocumentState | null = null;
 
-    /** @param {boolean} [copyOperations] @returns {ImageInternal.DocumentState} */
-    function getDocumentState(copyOperations = false) {
+    function getDocumentState(copyOperations: boolean = false): ImageInternal.DocumentState {
         // Internal snapshots share immutable operations; serialization receives independent copies.
         return {
             canvasWidth: getCanvasWidth(),
@@ -2909,8 +3110,7 @@ export function createImage(image, config = {}) {
         };
     }
 
-    /** @param {ImageInternal.DocumentState} state */
-    function restoreDocumentState(state) {
+    function restoreDocumentState(state: ImageInternal.DocumentState) {
         const changed = !isDocumentStateEqual(state, true);
 
         const canvasSizeChanged = canvasWidthState !== state.canvasWidth || canvasHeightState !== state.canvasHeight;
@@ -2977,8 +3177,7 @@ export function createImage(image, config = {}) {
         return changed;
     }
 
-    /** @param {ImageInternal.DocumentState} state @param {boolean} [activeOnly] */
-    function isDocumentStateEqual(state, activeOnly = false) {
+    function isDocumentStateEqual(state: ImageInternal.DocumentState, activeOnly: boolean = false) {
         if (canvasWidthState !== state.canvasWidth || canvasHeightState !== state.canvasHeight || canvasBackgroundState !== state.canvasBackground || layers.length !== state.layers.length || !isSelectionEqual(selection, state.selection) || !isCropEqual(crop, state.crop) || straighten !== state.straighten) return false;
 
         return layers.every(function (layer, index) {
@@ -2995,7 +3194,6 @@ export function createImage(image, config = {}) {
         redoStack.length = 0;
     }
 
-    /** @type {ImageTypes.ImageEngine["undo"]} */
     function undo() {
         if (destroyed) return false;
         if (!canUndo()) return false;
@@ -3004,12 +3202,11 @@ export function createImage(image, config = {}) {
         const couldRedo = canRedo();
 
         redoStack.push(getDocumentState());
-        const changed = restoreDocumentState(/** @type {ImageInternal.DocumentState} */ (undoStack.pop()));
+        const changed = restoreDocumentState(((undoStack.pop()) as ImageInternal.DocumentState));
         if (changed || couldUndo !== canUndo() || couldRedo !== canRedo()) notify();
         return true;
     }
 
-    /** @type {ImageTypes.ImageEngine["redo"]} */
     function redo() {
         if (destroyed) return false;
         if (!canRedo()) return false;
@@ -3018,22 +3215,19 @@ export function createImage(image, config = {}) {
         const couldRedo = canRedo();
 
         undoStack.push(getDocumentState());
-        const changed = restoreDocumentState(/** @type {ImageInternal.DocumentState} */ (redoStack.pop()));
+        const changed = restoreDocumentState(((redoStack.pop()) as ImageInternal.DocumentState));
         if (changed || couldUndo !== canUndo() || couldRedo !== canRedo()) notify();
         return true;
     }
 
-    /** @type {ImageTypes.ImageEngine["canUndo"]} */
     function canUndo() {
         return !destroyed && !transactionState && undoStack.length > 0;
     }
 
-    /** @type {ImageTypes.ImageEngine["canRedo"]} */
     function canRedo() {
         return !destroyed && !transactionState && redoStack.length > 0;
     }
 
-    /** @type {ImageTypes.ImageEngine["beginTransaction"]} */
     function beginTransaction() {
         if (destroyed) return false;
         if (transactionState) return false;
@@ -3045,7 +3239,6 @@ export function createImage(image, config = {}) {
         return true;
     }
 
-    /** @type {ImageTypes.ImageEngine["commitTransaction"]} */
     function commitTransaction() {
         if (destroyed) return false;
         if (!transactionState) return false;
@@ -3062,7 +3255,6 @@ export function createImage(image, config = {}) {
         return true;
     }
 
-    /** @type {ImageTypes.ImageEngine["cancelTransaction"]} */
     function cancelTransaction() {
         if (destroyed) return false;
         if (!transactionState) return false;
@@ -3077,7 +3269,6 @@ export function createImage(image, config = {}) {
     // endregion
 
     // region ===== Persistence ========================================================================================
-    /** @type {ImageTypes.ImageEngine["serialize"]} */
     function serialize() {
         const state = getDocumentState(true);
 
@@ -3093,8 +3284,7 @@ export function createImage(image, config = {}) {
         return {...state, layers: serializedLayers};
     }
 
-    /** @type {ImageTypes.ImageEngine["load"]} */
-    function load(serialized) {
+    function load(serialized: ImageSerializedDocument) {
         if (destroyed) return false;
 
         if (!serialized || typeof serialized !== "object" || Array.isArray(serialized)) {
@@ -3119,8 +3309,7 @@ export function createImage(image, config = {}) {
             throw new TypeError("createImage: straighten must be a finite number of degrees.");
         }
 
-        /** @type {ImageInternal.DocumentState} */
-        const next = {
+        const next: ImageInternal.DocumentState = {
             canvasWidth: canvasWidth,
             canvasHeight: canvasHeight,
             canvasBackground: canvasBackground,
@@ -3193,7 +3382,7 @@ export function createImage(image, config = {}) {
                     throw new TypeError("createImage: layer perspective must be an object or null.");
                 }
 
-                for (const name of /** @type {const} */ (["topLeft", "topRight", "bottomRight", "bottomLeft"])) {
+                for (const name of ((["topLeft", "topRight", "bottomRight", "bottomLeft"]) as const)) {
                     const point = perspective[name];
                     if (!point || typeof point !== "object" || Array.isArray(point) || typeof point.x !== "number" || !Number.isFinite(point.x) || typeof point.y !== "number" || !Number.isFinite(point.y)) {
                         throw new TypeError("createImage: layer perspective corners must contain finite coordinates.");
@@ -3270,10 +3459,10 @@ export function createImage(image, config = {}) {
                     throw new TypeError("createImage: layer adjustment values must be an object.");
                 }
 
-                const names = /** @type {const} */ (["exposure", "brightness", "contrast", "highlights", "shadows", "temperature", "tint", "saturation", "vibrance", "clarity", "sharpness"]);
+                const names = ((["exposure", "brightness", "contrast", "highlights", "shadows", "temperature", "tint", "saturation", "vibrance", "clarity", "sharpness"]) as const);
 
                 for (const name of Reflect.ownKeys(values)) {
-                    if (!names.some(function (key) { return key === name; })) {
+                    if (!names.some(function (key) {return key === name;})) {
                         throw new TypeError("createImage: layer adjustment name is not supported.");
                     }
                 }
@@ -3641,46 +3830,31 @@ export function createImage(image, config = {}) {
     // endregion
 
     // region ===== Rendering ==========================================================================================
-    /** @type {Map<string, ImageInternal.LayerProxy>} */
-    const layerProxies = new Map();
-    /** @type {HTMLCanvasElement | null} */
-    let documentRenderCanvas = null;
-    /** @type {HTMLCanvasElement | null} */
-    let layerPerspectiveCanvas = null;
-    /** @type {HTMLCanvasElement | null} */
-    let layerAdjustmentsCanvas = null;
-    /** @type {HTMLCanvasElement | null} */
-    let layerLiquifyCanvas = null;
-    /** @type {HTMLCanvasElement | null} */
-    let layerLiquifySourceCanvas = null;
-    /** @type {HTMLCanvasElement | null} */
-    let layerRetouchCanvas = null;
-    /** @type {HTMLCanvasElement | null} */
-    let layerRetouchStrokeCanvas = null;
-    /** @type {HTMLCanvasElement | null} */
-    let layerPaintCanvas = null;
-    /** @type {HTMLCanvasElement | null} */
-    let layerPaintStrokeCanvas = null;
-    /** @type {HTMLCanvasElement | null} */
-    let layerRenderCanvas = null;
-    /** @type {HTMLCanvasElement | null} */
-    let layerMaskCanvas = null;
-    /** @type {HTMLCanvasElement | null} */
-    let layerMaskStrokeCanvas = null;
+    const layerProxies: Map<string, ImageInternal.LayerProxy> = new Map();
+    let documentRenderCanvas: HTMLCanvasElement | null = null;
+    let layerPerspectiveCanvas: HTMLCanvasElement | null = null;
+    let layerAdjustmentsCanvas: HTMLCanvasElement | null = null;
+    let layerLiquifyCanvas: HTMLCanvasElement | null = null;
+    let layerLiquifySourceCanvas: HTMLCanvasElement | null = null;
+    let layerRetouchCanvas: HTMLCanvasElement | null = null;
+    let layerRetouchStrokeCanvas: HTMLCanvasElement | null = null;
+    let layerPaintCanvas: HTMLCanvasElement | null = null;
+    let layerPaintStrokeCanvas: HTMLCanvasElement | null = null;
+    let layerRenderCanvas: HTMLCanvasElement | null = null;
+    let layerMaskCanvas: HTMLCanvasElement | null = null;
+    let layerMaskStrokeCanvas: HTMLCanvasElement | null = null;
 
     cleanups.push(function () {
         for (const id of layerProxies.keys()) clearLayerProxy(id);
     });
 
-    /** @type {ImageTypes.ImageEngine['render']} */
-    function render(target) {
+    function render(target: HTMLCanvasElement) {
         if (destroyed) return false;
 
         return renderDocument(target, 1);
     }
 
-    /** @type {ImageTypes.ImageEngine['renderPreview']} */
-    function renderPreview(target, maxWidth, maxHeight) {
+    function renderPreview(target: HTMLCanvasElement, maxWidth: number, maxHeight: number) {
         if (destroyed) return false;
 
         if (typeof maxWidth !== "number" || !Number.isFinite(maxWidth) || maxWidth < 1 || typeof maxHeight !== "number" || !Number.isFinite(maxHeight) || maxHeight < 1) {
@@ -3694,8 +3868,7 @@ export function createImage(image, config = {}) {
         return renderDocument(target, outputScale, true, true);
     }
 
-    /** @type {ImageTypes.ImageEngine['exportImage']} */
-    async function exportImage(options = {}) {
+    async function exportImage(options: ImageExportOptions | undefined = {}) {
         if (destroyed) throw new Error("createImage: the image has been destroyed.");
 
         if (!options || typeof options !== "object" || Array.isArray(options)) {
@@ -3719,7 +3892,7 @@ export function createImage(image, config = {}) {
                 throw new Error("createImage: the image could not be rendered for export.");
             }
 
-            const blob = await new Promise(/** @param {(value: Blob) => void} resolve */ function (resolve, reject) {
+            const blob = await new Promise(function (resolve: (value: Blob) => void, reject) {
                 target.toBlob(function (blob) {
                     if (!blob || blob.type !== type) {
                         reject(new Error("createImage: the image could not be encoded as the requested type."));
@@ -3739,8 +3912,7 @@ export function createImage(image, config = {}) {
         }
     }
 
-    /** @type {ImageTypes.ImageEngine['pickColor']} */
-    function pickColor(x, y) {
+    function pickColor(x: number, y: number) {
         if (destroyed) return false;
 
         if (typeof x !== "number" || !Number.isFinite(x) || typeof y !== "number" || !Number.isFinite(y)) {
@@ -3795,17 +3967,12 @@ export function createImage(image, config = {}) {
         return (straighten % 360) * Math.PI / 180;
     }
 
-    /** @param {number} value */
-    function getRasterDimension(value) {
+    function getRasterDimension(value: number) {
         // Positive logical dimensions always need at least one backing pixel.
         return value > 0 ? Math.max(1, Math.floor(value)) : 0;
     }
 
-    /**
-     * @param {HTMLCanvasElement} target
-     * @param {number} outputScale
-     */
-    function renderDocument(target, outputScale, transformDocument = true, preview = false) {
+    function renderDocument(target: HTMLCanvasElement, outputScale: number, transformDocument = true, preview = false) {
         const targetDocument = target && target.ownerDocument;
         // Detached documents have no window, but their canvases still carry the correct native prototype.
         const canvasPrototype = targetDocument && (targetDocument.defaultView?.HTMLCanvasElement?.prototype || Object.getPrototypeOf(targetDocument.createElement("canvas")));
@@ -3817,7 +3984,7 @@ export function createImage(image, config = {}) {
         // History shares source objects, so rendering into one would also alter a future restoration.
         for (const stack of [undoStack, redoStack, transactionState ? [transactionState] : []]) {
             for (const state of stack) {
-                if (state.layers.some(function (layer) { return layer.source === target; })) {
+                if (state.layers.some(function (layer) {return layer.source === target;})) {
                     throw new TypeError("createImage: render target must not be a layer source retained by history.");
                 }
             }
@@ -3929,11 +4096,7 @@ export function createImage(image, config = {}) {
         return true;
     }
 
-    /**
-     * @param {ImageInternal.LayerState} layer
-     * @param {number} outputScale
-     */
-    function getLayerProxy(layer, outputScale) {
+    function getLayerProxy(layer: ImageInternal.LayerState, outputScale: number) {
         const source = layer.source;
         if (typeof source === "string") return null;
 
@@ -4012,10 +4175,7 @@ export function createImage(image, config = {}) {
         return next;
     }
 
-    /**
-     * @param {string} id
-     */
-    function clearLayerProxy(id) {
+    function clearLayerProxy(id: string) {
         const proxy = layerProxies.get(id);
         if (!proxy) return;
 
@@ -4024,12 +4184,7 @@ export function createImage(image, config = {}) {
         layerProxies.delete(id);
     }
 
-    /**
-     * @param {CanvasRenderingContext2D} context
-     * @param {ImageInternal.LayerState} layer
-     * @param {ImageInternal.LayerSource} source
-     */
-    function renderLayerPerspective(context, layer, source, sourceScaleX = 1, sourceScaleY = 1) {
+    function renderLayerPerspective(context: CanvasRenderingContext2D, layer: ImageInternal.LayerState, source: ImageInternal.LayerSource, sourceScaleX = 1, sourceScaleY = 1) {
         const matrix = getLayerPerspectiveTransform(layer, true);
         if (!matrix) return false;
 
@@ -4037,7 +4192,7 @@ export function createImage(image, config = {}) {
         const determinant = transform.a * transform.d - transform.b * transform.c;
         if (!Number.isFinite(determinant) || !determinant) return false;
 
-        const {topLeft, topRight, bottomRight, bottomLeft} = /** @type {ImageTypes.ImageLayerPerspective} */ (layer.transform.perspective);
+        const {topLeft, topRight, bottomRight, bottomLeft} = ((layer.transform.perspective) as ImageLayerPerspective);
         const corners = [topLeft, topRight, bottomRight, bottomLeft];
         let left = 0;
         let top = 0;
@@ -4181,14 +4336,8 @@ export function createImage(image, config = {}) {
         return true;
     }
 
-    /**
-     * @param {ImageInternal.LayerState} layer
-     * @param {ImageInternal.LayerProxy | null} [proxy]
-     * @returns {ImageInternal.LayerSource | null}
-     */
-    function renderLayerSource(layer, proxy = null) {
-        /** @type {ImageInternal.LayerSource | null} */
-        let source = proxy ? proxy.canvas : typeof layer.source === "string" ? null : layer.source;
+    function renderLayerSource(layer: ImageInternal.LayerState, proxy: ImageInternal.LayerProxy | null = null): ImageInternal.LayerSource | null {
+        let source: ImageInternal.LayerSource | null = proxy ? proxy.canvas : typeof layer.source === "string" ? null : layer.source;
         if (!source) return null;
         const scaleX = proxy ? proxy.canvas.width / proxy.width : 1;
         const scaleY = proxy ? proxy.canvas.height / proxy.height : 1;
@@ -4205,15 +4354,11 @@ export function createImage(image, config = {}) {
         return source;
     }
 
-    /**
-     * @param {ImageInternal.LayerState} layer
-     * @param {ImageInternal.LayerSource} source
-     */
-    function renderLayerAdjustments(layer, source, scaleX = 1, scaleY = 1) {
-        const adjustments = /** @type {ImageTypes.ImageLayerAdjustments} */ (layer.adjustments);
+    function renderLayerAdjustments(layer: ImageInternal.LayerState, source: ImageInternal.LayerSource, scaleX = 1, scaleY = 1) {
+        const adjustments = ((layer.adjustments) as ImageLayerAdjustments);
         const values = adjustments.values;
         if (!Object.keys(values).some(function (name) {
-            return values[/** @type {keyof ImageTypes.ImageLayerAdjustmentValues} */ (name)] !== 0;
+            return values[(name as keyof ImageLayerAdjustmentValues)] !== 0;
         })) return source;
 
         let width = "width" in source && typeof source.width === "number" ? source.width : NaN;
@@ -4256,11 +4401,7 @@ export function createImage(image, config = {}) {
         return layerAdjustmentsCanvas;
     }
 
-    /**
-     * @param {Uint8ClampedArray} data
-     * @param {ImageTypes.ImageLayerAdjustmentValues} values
-     */
-    function applyLayerAdjustmentColors(data, values) {
+    function applyLayerAdjustmentColors(data: Uint8ClampedArray, values: ImageLayerAdjustmentValues) {
         if (!values.exposure && !values.brightness && !values.contrast && !values.highlights && !values.shadows && !values.temperature && !values.tint && !values.saturation && !values.vibrance) return;
 
         // Exposure uses stops in linear light; other controls use normalized amounts without changing stored values.
@@ -4317,14 +4458,7 @@ export function createImage(image, config = {}) {
         }
     }
 
-    /**
-     * @param {ImageData} result
-     * @param {number} radius
-     * @param {number} value
-     * @param {number} scaleX
-     * @param {number} scaleY
-     */
-    function applyLayerAdjustmentDetail(result, radius, value, scaleX, scaleY) {
+    function applyLayerAdjustmentDetail(result: ImageData, radius: number, value: number, scaleX: number, scaleY: number) {
         const width = result.width;
         const height = result.height;
         const radiusX = Math.min(width - 1, Math.max(1, Math.round(radius * scaleX)));
@@ -4387,12 +4521,7 @@ export function createImage(image, config = {}) {
         }
     }
 
-    /**
-     * @param {ImageTypes.ImageSelection | null | undefined} selection
-     * @param {number} width
-     * @param {number} height
-     */
-    function getLayerSelectionMask(selection, width, height, scaleX = 1, scaleY = 1) {
+    function getLayerSelectionMask(selection: ImageSelection | null | undefined, width: number, height: number, scaleX = 1, scaleY = 1) {
         if (!selection) return null;
 
         const mask = new Uint8Array(width * height);
@@ -4406,11 +4535,7 @@ export function createImage(image, config = {}) {
         return mask;
     }
 
-    /**
-     * @param {CanvasRenderingContext2D} context
-     * @param {Uint8Array | null} mask
-     */
-    function applyLayerSelectionMask(context, mask) {
+    function applyLayerSelectionMask(context: CanvasRenderingContext2D, mask: Uint8Array | null) {
         if (!mask) return;
 
         const width = context.canvas.width;
@@ -4432,11 +4557,7 @@ export function createImage(image, config = {}) {
         }
     }
 
-    /**
-     * @param {ImageInternal.LayerState} layer
-     * @param {ImageInternal.LayerSource} source
-     */
-    function renderLayerLiquify(layer, source, scaleX = 1, scaleY = 1) {
+    function renderLayerLiquify(layer: ImageInternal.LayerState, source: ImageInternal.LayerSource, scaleX = 1, scaleY = 1) {
         let width = "width" in source && typeof source.width === "number" ? source.width : NaN;
         let height = "height" in source && typeof source.height === "number" ? source.height : NaN;
 
@@ -4463,7 +4584,7 @@ export function createImage(image, config = {}) {
             });
         }
 
-        const sourceCanvas = /** @type {HTMLCanvasElement} */ (layerLiquifySourceCanvas);
+        const sourceCanvas = (layerLiquifySourceCanvas as HTMLCanvasElement);
         const size = 256;
         const border = 64;
         layerLiquifyCanvas.width = width;
@@ -4476,10 +4597,8 @@ export function createImage(image, config = {}) {
         if (!context || !sourceContext) return null;
 
         const points = getLayerLiquifyPoints(layer, width, height, scaleX, scaleY);
-        /** @type {ImageRender.LiquifyCache} */
-        const cache = {keys: null, values: null, ages: null, clock: 0};
-        /** @type {Map<string, ImageRender.LiquifySource>} */
-        const sourceCache = new Map();
+        const cache: ImageRender.LiquifyCache = {keys: null, values: null, ages: null, clock: 0};
+        const sourceCache: Map<string, ImageRender.LiquifySource> = new Map();
         const length = Math.min(width, size + border * 2) * Math.min(height, size + border * 2) * 2;
         const tile = {x: 0, y: 0, width: 0, height: 0, field: new Float32Array(length), scratch: new Float32Array(length)};
         const result = context.createImageData(size, size);
@@ -4561,15 +4680,7 @@ export function createImage(image, config = {}) {
         return layerLiquifyCanvas;
     }
 
-    /**
-     * @param {CanvasRenderingContext2D} context
-     * @param {ImageInternal.LayerSource} source
-     * @param {number} x
-     * @param {number} y
-     * @param {number} size
-     * @param {Map<string, ImageRender.LiquifySource>} cache
-     */
-    function getLayerLiquifySource(context, source, x, y, size, cache) {
+    function getLayerLiquifySource(context: CanvasRenderingContext2D, source: ImageInternal.LayerSource, x: number, y: number, size: number, cache: Map<string, ImageRender.LiquifySource>) {
         const left = Math.floor(x / size) * size;
         const top = Math.floor(y / size) * size;
         const key = left + ":" + top;
@@ -4580,22 +4691,14 @@ export function createImage(image, config = {}) {
         context.drawImage(source, -left, -top);
 
         const next = {x: left, y: top, pixels: context.getImageData(0, 0, size + 1, size + 1)};
-        if (cache.size === 16) cache.delete(/** @type {string} */ (cache.keys().next().value));
+        if (cache.size === 16) cache.delete(((cache.keys().next().value) as string));
         cache.set(key, next);
         return next;
     }
 
-    /**
-     * @param {ImageInternal.LayerState} layer
-     * @param {number} width
-     * @param {number} height
-     * @param {number} scaleX
-     * @param {number} scaleY
-     */
-    function getLayerLiquifyPoints(layer, width, height, scaleX, scaleY) {
-        const liquify = /** @type {ImageTypes.ImageSerializedLayerLiquify} */ (layer.liquify);
-        /** @type {ImageRender.LiquifyPoints} */
-        const points = {segments: [], length: 0};
+    function getLayerLiquifyPoints(layer: ImageInternal.LayerState, width: number, height: number, scaleX: number, scaleY: number) {
+        const liquify = ((layer.liquify) as ImageSerializedLayerLiquify);
+        const points: ImageRender.LiquifyPoints = {segments: [], length: 0};
 
         for (let index = 0; index < liquify.historyIndex; index++) {
             const operation = liquify.operations[index];
@@ -4625,7 +4728,7 @@ export function createImage(image, config = {}) {
                 let start = 0;
                 let end = 1;
 
-                for (const axis of /** @type {const} */ (["x", "y"])) {
+                for (const axis of ((["x", "y"]) as const)) {
                     const delta = axis === "x" ? deltaX : deltaY;
                     const maximum = (axis === "x" ? width / scaleX : height / scaleY) + radius;
 
@@ -4656,20 +4759,7 @@ export function createImage(image, config = {}) {
         return points;
     }
 
-    /**
-     * @param {ImageRender.LiquifyPoints} points
-     * @param {ImageTypes.ImageLayerLiquifyOperation['type']} type
-     * @param {number} x
-     * @param {number} y
-     * @param {number} radius
-     * @param {number} density
-     * @param {number} amount
-     * @param {number} deltaX
-     * @param {number} deltaY
-     * @param {number} steps
-     * @param {ImageTypes.ImageSelection | null | undefined} selection
-     */
-    function addLayerLiquifyPoints(points, type, x, y, radius, density, amount, deltaX, deltaY, steps, selection) {
+    function addLayerLiquifyPoints(points: ImageRender.LiquifyPoints, type: ImageLayerLiquifyOperation['type'], x: number, y: number, radius: number, density: number, amount: number, deltaX: number, deltaY: number, steps: number, selection: ImageSelection | null | undefined) {
         if (!amount) return;
 
         // Keep each interpolated segment compact instead of allocating one object for every brush stamp.
@@ -4677,11 +4767,7 @@ export function createImage(image, config = {}) {
         points.length += steps;
     }
 
-    /**
-     * @param {ImageRender.LiquifyPoints} points
-     * @param {number} index
-     */
-    function getLayerLiquifySegment(points, index) {
+    function getLayerLiquifySegment(points: ImageRender.LiquifyPoints, index: number) {
         let first = 0;
         let last = points.segments.length - 1;
 
@@ -4694,20 +4780,11 @@ export function createImage(image, config = {}) {
         return points.segments[first];
     }
 
-    /**
-     * @param {ImageRender.LiquifySegment} segment
-     * @param {number} left
-     * @param {number} top
-     * @param {number} right
-     * @param {number} bottom
-     * @param {number} scaleX
-     * @param {number} scaleY
-     */
-    function getLayerLiquifyRange(segment, left, top, right, bottom, scaleX, scaleY) {
+    function getLayerLiquifyRange(segment: ImageRender.LiquifySegment, left: number, top: number, right: number, bottom: number, scaleX: number, scaleY: number) {
         let first = 1;
         let last = segment.steps;
 
-        for (const axis of /** @type {const} */ (["x", "y"])) {
+        for (const axis of ((["x", "y"]) as const)) {
             const delta = axis === "x" ? segment.deltaX : segment.deltaY;
             const minimum = (axis === "x" ? left / scaleX : top / scaleY) - segment.radius;
             const maximum = (axis === "x" ? right / scaleX : bottom / scaleY) + segment.radius;
@@ -4725,17 +4802,7 @@ export function createImage(image, config = {}) {
         return first <= last ? {first: first, last: last} : null;
     }
 
-    /**
-     * @param {ImageRender.LiquifySegment} segment
-     * @param {number} index
-     * @param {number} width
-     * @param {number} height
-     * @param {number} scaleX
-     * @param {number} scaleY
-     * @param {Partial<ImageRender.LiquifyPoint>} point
-     * @returns {asserts point is ImageRender.LiquifyPoint}
-     */
-    function getLayerLiquifyPoint(segment, index, width, height, scaleX, scaleY, point) {
+    function getLayerLiquifyPoint(segment: ImageRender.LiquifySegment, index: number, width: number, height: number, scaleX: number, scaleY: number, point: Partial<ImageRender.LiquifyPoint>): asserts point is ImageRender.LiquifyPoint {
         const step = index - segment.index + 1;
         point.type = segment.type;
         point.x = segment.x + segment.deltaX * step;
@@ -4752,15 +4819,7 @@ export function createImage(image, config = {}) {
         point.bottom = Math.min(height - 1, Math.floor((point.y + point.radius) * scaleY - 0.5));
     }
 
-    /**
-     * @param {ImageRender.LiquifyPoint} point
-     * @param {number} x
-     * @param {number} y
-     * @param {number} scaleX
-     * @param {number} scaleY
-     * @param {ImageRender.LiquifySample} sample
-     */
-    function getLayerLiquifySample(point, x, y, scaleX, scaleY, sample) {
+    function getLayerLiquifySample(point: ImageRender.LiquifyPoint, x: number, y: number, scaleX: number, scaleY: number, sample: ImageRender.LiquifySample) {
         if (x < point.left || x > point.right || y < point.top || y > point.bottom) return false;
         if (!isSelectionPoint(point.selection, (x + 0.5) / scaleX, (y + 0.5) / scaleY)) return false;
 
@@ -4795,15 +4854,10 @@ export function createImage(image, config = {}) {
         return true;
     }
 
-    /**
-     * @param {ImageRender.LiquifyCache} cache
-     * @param {number} index
-     * @param {number} position
-     */
-    function getLayerLiquifyCached(cache, index, position) {
+    function getLayerLiquifyCached(cache: ImageRender.LiquifyCache, index: number, position: number) {
         if (!cache.keys) return -1;
 
-        const ages = /** @type {Uint32Array} */ (cache.ages);
+        const ages = ((cache.ages) as Uint32Array);
 
         // Four slots per bucket bound memory; evicted displacements are rebuilt from the same history.
         const first = ((Math.imul(index + 1, 73856093) ^ Math.imul(position, 19349663)) & (ages.length / 4 - 1)) * 4;
@@ -4818,21 +4872,15 @@ export function createImage(image, config = {}) {
         return -1;
     }
 
-    /**
-     * @param {ImageRender.LiquifyCache} cache
-     * @param {number} index
-     * @param {number} position
-     * @param {ImageRender.Point} value
-     */
-    function setLayerLiquifyCached(cache, index, position, value) {
+    function setLayerLiquifyCached(cache: ImageRender.LiquifyCache, index: number, position: number, value: ImageRender.Point) {
         if (!cache.keys) {
             cache.keys = new Float64Array(262144 * 2);
             cache.values = new Float32Array(262144 * 2);
             cache.ages = new Uint32Array(262144);
         }
 
-        const ages = /** @type {Uint32Array} */ (cache.ages);
-        const values = /** @type {Float32Array} */ (cache.values);
+        const ages = ((cache.ages) as Uint32Array);
+        const values = ((cache.values) as Float32Array);
 
         const first = ((Math.imul(index + 1, 73856093) ^ Math.imul(position, 19349663)) & (ages.length / 4 - 1)) * 4;
         let next = first;
@@ -4848,34 +4896,20 @@ export function createImage(image, config = {}) {
         ages[next] = ++cache.clock;
     }
 
-    /**
-     * @param {ImageRender.LiquifyPoints} points
-     * @param {number} index
-     * @param {number} x
-     * @param {number} y
-     * @param {number} width
-     * @param {number} height
-     * @param {number} scaleX
-     * @param {number} scaleY
-     * @param {ImageRender.LiquifyCache} cache
-     * @returns {ImageRender.Point}
-     */
-    function getLayerLiquifyDisplacement(points, index, x, y, width, height, scaleX, scaleY, cache) {
+    function getLayerLiquifyDisplacement(points: ImageRender.LiquifyPoints, index: number, x: number, y: number, width: number, height: number, scaleX: number, scaleY: number, cache: ImageRender.LiquifyCache): ImageRender.Point {
         if (index < 0) return {x: 0, y: 0};
 
         const previous = getLayerLiquifyCached(cache, index, y * width + x);
         if (previous >= 0) {
-            const values = /** @type {Float32Array} */ (cache.values);
+            const values = ((cache.values) as Float32Array);
             return {x: values[previous * 2], y: values[previous * 2 + 1]};
         }
 
         // A bounded cache and an explicit stack keep long histories and distant dependencies off the call stack.
-        /** @type {ImageRender.PendingLiquifyFrame[]} */
-        const stack = [{index: index, x: x, y: y}];
+        const stack: ImageRender.PendingLiquifyFrame[] = [{index: index, x: x, y: y}];
         const point = {};
         const sample = {x: 0, y: 0, restore: -1};
-        /** @type {ImageRender.Point | null} */
-        let result = null;
+        let result: ImageRender.Point | null = null;
 
         while (stack.length) {
             const frame = stack[stack.length - 1];
@@ -4904,7 +4938,7 @@ export function createImage(image, config = {}) {
 
                 const previous = getLayerLiquifyCached(cache, frame.index, frame.y * width + frame.x);
                 if (previous >= 0) {
-                    const values = /** @type {Float32Array} */ (cache.values);
+                    const values = ((cache.values) as Float32Array);
                     result = {x: values[previous * 2], y: values[previous * 2 + 1]};
                     stack.pop();
                     continue;
@@ -4927,7 +4961,7 @@ export function createImage(image, config = {}) {
                 result = null;
             }
 
-            const sampled = /** @type {ImageRender.LiquifyFrame} */ (frame);
+            const sampled = (frame as ImageRender.LiquifyFrame);
 
             if (sampled.samples.length < (sampled.restore >= 0 ? 1 : 4)) {
                 const x = sampled.restore >= 0 ? sampled.x : sampled.samples.length % 2 ? sampled.x1 : sampled.x0;
@@ -4954,23 +4988,10 @@ export function createImage(image, config = {}) {
             stack.pop();
         }
 
-        return /** @type {ImageRender.Point} */ (result);
+        return (result as ImageRender.Point);
     }
 
-    /**
-     * @param {ImageRender.LiquifyTile} tile
-     * @param {ImageRender.LiquifyPoints} points
-     * @param {number} index
-     * @param {number} x
-     * @param {number} y
-     * @param {number} axis
-     * @param {number} width
-     * @param {number} height
-     * @param {number} scaleX
-     * @param {number} scaleY
-     * @param {ImageRender.LiquifyCache} cache
-     */
-    function getLayerLiquifyField(tile, points, index, x, y, axis, width, height, scaleX, scaleY, cache) {
+    function getLayerLiquifyField(tile: ImageRender.LiquifyTile, points: ImageRender.LiquifyPoints, index: number, x: number, y: number, axis: number, width: number, height: number, scaleX: number, scaleY: number, cache: ImageRender.LiquifyCache) {
         if (!index) return 0;
 
         if (x >= tile.x && x < tile.x + tile.width && y >= tile.y && y < tile.y + tile.height) {
@@ -4981,18 +5002,7 @@ export function createImage(image, config = {}) {
         return axis ? sample.y : sample.x;
     }
 
-    /**
-     * @param {ImageRender.LiquifyTile} tile
-     * @param {ImageRender.LiquifyPoint} point
-     * @param {ImageRender.LiquifyPoints} points
-     * @param {number} index
-     * @param {number} width
-     * @param {number} height
-     * @param {number} scaleX
-     * @param {number} scaleY
-     * @param {ImageRender.LiquifyCache} cache
-     */
-    function renderLayerLiquifyPoint(tile, point, points, index, width, height, scaleX, scaleY, cache) {
+    function renderLayerLiquifyPoint(tile: ImageRender.LiquifyTile, point: ImageRender.LiquifyPoint, points: ImageRender.LiquifyPoints, index: number, width: number, height: number, scaleX: number, scaleY: number, cache: ImageRender.LiquifyCache) {
         const left = Math.max(tile.x, point.left);
         const top = Math.max(tile.y, point.top);
         const right = Math.min(tile.x + tile.width - 1, point.right);
@@ -5040,12 +5050,8 @@ export function createImage(image, config = {}) {
         }
     }
 
-    /**
-     * @param {ImageInternal.LayerState} layer
-     * @param {ImageInternal.LayerSource} source
-     */
-    function renderLayerRetouch(layer, source, scaleX = 1, scaleY = 1) {
-        const retouch = /** @type {ImageTypes.ImageSerializedLayerRetouch} */ (layer.retouch);
+    function renderLayerRetouch(layer: ImageInternal.LayerState, source: ImageInternal.LayerSource, scaleX = 1, scaleY = 1) {
+        const retouch = ((layer.retouch) as ImageSerializedLayerRetouch);
         let width = "width" in source && typeof source.width === "number" ? source.width : NaN;
         let height = "height" in source && typeof source.height === "number" ? source.height : NaN;
 
@@ -5072,7 +5078,7 @@ export function createImage(image, config = {}) {
             });
         }
 
-        const strokeCanvas = /** @type {HTMLCanvasElement} */ (layerRetouchStrokeCanvas);
+        const strokeCanvas = (layerRetouchStrokeCanvas as HTMLCanvasElement);
 
         for (const canvas of [layerRetouchCanvas, strokeCanvas]) {
             canvas.width = width;
@@ -5110,14 +5116,7 @@ export function createImage(image, config = {}) {
         return layerRetouchCanvas;
     }
 
-    /**
-     * @param {CanvasRenderingContext2D} context
-     * @param {CanvasRenderingContext2D} strokeContext
-     * @param {ImageTypes.ImageLayerRetouchOperation} operation
-     * @param {number} scaleX
-     * @param {number} scaleY
-     */
-    function renderLayerRetouchHeal(context, strokeContext, operation, scaleX, scaleY) {
+    function renderLayerRetouchHeal(context: CanvasRenderingContext2D, strokeContext: CanvasRenderingContext2D, operation: ImageLayerRetouchOperation, scaleX: number, scaleY: number) {
         const width = context.canvas.width;
         const height = context.canvas.height;
         const radius = operation.size / 2;
@@ -5164,12 +5163,8 @@ export function createImage(image, config = {}) {
         strokeContext.putImageData(stroke, left, top);
     }
 
-    /**
-     * @param {ImageInternal.LayerState} layer
-     * @param {ImageInternal.LayerSource} source
-     */
-    function renderLayerPaint(layer, source, scaleX = 1, scaleY = 1) {
-        const paint = /** @type {ImageTypes.ImageSerializedLayerPaint} */ (layer.paint);
+    function renderLayerPaint(layer: ImageInternal.LayerState, source: ImageInternal.LayerSource, scaleX = 1, scaleY = 1) {
+        const paint = ((layer.paint) as ImageSerializedLayerPaint);
         let width = "width" in source && typeof source.width === "number" ? source.width : NaN;
         let height = "height" in source && typeof source.height === "number" ? source.height : NaN;
 
@@ -5196,7 +5191,7 @@ export function createImage(image, config = {}) {
             });
         }
 
-        const strokeCanvas = /** @type {HTMLCanvasElement} */ (layerPaintStrokeCanvas);
+        const strokeCanvas = (layerPaintStrokeCanvas as HTMLCanvasElement);
 
         for (const canvas of [layerPaintCanvas, strokeCanvas]) {
             canvas.width = width;
@@ -5272,15 +5267,7 @@ export function createImage(image, config = {}) {
         return layerPaintCanvas;
     }
 
-    /**
-     * @param {CanvasRenderingContext2D} context
-     * @param {CanvasRenderingContext2D} strokeContext
-     * @param {ImageTypes.ImageLayerPaintFillOperation} operation
-     * @param {Uint8Array | null} selectionMask
-     * @param {number} scaleX
-     * @param {number} scaleY
-     */
-    function renderLayerPaintFill(context, strokeContext, operation, selectionMask, scaleX, scaleY) {
+    function renderLayerPaintFill(context: CanvasRenderingContext2D, strokeContext: CanvasRenderingContext2D, operation: ImageLayerPaintFillOperation, selectionMask: Uint8Array | null, scaleX: number, scaleY: number) {
         const width = context.canvas.width;
         const height = context.canvas.height;
         const seedX = Math.floor(operation.x * scaleX);
@@ -5299,7 +5286,7 @@ export function createImage(image, config = {}) {
 
         // Fill connected horizontal runs, comparing every pixel's RGBA channels with the unchanged seed.
         while (pending.length) {
-            const pixel = /** @type {number} */ (pending.pop());
+            const pixel = ((pending.pop()) as number);
             const y = Math.floor(pixel / width);
             let x = pixel % width;
             let offset = pixel * 4;
@@ -5310,10 +5297,8 @@ export function createImage(image, config = {}) {
                 offset -= 4;
             }
 
-            /** @type {number | boolean} */
-            let above = false;
-            /** @type {number | boolean} */
-            let below = false;
+            let above: number | boolean = false;
+            let below: number | boolean = false;
 
             for (; x < width && isLayerPaintFillPixel(original.data, stroke.data, offset, seed, tolerance, selectionMask); x++, offset += 4) {
                 stroke.data[offset + 3] = 255;
@@ -5332,24 +5317,12 @@ export function createImage(image, config = {}) {
         strokeContext.putImageData(stroke, 0, 0);
     }
 
-    /**
-     * @param {Uint8ClampedArray} data
-     * @param {Uint8ClampedArray} stroke
-     * @param {number} offset
-     * @param {Uint8ClampedArray} seed
-     * @param {number} tolerance
-     * @param {Uint8Array | null} selectionMask
-     */
-    function isLayerPaintFillPixel(data, stroke, offset, seed, tolerance, selectionMask) {
+    function isLayerPaintFillPixel(data: Uint8ClampedArray, stroke: Uint8ClampedArray, offset: number, seed: Uint8ClampedArray, tolerance: number, selectionMask: Uint8Array | null) {
         return (!selectionMask || selectionMask[offset / 4]) && !stroke[offset + 3] && Math.abs(data[offset] - seed[0]) <= tolerance && Math.abs(data[offset + 1] - seed[1]) <= tolerance && Math.abs(data[offset + 2] - seed[2]) <= tolerance && Math.abs(data[offset + 3] - seed[3]) <= tolerance;
     }
 
-    /**
-     * @param {ImageInternal.LayerState} layer
-     * @param {ImageInternal.LayerSource} source
-     */
-    function renderLayerMask(layer, source, scaleX = 1, scaleY = 1) {
-        const mask = /** @type {ImageTypes.ImageSerializedLayerMask} */ (layer.mask);
+    function renderLayerMask(layer: ImageInternal.LayerState, source: ImageInternal.LayerSource, scaleX = 1, scaleY = 1) {
+        const mask = ((layer.mask) as ImageSerializedLayerMask);
         let width = "width" in source && typeof source.width === "number" ? source.width : NaN;
         let height = "height" in source && typeof source.height === "number" ? source.height : NaN;
 
@@ -5378,8 +5351,8 @@ export function createImage(image, config = {}) {
             });
         }
 
-        const maskCanvas = /** @type {HTMLCanvasElement} */ (layerMaskCanvas);
-        const strokeCanvas = /** @type {HTMLCanvasElement} */ (layerMaskStrokeCanvas);
+        const maskCanvas = (layerMaskCanvas as HTMLCanvasElement);
+        const strokeCanvas = (layerMaskStrokeCanvas as HTMLCanvasElement);
 
         for (const canvas of [layerRenderCanvas, maskCanvas, strokeCanvas]) {
             canvas.width = width;
@@ -5412,11 +5385,7 @@ export function createImage(image, config = {}) {
         return layerRenderCanvas;
     }
 
-    /**
-     * @param {CanvasRenderingContext2D} context
-     * @param {Pick<ImageTypes.ImageLayerMaskOperation, 'points' | 'size' | 'hardness'>} operation
-     */
-    function renderLayerMaskOperation(context, operation, scaleX = 1, scaleY = 1) {
+    function renderLayerMaskOperation(context: CanvasRenderingContext2D, operation: Pick<ImageLayerMaskOperation, 'points' | 'size' | 'hardness'>, scaleX = 1, scaleY = 1) {
         context.clearRect(0, 0, context.canvas.width, context.canvas.height);
 
         const radius = operation.size / 2;
@@ -5478,16 +5447,14 @@ export function createImage(image, config = {}) {
         return image.naturalHeight || 0;
     }
 
-    /** @returns {ImageInternal.ViewportSize} */
-    function getViewportSize() {
+    function getViewportSize(): ImageInternal.ViewportSize {
         const rect = viewport.getBoundingClientRect();
 
         return {width: rect.width, height: rect.height, centerX: rect.left + rect.width / 2, centerY: rect.top + rect.height / 2};
     }
 
     // The axis-aligned bounding box of the image after rotation, at scale 1, used to fit the whole image.
-    /** @param {number} canvasWidth @param {number} canvasHeight */
-    function getRotatedBounds(canvasWidth, canvasHeight) {
+    function getRotatedBounds(canvasWidth: number, canvasHeight: number) {
         const radians = rotation * Math.PI / 180;
         const absCos = Math.abs(Math.cos(radians));
         const absSin = Math.abs(Math.sin(radians));
@@ -5498,8 +5465,7 @@ export function createImage(image, config = {}) {
         };
     }
 
-    /** @param {number} canvasWidth @param {number} canvasHeight @param {ImageInternal.ViewportSize} viewportSize */
-    function getFitScale(canvasWidth, canvasHeight, viewportSize) {
+    function getFitScale(canvasWidth: number, canvasHeight: number, viewportSize: ImageInternal.ViewportSize) {
         if (!canvasWidth || !canvasHeight || !viewportSize.width || !viewportSize.height) return 1;
 
         const bounds = getRotatedBounds(canvasWidth, canvasHeight);
@@ -5507,8 +5473,7 @@ export function createImage(image, config = {}) {
         return Math.min(viewportSize.width / bounds.width, viewportSize.height / bounds.height);
     }
 
-    /** @param {number} canvasWidth @param {number} canvasHeight @param {ImageInternal.ViewportSize} viewportSize */
-    function getFillScale(canvasWidth, canvasHeight, viewportSize) {
+    function getFillScale(canvasWidth: number, canvasHeight: number, viewportSize: ImageInternal.ViewportSize) {
         if (!canvasWidth || !canvasHeight || !viewportSize.width || !viewportSize.height) return 1;
 
         const radians = rotation * Math.PI / 180;
@@ -5519,28 +5484,24 @@ export function createImage(image, config = {}) {
         return Math.max((viewportSize.width * cos + viewportSize.height * sin) / canvasWidth, (viewportSize.width * sin + viewportSize.height * cos) / canvasHeight);
     }
 
-    /** @param {number} fitScale */
-    function getMinScale(fitScale) {
+    function getMinScale(fitScale: number) {
         if (minZoom === "fit") return fitScale;
 
         return minZoom;
     }
 
-    /** @param {number} fitScale */
-    function getMaxScale(fitScale) {
+    function getMaxScale(fitScale: number) {
         return Math.max(maxZoom, getMinScale(fitScale)); // never let the ceiling fall below the floor on a tiny viewport
     }
 
-    /** @param {number} value */
-    function clampScale(value) {
+    function clampScale(value: number) {
         const viewportSize = getViewportSize();
         const fitScale = getFitScale(getCanvasWidth(), getCanvasHeight(), viewportSize);
 
         return Math.max(getMinScale(fitScale), Math.min(value, getMaxScale(fitScale)));
     }
 
-    /** @param {number} canvasWidth @param {number} canvasHeight @param {ImageInternal.ViewportSize} viewportSize */
-    function getContainPanBounds(canvasWidth, canvasHeight, viewportSize) {
+    function getContainPanBounds(canvasWidth: number, canvasHeight: number, viewportSize: ImageInternal.ViewportSize) {
         const radians = rotation * Math.PI / 180;
         const cos = Math.cos(radians);
         const sin = Math.sin(radians);
@@ -5590,8 +5551,7 @@ export function createImage(image, config = {}) {
     // endregion
 
     // region ===== Coordinate Conversion ==============================================================================
-    /** @type {ImageTypes.ImageEngine["viewportToCanvas"]} */
-    function viewportToCanvas(x, y) {
+    function viewportToCanvas(x: number, y: number) {
         const nextX = Number(x);
         const nextY = Number(y);
 
@@ -5614,8 +5574,7 @@ export function createImage(image, config = {}) {
         };
     }
 
-    /** @type {ImageTypes.ImageEngine["canvasToViewport"]} */
-    function canvasToViewport(x, y) {
+    function canvasToViewport(x: number, y: number) {
         const nextX = Number(x);
         const nextY = Number(y);
 
@@ -5638,8 +5597,7 @@ export function createImage(image, config = {}) {
         };
     }
 
-    /** @type {ImageTypes.ImageEngine["canvasToLayer"]} */
-    function canvasToLayer(id, x, y) {
+    function canvasToLayer(id: string, x: number, y: number) {
         const layer = layers.find(function (layer) {
             return layer.id === id;
         });
@@ -5674,8 +5632,7 @@ export function createImage(image, config = {}) {
         return transformLayerPerspectivePoint(matrix, point.x, point.y);
     }
 
-    /** @type {ImageTypes.ImageEngine["layerToCanvas"]} */
-    function layerToCanvas(id, x, y) {
+    function layerToCanvas(id: string, x: number, y: number) {
         const layer = layers.find(function (layer) {
             return layer.id === id;
         });
@@ -5689,8 +5646,7 @@ export function createImage(image, config = {}) {
         }
 
         const transform = layer.transform;
-        /** @type {{x: number, y: number} | false} */
-        let point = {x: nextX, y: nextY};
+        let point: {x: number, y: number} | false = {x: nextX, y: nextY};
 
         if (transform.perspective) {
             const matrix = getLayerPerspectiveTransform(layer);
@@ -5714,8 +5670,7 @@ export function createImage(image, config = {}) {
         };
     }
 
-    /** @param {ImageInternal.LayerState} layer @param {boolean} [inverse] @returns {number[] | null} */
-    function getLayerPerspectiveTransform(layer, inverse = false) {
+    function getLayerPerspectiveTransform(layer: ImageInternal.LayerState, inverse: boolean = false): number[] | null {
         const source = layer.source;
         if (typeof source === "string") return null;
 
@@ -5729,7 +5684,7 @@ export function createImage(image, config = {}) {
 
         if (!Number.isFinite(width) || width <= 0 || !Number.isFinite(height) || height <= 0) return null;
 
-        const {topLeft, topRight, bottomRight, bottomLeft} = /** @type {ImageTypes.ImageLayerPerspective} */ (layer.transform.perspective);
+        const {topLeft, topRight, bottomRight, bottomLeft} = ((layer.transform.perspective) as ImageLayerPerspective);
         const dx1 = topRight.x - bottomRight.x;
         const dx2 = bottomLeft.x - bottomRight.x;
         const dx3 = topLeft.x - topRight.x + bottomRight.x - bottomLeft.x;
@@ -5773,8 +5728,7 @@ export function createImage(image, config = {}) {
         }) ? result : null;
     }
 
-    /** @param {number[]} matrix @param {number} x @param {number} y */
-    function transformLayerPerspectivePoint(matrix, x, y) {
+    function transformLayerPerspectivePoint(matrix: number[], x: number, y: number) {
         const denominator = matrix[6] * x + matrix[7] * y + matrix[8];
         if (!denominator || !Number.isFinite(denominator)) return false;
 
@@ -5788,37 +5742,32 @@ export function createImage(image, config = {}) {
     // endregion
 
     // region ===== Zoom Controls ======================================================================================
-    /** @type {ImageTypes.ImageEngine["setZoom"]} */
-    function setZoom(value) {
+    function setZoom(value: number) {
         if (destroyed) return false;
 
         return applyZoomAt(parseScale(value), 0, 0); // absolute scale, around the viewport centre
     }
 
-    /** @type {ImageTypes.ImageEngine["zoomIn"]} */
-    function zoomIn(factor = zoomStep) {
+    function zoomIn(factor: number | undefined = zoomStep) {
         if (destroyed) return false;
 
         return applyZoomAt(scale * parseZoomFactor(factor), 0, 0);
     }
 
-    /** @type {ImageTypes.ImageEngine["zoomOut"]} */
-    function zoomOut(factor = zoomStep) {
+    function zoomOut(factor: number | undefined = zoomStep) {
         if (destroyed) return false;
 
         return applyZoomAt(scale / parseZoomFactor(factor), 0, 0);
     }
 
     // Zoom to a scale while keeping the content under (clientX, clientY) fixed — the wheel/pinch behaviour.
-    /** @type {ImageTypes.ImageEngine["zoomToPoint"]} */
-    function zoomToPoint(value, clientX, clientY) {
+    function zoomToPoint(value: number, clientX: number, clientY: number) {
         if (destroyed) return false;
 
         return applyZoomToPoint(value, clientX, clientY);
     }
 
-    /** @param {number} value @param {number} clientX @param {number} clientY @param {boolean} [deferred] */
-    function applyZoomToPoint(value, clientX, clientY, deferred = false) {
+    function applyZoomToPoint(value: number, clientX: number, clientY: number, deferred: boolean = false) {
         const viewportSize = getViewportSize();
         const px = Number(clientX) - viewportSize.centerX;
         const py = Number(clientY) - viewportSize.centerY;
@@ -5828,8 +5777,7 @@ export function createImage(image, config = {}) {
     }
 
     // Scale around a viewport-relative point, then follow any pinch midpoint movement before clamping.
-    /** @param {number} nextScale @param {number} px @param {number} py @param {boolean} [deferred] @param {number} [deltaX] @param {number} [deltaY] */
-    function applyZoomAt(nextScale, px, py, deferred = false, deltaX = 0, deltaY = 0) {
+    function applyZoomAt(nextScale: number, px: number, py: number, deferred: boolean = false, deltaX: number = 0, deltaY: number = 0) {
         const clamped = clampScale(nextScale);
         const scaleChanged = Math.abs(clamped - scale) >= 0.00001;
         if (!scaleChanged && !deltaX && !deltaY) return false;
@@ -5852,8 +5800,7 @@ export function createImage(image, config = {}) {
         return true;
     }
 
-    /** @param {number} value */
-    function parseScale(value) {
+    function parseScale(value: number) {
         const next = Number(value);
 
         if (!Number.isFinite(next) || next <= 0) {
@@ -5863,8 +5810,7 @@ export function createImage(image, config = {}) {
         return next;
     }
 
-    /** @param {number} value */
-    function parseZoomFactor(value) {
+    function parseZoomFactor(value: number) {
         const factor = Number(value);
 
         if (!Number.isFinite(factor) || factor <= 0) {
@@ -5898,8 +5844,7 @@ export function createImage(image, config = {}) {
         fitted = true;
     }
 
-    /** @type {ImageTypes.ImageEngine["setFitMode"]} */
-    function setFitMode(mode) {
+    function setFitMode(mode: ImageFitMode) {
         if (destroyed) return false;
 
         if (!["contain", "cover", "actual"].includes(mode)) {
@@ -5917,7 +5862,6 @@ export function createImage(image, config = {}) {
         return true;
     }
 
-    /** @type {ImageTypes.ImageEngine["actualSize"]} */
     function actualSize() {
         if (destroyed) return false;
 
@@ -5925,7 +5869,6 @@ export function createImage(image, config = {}) {
     }
 
     // Reset the whole view — fit, no rotation, no flip, centred. The keyboard "0" / start-over action.
-    /** @type {ImageTypes.ImageEngine["reset"]} */
     function reset() {
         if (destroyed) return false;
 
@@ -5965,8 +5908,7 @@ export function createImage(image, config = {}) {
     // endregion
 
     // region ===== Pan Controls =======================================================================================
-    /** @type {ImageTypes.ImageEngine["setPan"]} */
-    function setPan(x, y) {
+    function setPan(x: number, y: number) {
         if (destroyed) return false;
 
         const nextX = Number(x);
@@ -5990,8 +5932,7 @@ export function createImage(image, config = {}) {
     }
 
     // Shift the pan by a screen-space delta (used by drag and the arrow keys). Returns whether anything moved.
-    /** @param {number} deltaX @param {number} deltaY */
-    function panScreenBy(deltaX, deltaY) {
+    function panScreenBy(deltaX: number, deltaY: number) {
         const beforeX = offsetX;
         const beforeY = offsetY;
 
@@ -6009,8 +5950,7 @@ export function createImage(image, config = {}) {
     // endregion
 
     // region ===== Rotation Controls ==================================================================================
-    /** @type {ImageTypes.ImageEngine["setRotation"]} */
-    function setRotation(degrees) {
+    function setRotation(degrees: number) {
         if (destroyed) return false;
 
         const next = Number(degrees);
@@ -6030,14 +5970,12 @@ export function createImage(image, config = {}) {
         return true;
     }
 
-    /** @type {ImageTypes.ImageEngine["rotateClockwise"]} */
     function rotateClockwise() {
         if (destroyed) return false;
 
         return setRotation(rotation + rotationStep);
     }
 
-    /** @type {ImageTypes.ImageEngine["rotateCounterClockwise"]} */
     function rotateCounterClockwise() {
         if (destroyed) return false;
 
@@ -6047,8 +5985,7 @@ export function createImage(image, config = {}) {
     // endregion
 
     // region ===== Flip Controls ======================================================================================
-    /** @type {ImageTypes.ImageEngine["setFlipHorizontal"]} */
-    function setFlipHorizontal(enabled) {
+    function setFlipHorizontal(enabled: boolean) {
         if (destroyed) return false;
 
         if (typeof enabled !== "boolean") {
@@ -6062,8 +5999,7 @@ export function createImage(image, config = {}) {
         return true;
     }
 
-    /** @type {ImageTypes.ImageEngine["setFlipVertical"]} */
-    function setFlipVertical(enabled) {
+    function setFlipVertical(enabled: boolean) {
         if (destroyed) return false;
 
         if (typeof enabled !== "boolean") {
@@ -6077,12 +6013,10 @@ export function createImage(image, config = {}) {
         return true;
     }
 
-    /** @type {ImageTypes.ImageEngine["toggleFlipHorizontal"]} */
     function toggleFlipHorizontal() {
         return setFlipHorizontal(!flipX);
     }
 
-    /** @type {ImageTypes.ImageEngine["toggleFlipVertical"]} */
     function toggleFlipVertical() {
         return setFlipVertical(!flipY);
     }
@@ -6118,7 +6052,6 @@ export function createImage(image, config = {}) {
         return getFullscreenElement() === viewport;
     }
 
-    /** @type {ImageTypes.ImageEngine["enterFullscreen"]} */
     async function enterFullscreen() {
         if (destroyed) return false;
         if (!isFullscreenSupported()) return false;
@@ -6142,7 +6075,6 @@ export function createImage(image, config = {}) {
         return true;
     }
 
-    /** @type {ImageTypes.ImageEngine["exitFullscreen"]} */
     async function exitFullscreen() {
         if (destroyed) return false;
         if (!isFullscreenActive()) return true;
@@ -6165,7 +6097,6 @@ export function createImage(image, config = {}) {
         return true;
     }
 
-    /** @type {ImageTypes.ImageEngine["toggleFullscreen"]} */
     function toggleFullscreen() {
         if (isFullscreenActive()) {
             void exitFullscreen();
@@ -6196,15 +6127,13 @@ export function createImage(image, config = {}) {
         return loaded;
     }
 
-    /** @param {string} nextSource */
-    function applySource(nextSource) {
+    function applySource(nextSource: string) {
         loaded = false;
         hasError = false;
         errorMessage = "";
         image.src = nextSource;
     }
 
-    /** @type {ImageTypes.ImageEngine["retry"]} */
     function retry() {
         if (destroyed) return false;
 
@@ -6223,25 +6152,20 @@ export function createImage(image, config = {}) {
     // region ===== Pointer Controls ===================================================================================
     const doubleTapDelay = 300;
     const tapMoveTolerance = 8; // px of movement below which a press still counts as a tap, not a drag
-    /** @type {Map<number, {x: number, y: number}>} */
-    const activePointers = new Map(); // pointerId → last client position, so drag/pinch can measure deltas
+    const activePointers: Map<number, {x: number, y: number}> = new Map(); // pointerId → last client position, so drag/pinch can measure deltas
     let pinchDistance = 0; // distance between the two pinch pointers on the previous move
     let pointerMoved = false; // whether the gesture has moved beyond the tap tolerance
-    /** @type {{x: number, y: number} | null} */
-    let pointerDownPosition = null; // where a single-pointer press started, for tap detection
-    /** @type {{x: number, y: number, time: number} | null} */
-    let lastTap = null; // the previous tap, for double-tap detection
+    let pointerDownPosition: {x: number, y: number} | null = null; // where a single-pointer press started, for tap detection
+    let lastTap: {x: number, y: number, time: number} | null = null; // the previous tap, for double-tap detection
 
-    /** @param {DragEvent} event */
-    function handleImageDragStart(event) {
+    function handleImageDragStart(event: DragEvent) {
         if (destroyed || activePointers.size !== 1 || !isDragPanEnabled()) return;
         if (!canPan(getCanvasWidth(), getCanvasHeight(), getViewportSize())) return;
 
         event.preventDefault(); // keep native image dragging from cancelling the active pan
     }
 
-    /** @param {PointerEvent} event */
-    function handlePointerDown(event) {
+    function handlePointerDown(event: PointerEvent) {
         if (destroyed) return;
         if (event.defaultPrevented || (event.pointerType === "mouse" && event.button !== 0) || (!isDragPanEnabled() && !isPinchZoomEnabled() && !isDoubleClickZoomEnabled())) {
             lastTap = null;
@@ -6253,7 +6177,7 @@ export function createImage(image, config = {}) {
         for (const target of event.composedPath()) {
             if (target === viewport) break;
 
-            const element = /** @type {HTMLElement} */ (target);
+            const element = (target as HTMLElement);
             if (element.isContentEditable || ["BUTTON", "A", "LABEL", "INPUT", "SELECT", "TEXTAREA", "SUMMARY"].includes(element.tagName?.toUpperCase())) {
                 lastTap = null;
                 pointerDownPosition = null;
@@ -6281,8 +6205,7 @@ export function createImage(image, config = {}) {
         }
     }
 
-    /** @param {PointerEvent} event */
-    function handlePointerMove(event) {
+    function handlePointerMove(event: PointerEvent) {
         if (destroyed) return;
 
         const pointer = activePointers.get(event.pointerId);
@@ -6330,8 +6253,7 @@ export function createImage(image, config = {}) {
         }
     }
 
-    /** @param {PointerEvent} event */
-    function handlePointerUp(event) {
+    function handlePointerUp(event: PointerEvent) {
         if (destroyed || !activePointers.has(event.pointerId)) return;
         if (event.type === "lostpointercapture" && event.target !== viewport) return;
 
@@ -6357,8 +6279,7 @@ export function createImage(image, config = {}) {
         pointerDownPosition = null;
     }
 
-    /** @param {number} clientX @param {number} clientY */
-    function handleTap(clientX, clientY) {
+    function handleTap(clientX: number, clientY: number) {
         if (!isDoubleClickZoomEnabled()) {
             lastTap = null;
             return;
@@ -6376,8 +6297,7 @@ export function createImage(image, config = {}) {
     }
 
     // Double-click/tap: when not at actual size, jump to 1:1 at the point; otherwise drop back to fit.
-    /** @param {number} clientX @param {number} clientY */
-    function toggleZoomAt(clientX, clientY) {
+    function toggleZoomAt(clientX: number, clientY: number) {
         if (isActualSize()) {
             setFitMode("contain");
             return;
@@ -6386,8 +6306,7 @@ export function createImage(image, config = {}) {
         zoomToPoint(1, clientX, clientY);
     }
 
-    /** @param {WheelEvent} event */
-    function handleWheel(event) {
+    function handleWheel(event: WheelEvent) {
         if (destroyed || !isWheelZoomEnabled()) return;
         if (event.deltaY === 0) return;
 
@@ -6431,8 +6350,7 @@ export function createImage(image, config = {}) {
     // region ===== Keyboard Shortcuts =================================================================================
     let keyboardShortcutsEnabled = keyboardShortcuts;
 
-    /** @type {ImageTypes.ImageEngine["setKeyboardShortcuts"]} */
-    function setKeyboardShortcuts(enabled) {
+    function setKeyboardShortcuts(enabled: boolean) {
         if (destroyed) return false;
 
         if (typeof enabled !== "boolean") {
@@ -6449,7 +6367,6 @@ export function createImage(image, config = {}) {
         return keyboardShortcutsEnabled;
     }
 
-    /** @type {ImageTypes.ImageEngine["listKeyboardShortcuts"]} */
     function listKeyboardShortcuts() {
         return [
             {id: "zoom-in", keys: ["+", "="], message: "Zoom in"},
@@ -6461,8 +6378,7 @@ export function createImage(image, config = {}) {
         ];
     }
 
-    /** @param {KeyboardEvent} event */
-    function handleKeyboardShortcut(event) {
+    function handleKeyboardShortcut(event: KeyboardEvent) {
         if (destroyed || !isKeyboardShortcutsEnabled()) return;
         if (shouldIgnoreKeyboardShortcut(event)) return;
 
@@ -6502,13 +6418,12 @@ export function createImage(image, config = {}) {
         }
     }
 
-    /** @param {KeyboardEvent} event */
-    function shouldIgnoreKeyboardShortcut(event) {
+    function shouldIgnoreKeyboardShortcut(event: KeyboardEvent) {
         if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return true;
 
         // Shadow DOM retargets event.target to the host; the composed path still identifies editable controls.
         for (const target of event.composedPath()) {
-            const element = /** @type {HTMLElement} */ (target);
+            const element = (target as HTMLElement);
             if (element.isContentEditable || ["INPUT", "TEXTAREA", "SELECT", "BUTTON"].includes(element.tagName?.toUpperCase())) return true;
             if (target === viewport) break;
         }
@@ -6519,7 +6434,6 @@ export function createImage(image, config = {}) {
     // endregion
 
     // region ===== Tear Down ==========================================================================================
-    /** @type {ImageTypes.ImageEngine["destroy"]} */
     function destroy() {
         if (destroyed) return;
 

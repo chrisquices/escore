@@ -1,4 +1,95 @@
-import {callConsumer, createErrorReporter} from './internal/core.js';
+import {callConsumer, createErrorReporter} from 'strata-packages/ui-interactions/internal/core';
+
+export type SelectionMode = "single" | "multi"
+
+export interface SelectionRect {
+    x: number
+    y: number
+    width: number
+    height: number
+}
+
+export interface SelectionState<TKey = string | number> {
+    /** Selected keys sorted by key; their order does not indicate selection recency. */
+    selected: TKey[]
+    selectedCount: number
+    anchor: number | null
+    /** Logical navigation index, which may identify an unselected item. */
+    focused: number | null
+    mode: SelectionMode
+    count: number
+    marqueeing: boolean
+    marquee: SelectionRect | null
+}
+
+export interface SelectionError {
+    id: string
+    message: string
+    metadata: unknown
+}
+
+export interface SelectionConfig<TKey = string | number> {
+    onChange?: (state: SelectionState<TKey>) => void
+    onError?: (error: SelectionError) => void
+    /** Handles Enter without changing selection; the consumer chooses the action. */
+    onEnter?: (context: {state: SelectionState<TKey>; event: KeyboardEvent}) => void
+    /** Requests DOM focus after arrow navigation; the consumer moves focus and scrolls. */
+    onFocusRequest?: (context: {index: number; event: KeyboardEvent}) => void
+    count?: number
+    getItemKey?: (index: number) => TKey
+    mode?: SelectionMode
+    container?: HTMLElement | null
+    keyboard?: boolean
+    /** Returns a positive integer column count (1 for a list); unused when itemSelector supplies the layout. */
+    calculateColumnCount?: () => number
+    marquee?: boolean
+    collectIndicesInRect?: ((rect: SelectionRect) => number[]) | null
+    /**
+     * Matches one rendered element per configured item, covering the complete
+     * collection in logical index order (0 through count - 1). Match positions
+     * supply indices for native focus tracking and default marquee hit testing;
+     * the matched layout also supplies the grid column count.
+     *
+     * For virtualized collections, omit this option and keep count/getItemKey
+     * based on the complete collection. Call setFocused with the logical index
+     * when native focus changes, return logical indices from collectIndicesInRect
+     * for marquee selection, and provide calculateColumnCount for grids. In
+     * onFocusRequest, render the requested logical item if needed, then move DOM
+     * focus and scroll in the consumer.
+     */
+    itemSelector?: string | null
+}
+
+export interface SelectionEngine<TKey = string | number> {
+    getState(): SelectionState<TKey>
+    subscribe(listener: (state: SelectionState<TKey>) => void): () => void
+    /** Updates logical focus only. Pass null to clear it; invalid indices are ignored. */
+    setFocused(index: number | null): void
+    /**
+     * Resolves a click from an item index and normalized modifier flags.
+     * Set meta for either Command or Ctrl; set shift from the event's Shift flag.
+     * @example
+     * selection.select(index, {
+     *   meta: event.metaKey || event.ctrlKey,
+     *   shift: event.shiftKey
+     * });
+     */
+    select(index: number, modifiers?: {shift?: boolean; meta?: boolean}): void
+    toggle(index: number): void
+    deselect(index: number): void
+    selectRange(fromIndex: number, toIndex: number): void
+    selectAll(): void
+    clear(): void
+    /**
+     * Checks membership by item key, using the same keys stored in state.selected.
+     * To query a logical index, resolve it with the configured getItemKey first.
+     * @example
+     * selection.select(index);
+     * selection.isSelected(getItemKey(index)); // true
+     */
+    isSelected(key: TKey): boolean
+    destroy(): void
+}
 
 const interactiveControlSelector =
     "button, a[href], input, textarea, select, option, label, summary, audio[controls], video[controls], " +
@@ -6,7 +97,7 @@ const interactiveControlSelector =
     "[role='combobox'], [role='listbox'], [role='slider'], [role='spinbutton'], [role='tab'], " +
     "[role='menuitem'], [role='menuitemcheckbox'], [role='menuitemradio'], [contenteditable]:not([contenteditable='false'])";
 
-function arrowDelta(key, columns) {
+function arrowDelta(key: string, columns: number) {
     if (key === "ArrowUp") {
         return -columns;
     }
@@ -26,7 +117,7 @@ function arrowDelta(key, columns) {
     return 0;
 }
 
-export function createSelection(config = {}) {
+export function createSelection<TKey = string | number>(config: SelectionConfig<TKey> = {}): SelectionEngine<TKey> {
     if (!config || typeof config !== "object") {
         throw new TypeError("createSelection: 'config' must be an options object.");
     }
@@ -35,11 +126,11 @@ export function createSelection(config = {}) {
     const {
         onChange, onError, onEnter, onFocusRequest,
         count = 0,
-        getItemKey = function (index) { return index; },
+        getItemKey = function (index) {return index as TKey;},
         mode = "multi",
         container = null,
         keyboard = true,
-        calculateColumnCount = function () { return 1; },
+        calculateColumnCount = function () {return 1;},
         marquee = true,
         collectIndicesInRect = null,
         itemSelector = null
@@ -85,7 +176,7 @@ export function createSelection(config = {}) {
         }
 
         // Container — the element keyboard and marquee listen on; null = no keyboard/marquee
-        if (container !== null && typeof container.addEventListener !== "function") {
+        if (container !== null && typeof container!.addEventListener !== "function") {
             throw new TypeError("createSelection: the 'container' option must be a DOM element.");
         }
 
@@ -137,14 +228,14 @@ export function createSelection(config = {}) {
     // endregion
 
     // region ===== Event Listeners ====================================================================================
-    const listeners = new Set(); // change subscribers — each gets the full state on every change
-    const cleanups = []; // teardown functions, collected so everything can be undone at once
+    const listeners = new Set<(state: SelectionState<TKey>) => void>(); // change subscribers — each gets the full state on every change
+    const cleanups: (() => void)[] = []; // teardown functions, collected so everything can be undone at once
 
-    function registerEventListener(target, type, handler, options) {
-        target.addEventListener(type, handler, options);
+    function registerEventListener<K extends keyof HTMLElementEventMap>(target: EventTarget, type: K, handler: (event: HTMLElementEventMap[K]) => void, options?: AddEventListenerOptions) {
+        target.addEventListener(type, handler as EventListener, options);
 
         cleanups.push(function () {
-            target.removeEventListener(type, handler, options); // detach the exact listener that was registered
+            target.removeEventListener(type, handler as EventListener, options); // detach the exact listener that was registered
         });
     }
 
@@ -190,7 +281,7 @@ export function createSelection(config = {}) {
     // region ===== Error Handling =====================================================================================
     const reportError = createErrorReporter(onError);
 
-    function handleSelectionError(operation, cause, snapshot = marqueeSnapshot) {
+    function handleSelectionError(operation: string, cause: unknown, snapshot = marqueeSnapshot) {
         if (destroyed) return;
 
         if (operation === "marquee" && marqueeSnapshot === snapshot) {
@@ -209,7 +300,7 @@ export function createSelection(config = {}) {
     let notificationVersion = 0; // newer notifications supersede an in-progress delivery
 
     // Subscribe to selection changes. The listener gets state on every change (not immediately — read getState() for the first paint). Returns an unsubscribe function.
-    function subscribe(listener) {
+    function subscribe(listener: (state: SelectionState<TKey>) => void): () => void {
         if (destroyed) return function unsubscribe() {};
 
         listeners.add(listener);
@@ -240,7 +331,7 @@ export function createSelection(config = {}) {
         }
     }
 
-    function getState() {
+    function getState(): SelectionState<TKey> {
         return {
             selected: sortedSelection(),
             selectedCount: selected.size,
@@ -256,7 +347,7 @@ export function createSelection(config = {}) {
     function collectItemElements() {
         if (!container || !itemSelector) return [];
 
-        return [...container.querySelectorAll(itemSelector)].filter(function (element) {
+        return [...container!.querySelectorAll(itemSelector)].filter(function (element) {
             return typeof element.getBoundingClientRect === "function";
         });
     }
@@ -286,18 +377,18 @@ export function createSelection(config = {}) {
         return columnCount;
     }
 
-    function collectResolvedIndicesInRect(rect) {
+    function collectResolvedIndicesInRect(rect: SelectionRect) {
         if (collectIndicesInRect) return collectIndicesInRect(rect);
         if (!container || !itemSelector) return [];
 
-        const containerRect = container.getBoundingClientRect();
-        const indices = [];
+        const containerRect = container!.getBoundingClientRect();
+        const indices: number[] = [];
 
         collectItemElements().forEach(function (element, index) {
             const cellRect = element.getBoundingClientRect();
             const cellBox = {
-                x: cellRect.left - containerRect.left - container.clientLeft + container.scrollLeft,
-                y: cellRect.top - containerRect.top - container.clientTop + container.scrollTop,
+                x: cellRect.left - containerRect.left - container!.clientLeft + container!.scrollLeft,
+                y: cellRect.top - containerRect.top - container!.clientTop + container!.scrollTop,
                 width: cellRect.width,
                 height: cellRect.height
             };
@@ -320,18 +411,18 @@ export function createSelection(config = {}) {
     // endregion
 
     // region ===== Selection State ====================================================================================
-    const selected = new Set(); // selected item ids (we store keys, not indices, so selection survives reorders)
-    let anchor = null; // the index a Shift-range extends from
-    let focused = null; // the active index (keyboard, DOM focus, or last click)
+    const selected = new Set<TKey>(); // selected item ids (we store keys, not indices, so selection survives reorders)
+    let anchor: number | null = null; // the index a Shift-range extends from
+    let focused: number | null = null; // the active index (keyboard, DOM focus, or last click)
     const currentMode = mode;
     const itemCount = count;
 
-    function isValidIndex(index) {
-        return Number.isInteger(index) && index >= 0 && index < itemCount;
+    function isValidIndex(index: unknown) {
+        return typeof index === "number" && Number.isInteger(index) && index >= 0 && index < itemCount;
     }
 
     // Checks a key from state.selected; resolve indices with the configured getItemKey.
-    function isSelected(key) {
+    function isSelected(key: TKey): boolean {
         return selected.has(key);
     }
 
@@ -344,10 +435,10 @@ export function createSelection(config = {}) {
     }
 
     // Resolve providers against a draft so a failure cannot leave a partial update.
-    function applySelectionUpdate(operation, update) {
+    function applySelectionUpdate(operation: string, update: (draft: {selected: Set<TKey>; anchor: number | null; focused: number | null; marquee: SelectionRect | null}) => boolean | void) {
         if (destroyed) return false;
 
-        const snapshot = marqueeSnapshot;
+        const snapshot = marqueeSnapshot!;
         const next = {
             selected: new Set(selected),
             anchor: anchor,
@@ -366,7 +457,7 @@ export function createSelection(config = {}) {
         if (operation === "marquee" && (!marqueeing || marqueeSnapshot !== snapshot)) return false;
 
         selected.clear();
-        next.selected.forEach(function (id) { selected.add(id); });
+        next.selected.forEach(function (id) {selected.add(id);});
         anchor = next.anchor;
         focused = next.focused;
         marqueeRect = next.marquee;
@@ -375,7 +466,7 @@ export function createSelection(config = {}) {
         return !destroyed;
     }
 
-    function replaceWith(nextSelected, indices) {
+    function replaceWith(nextSelected: Set<TKey>, indices: number[]) {
         nextSelected.clear();
         for (const index of indices) {
             if (destroyed) return;
@@ -383,7 +474,7 @@ export function createSelection(config = {}) {
         }
     }
 
-    function addRange(nextSelected, fromIndex, toIndex) {
+    function addRange(nextSelected: Set<TKey>, fromIndex: number, toIndex: number) {
         const start = Math.min(fromIndex, toIndex);
         const end = Math.max(fromIndex, toIndex);
         for (let index = start; index <= end; index++) {
@@ -394,7 +485,7 @@ export function createSelection(config = {}) {
 
     // The click resolver: plain replaces, meta toggles, Shift extends a range from the anchor.
     // Consumers normalize clicks with {meta: event.metaKey || event.ctrlKey, shift: event.shiftKey}.
-    function select(index, modifiers) {
+    function select(index: number, modifiers?: {shift?: boolean; meta?: boolean}): void {
         if (destroyed || !isValidIndex(index)) return;
 
         modifiers = modifiers || {};
@@ -418,7 +509,7 @@ export function createSelection(config = {}) {
         });
     }
 
-    function toggle(index) {
+    function toggle(index: number): void {
         if (destroyed || !isValidIndex(index)) return;
 
         applySelectionUpdate("toggle", function (next) {
@@ -435,7 +526,7 @@ export function createSelection(config = {}) {
         });
     }
 
-    function deselect(index) {
+    function deselect(index: number): void {
         if (destroyed || !isValidIndex(index)) return;
 
         applySelectionUpdate("deselect", function (next) {
@@ -444,7 +535,7 @@ export function createSelection(config = {}) {
     }
 
     // Adds the specified range to the existing selection.
-    function selectRange(fromIndex, toIndex) {
+    function selectRange(fromIndex: number, toIndex: number): void {
         if (destroyed || currentMode === "single" || !isValidIndex(fromIndex) || !isValidIndex(toIndex)) return;
 
         applySelectionUpdate("select-range", function (next) {
@@ -454,7 +545,7 @@ export function createSelection(config = {}) {
         });
     }
 
-    function selectAll() {
+    function selectAll(): void {
         if (destroyed || currentMode === "single") return;
 
         applySelectionUpdate("select-all", function (next) {
@@ -462,7 +553,7 @@ export function createSelection(config = {}) {
         });
     }
 
-    function clear() {
+    function clear(): void {
         if (destroyed) return;
 
         selected.clear();
@@ -474,17 +565,17 @@ export function createSelection(config = {}) {
 
     // region ===== Keyboard ===========================================================================================
     // Synchronize logical focus without selecting an item or requesting DOM focus.
-    function setFocused(index) {
+    function setFocused(index: number | null): void {
         if (destroyed || (index !== null && !isValidIndex(index)) || focused === index) return;
 
         focused = index;
         notify();
     }
 
-    function handleFocusIn(event) {
+    function handleFocusIn(event: {target?: EventTarget | null}) {
         if (destroyed || !itemSelector) return;
 
-        const target = event.target;
+        const target = event.target as HTMLElement | null;
         if (!target || typeof target.closest !== "function") return;
 
         try {
@@ -497,7 +588,7 @@ export function createSelection(config = {}) {
         }
     }
 
-    function handleKeydown(event) {
+    function handleKeydown(event: KeyboardEvent) {
         if (destroyed || !keyboard) return;
 
         try {
@@ -580,16 +671,16 @@ export function createSelection(config = {}) {
     }
 
     // Nested controls own their keys; the container and configured item roots remain eligible.
-    function shouldIgnoreKeyboard(event) {
+    function shouldIgnoreKeyboard(event: KeyboardEvent) {
         if (event.defaultPrevented) return true;
 
-        const target = event.target;
+        const target = event.target as HTMLElement | null;
         if (!target || typeof target.closest !== "function") return false;
         if (target.isContentEditable) return true;
 
         const control = target.closest(interactiveControlSelector);
 
-        if (!control || control === container || !container.contains(control)) return false;
+        if (!control || control === container || !container!.contains(control)) return false;
 
         const item = itemSelector ? target.closest(itemSelector) : null;
 
@@ -602,39 +693,39 @@ export function createSelection(config = {}) {
     // region ===== Marquee ============================================================================================
     let marqueeing = false; // a marquee gesture is in progress
     let marqueeMoved = false; // has it dragged past the threshold (vs a bare click)?
-    let marqueeRect = null; // {x, y, width, height} in CONTENT space (scroll included), or null
-    let marqueePointerId = null;
+    let marqueeRect: SelectionRect | null = null; // {x, y, width, height} in CONTENT space (scroll included), or null
+    let marqueePointerId: number | null = null;
     let marqueeStartX = 0;
     let marqueeStartY = 0;
-    let marqueeBase = null; // ids selected before an additive drag; null means no starting modifier
-    let marqueeSnapshot = null; // selection and anchor to restore if the gesture is canceled
+    let marqueeBase: Set<TKey> | null = null; // ids selected before an additive drag; null means no starting modifier
+    let marqueeSnapshot: {selected: Set<TKey>; anchor: number | null} | null = null; // selection and anchor to restore if the gesture is canceled
 
     // Pointer position in the container's CONTENT space, so off-screen items are covered by the box.
-    function calculateContentPoint(event) {
-        const rect = container.getBoundingClientRect();
+    function calculateContentPoint(event: {clientX: number; clientY: number}) {
+        const rect = container!.getBoundingClientRect();
 
         return {
-            x: event.clientX - rect.left - container.clientLeft + container.scrollLeft,
-            y: event.clientY - rect.top - container.clientTop + container.scrollTop
+            x: event.clientX - rect.left - container!.clientLeft + container!.scrollLeft,
+            y: event.clientY - rect.top - container!.clientTop + container!.scrollTop
         };
     }
 
-    function handleMarqueeDown(event) {
+    function handleMarqueeDown(event: PointerEvent) {
         if (destroyed || !marquee || currentMode === "single" || event.button !== 0) return;
         if (marqueeing || event.defaultPrevented) return;
 
         try {
-            const target = event.target;
+            const target = event.target as HTMLElement | null;
             if (!target || typeof target.closest !== "function") return;
             if (!itemSelector && target !== container) return;
 
             const item = itemSelector ? target.closest(itemSelector) : null;
-            if (item && item !== container && container.contains(item)) return;
+            if (item && item !== container && container!.contains(item)) return;
 
             if (target.isContentEditable) return;
 
             const control = target.closest(interactiveControlSelector);
-            if (control && control !== container && container.contains(control)) return;
+            if (control && control !== container && container!.contains(control)) return;
 
             const start = calculateContentPoint(event);
             if (destroyed) return;
@@ -651,17 +742,17 @@ export function createSelection(config = {}) {
             marqueeBase = event.metaKey || event.ctrlKey || event.shiftKey
                 ? new Set(selected)
                 : null;
-            container.setPointerCapture(event.pointerId);
+            container!.setPointerCapture(event.pointerId);
             notify();
         } catch (error) {
             handleSelectionError("marquee", error);
         }
     }
 
-    function handleMarqueeMove(event) {
+    function handleMarqueeMove(event: PointerEvent) {
         if (destroyed || !marqueeing || event.pointerId !== marqueePointerId) return;
 
-        const snapshot = marqueeSnapshot;
+        const snapshot = marqueeSnapshot!;
         applySelectionUpdate("marquee", function (next) {
             const point = calculateContentPoint(event);
 
@@ -680,7 +771,7 @@ export function createSelection(config = {}) {
         });
     }
 
-    function handleMarqueeUp(event) {
+    function handleMarqueeUp(event: PointerEvent) {
         if (destroyed || !marqueeing || event.pointerId !== marqueePointerId) return;
 
         // A bare click on empty space (no drag, no modifier) clears the selection — Finder behavior.
@@ -693,7 +784,7 @@ export function createSelection(config = {}) {
         notify();
     }
 
-    function handleMarqueeCancel(event) {
+    function handleMarqueeCancel(event: PointerEvent) {
         if (destroyed || !marqueeing || event.pointerId !== marqueePointerId) return;
         if (event.type === "lostpointercapture" && event.target !== container) return;
 
@@ -701,15 +792,15 @@ export function createSelection(config = {}) {
         notify();
     }
 
-    function resetMarquee(restoreSelection) {
+    function resetMarquee(restoreSelection: boolean) {
         if (!marqueeing) return;
 
-        const pointerId = marqueePointerId;
-        const snapshot = marqueeSnapshot;
+        const pointerId = marqueePointerId!;
+        const snapshot = marqueeSnapshot!;
         // Preserve focus changes made through navigation or native DOM focus during the gesture.
         if (restoreSelection) {
             selected.clear();
-            snapshot.selected.forEach(function (id) { selected.add(id); });
+            snapshot.selected.forEach(function (id: TKey) {selected.add(id);});
             anchor = snapshot.anchor;
         }
 
@@ -724,11 +815,11 @@ export function createSelection(config = {}) {
         marqueeSnapshot = null;
 
         try {
-            if (container.hasPointerCapture(pointerId)) container.releasePointerCapture(pointerId);
+            if (container!.hasPointerCapture(pointerId)) container!.releasePointerCapture(pointerId);
         } catch (error) {
             if (!restoreSelection) {
                 selected.clear();
-                snapshot.selected.forEach(function (id) { selected.add(id); });
+                snapshot.selected.forEach(function (id: TKey) {selected.add(id);});
                 anchor = snapshot.anchor;
             }
             handleSelectionError("pointer-capture", error);
@@ -738,7 +829,7 @@ export function createSelection(config = {}) {
     // endregion
 
     // region ===== Tear Down ==========================================================================================
-    function destroy() {
+    function destroy(): void {
         if (destroyed) return;
 
         destroyed = true; // make future work and future destroy calls harmless

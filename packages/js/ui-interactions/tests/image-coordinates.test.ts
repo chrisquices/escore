@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {createFixture, addTestLayer, validatePoint} from './helpers/image.js';
+import {createFixture, addTestLayer, validatePoint} from './helpers/image.ts';
 
 test("viewport coordinates are local to the viewport and use canvas rather than source dimensions", function (t) {
     const f = createFixture(t, {canvasWidth: 100, canvasHeight: 200});

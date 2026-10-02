@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
 import {test} from 'node:test';
-import {createFixture, addTestLayer, createOperation, createPattern, getPixels, validatePixels} from './helpers/image.js';
+import {createFixture, addTestLayer, createOperation, createPattern, getPixels, validatePixels} from './helpers/image.ts';
 
 const {loadImage} = createRequire(import.meta.url)("@napi-rs/canvas");
 

@@ -14,18 +14,20 @@
       "default": "./ui/src/components/*/index.ts"
     },
     "./ui-interactions/*": {
-      "types": "./ui-interactions/src/*.d.ts",
-      "default": "./ui-interactions/src/*.js"
+      "types": "./ui-interactions/src/*.ts",
+      "default": "./ui-interactions/src/*.ts"
     },
     "./inertia-plus": {
-      "types": "./inertia-plus/src/index.d.ts",
-      "default": "./inertia-plus/src/index.js"
+      "types": "./inertia-plus/src/index.ts",
+      "default": "./inertia-plus/src/index.ts"
     }
   },
   "scripts": {
     "typecheck:ui": "vue-tsc --noEmit -p ui/tsconfig.json",
     "typecheck:ui-interactions": "tsc --noEmit -p ui-interactions/tsconfig.json",
-    "typecheck:inertia-plus": "tsc --noEmit -p inertia-plus/tsconfig.json"
+    "typecheck:inertia-plus": "tsc --noEmit -p inertia-plus/tsconfig.json",
+    "test:ui-interactions": "node --test ui-interactions/tests/*.test.ts",
+    "test:inertia-plus": "node --test inertia-plus/tests/*.test.ts"
   },
   "dependencies": {
     "@internationalized/date": "^3.12.2",

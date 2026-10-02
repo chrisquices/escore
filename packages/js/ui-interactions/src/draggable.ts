@@ -1,16 +1,77 @@
-import {callConsumer, createErrorReporter} from './internal/core.js';
+import {callConsumer, createErrorReporter} from 'strata-packages/ui-interactions/internal/core';
 
-function isValidBounds(value) {
+export type DraggableAxis = "both" | "x" | "y"
+export type DraggableBounds =
+    | "none"
+    | "parent"
+    | "viewport"
+    | HTMLElement
+    | {top: number; left: number; right: number; bottom: number}
+export type DraggableResizeSide = "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w"
+
+export interface DraggableState {
+    x: number
+    y: number
+    dragging: boolean
+    axis: DraggableAxis
+    disabled: boolean
+    canDrag: boolean
+    boundsMode: "none" | "parent" | "viewport" | "custom"
+    resizable: boolean
+    resizing: boolean
+    resizeSide: DraggableResizeSide | null
+    width: number
+    height: number
+    canResize: boolean
+    cursor: string
+    transform: string
+}
+
+export interface DraggableError {
+    id: string
+    message: string
+    metadata: unknown
+}
+
+export interface DraggableConfig {
+    onChange?: (state: DraggableState) => void
+    onError?: (error: DraggableError) => void
+    handle?: string | HTMLElement | null
+    axis?: DraggableAxis
+    bounds?: DraggableBounds
+    threshold?: number
+    disabled?: boolean
+    resizable?: boolean
+    resizeHandles?: DraggableResizeSide[]
+    minWidth?: number
+    minHeight?: number
+    maxWidth?: number
+    maxHeight?: number
+    aspectRatio?: "auto" | number | null
+    resizeEdgeSize?: number
+}
+
+export interface DraggableEngine {
+    getState(): DraggableState
+    subscribe(listener: (state: DraggableState) => void): () => void
+    setPosition(x: number, y: number): void
+    reset(): void
+    setDisabled(value: boolean): void
+    setSize(width: number, height: number): void
+    destroy(): void
+}
+
+function isValidBounds(value: unknown) {
     if (value === "none" || value === "parent" || value === "viewport") {
         return true;
     }
 
-    if (value && typeof value.getBoundingClientRect === "function") {
+    if (value && typeof value === "object" && "getBoundingClientRect" in value && typeof value.getBoundingClientRect === "function") {
         return true;
     }
 
     if (value && typeof value === "object" && ["top", "left", "right", "bottom"].every(function (key) {
-        return typeof value[key] === "number";
+        return typeof (value as Record<string, unknown>)[key] === "number";
     })) {
         return true;
     }
@@ -18,25 +79,25 @@ function isValidBounds(value) {
     return false;
 }
 
-function roundTo(value, places) {
+function roundTo(value: number, places: number) {
     const factor = Math.pow(10, places);
 
     return Math.round(value * factor) / factor;
 }
 
-function clamp(value, min, max) {
+function clamp(value: number, min: number, max: number) {
     return Math.min(Math.max(value, min), max);
 }
 
-function detectResizeSide(rect, clientX, clientY, edge, allowed) {
+function detectResizeSide(rect: DOMRect, clientX: number, clientY: number, edge: number, allowed: DraggableResizeSide[]) {
     const vertical = clientY - rect.top <= edge ? "n" : rect.bottom - clientY <= edge ? "s" : "";
     const horizontal = clientX - rect.left <= edge ? "w" : rect.right - clientX <= edge ? "e" : "";
-    const side = vertical + horizontal;
+    const side = (vertical + horizontal) as DraggableResizeSide;
 
     return side && allowed.includes(side) ? side : null;
 }
 
-function resizeCursor(side) {
+function resizeCursor(side: string) {
     if (side === "n" || side === "s") return "ns-resize";
     if (side === "e" || side === "w") return "ew-resize";
     if (side === "ne" || side === "sw") return "nesw-resize";
@@ -45,7 +106,7 @@ function resizeCursor(side) {
     return "";
 }
 
-export function createDraggable(element, config = {}) {
+export function createDraggable(element: HTMLElement, config: DraggableConfig = {}): DraggableEngine {
     if (!element || typeof element.addEventListener !== "function" || typeof element.getBoundingClientRect !== "function" || !("ownerDocument" in element)) {
         throw new TypeError("createDraggable: 'element' must be a DOM element.");
     }
@@ -148,7 +209,7 @@ export function createDraggable(element, config = {}) {
 
     // region ===== Init ===============================================================================================
     const ownerDocument = element.ownerDocument; // the element's own document, so reads work across realms/iframes
-    const defaultView = ownerDocument.defaultView; // the window: for viewport bounds, RAF, and ResizeObserver later
+    const defaultView = ownerDocument.defaultView!; // the window: for viewport bounds, RAF, and ResizeObserver later
     const handleElement = resolveHandle(); // the sub-element that starts a drag, or the element itself
     let destroyed = false; // late pointer/RAF/resize events must not still fire callbacks after teardown
 
@@ -176,14 +237,14 @@ export function createDraggable(element, config = {}) {
     // endregion
 
     // region ===== Event Listeners ====================================================================================
-    const listeners = new Set(); // change subscribers — each gets the full state on every change
-    const cleanups = []; // teardown functions, collected so everything can be undone at once
+    const listeners = new Set<(state: DraggableState) => void>(); // change subscribers — each gets the full state on every change
+    const cleanups: (() => void)[] = []; // teardown functions, collected so everything can be undone at once
 
-    function registerEventListener(target, type, handler, options) {
-        target.addEventListener(type, handler, options);
+    function registerEventListener<K extends keyof HTMLElementEventMap>(target: EventTarget, type: K, handler: (event: HTMLElementEventMap[K]) => void, options?: AddEventListenerOptions) {
+        target.addEventListener(type, handler as EventListener, options);
 
         cleanups.push(function () {
-            target.removeEventListener(type, handler, options); // detach the exact listener that was registered
+            target.removeEventListener(type, handler as EventListener, options); // detach the exact listener that was registered
         });
     }
 
@@ -226,7 +287,7 @@ export function createDraggable(element, config = {}) {
     let lastStateSignature = ""; // last emitted state fingerprint, used to avoid duplicate echoes
 
     // Subscribe to drag changes. The listener gets state on every change (not immediately — read getState() for the first paint). Returns an unsubscribe function.
-    function subscribe(listener) {
+    function subscribe(listener: (state: DraggableState) => void): () => void {
         if (destroyed) {
             return function unsubscribe() {};
         }
@@ -254,7 +315,7 @@ export function createDraggable(element, config = {}) {
         }
     }
 
-    function getState() {
+    function getState(): DraggableState {
         return {
             x: roundTo(x, 2),
             y: roundTo(y, 2),
@@ -269,7 +330,7 @@ export function createDraggable(element, config = {}) {
             width: roundTo(width, 2),
             height: roundTo(height, 2),
             canResize: resizable && !isDisabled,
-            cursor: resizing ? resizeCursor(resizeSide) : hoverSide ? resizeCursor(hoverSide) : "",
+            cursor: resizing ? resizeCursor(resizeSide!) : hoverSide ? resizeCursor(hoverSide) : "",
             transform: getTransform()
         };
     }
@@ -300,9 +361,9 @@ export function createDraggable(element, config = {}) {
 
         if (bounds === "parent") return element.parentElement ? element.parentElement.getBoundingClientRect() : null;
 
-        if (typeof bounds.getBoundingClientRect === "function") return bounds.getBoundingClientRect();
+        if ("getBoundingClientRect" in bounds && typeof bounds.getBoundingClientRect === "function") return bounds.getBoundingClientRect();
 
-        return bounds; // an explicit {top, left, right, bottom} rect
+        return bounds as Pick<DOMRect, "left" | "right" | "top" | "bottom">; // an explicit {top, left, right, bottom} rect
     }
 
     // The element's layout box (where it sits with NO offset) — its current on-screen box minus the current offset.
@@ -318,7 +379,7 @@ export function createDraggable(element, config = {}) {
     }
 
     // Keep the element inside its bounds: given a layout box, cap the offset so no edge crosses the container.
-    function clampOffset(nextX, nextY, layoutRect) {
+    function clampOffset(nextX: number, nextY: number, layoutRect: Pick<DOMRect, "left" | "right" | "top" | "bottom">) {
         const boundsRect = getBoundsRect();
         if (!boundsRect) return {x: nextX, y: nextY};
 
@@ -336,15 +397,15 @@ export function createDraggable(element, config = {}) {
     // endregion
 
     // region ===== Gesture Core =======================================================================================
-    let activePointerId = null; // the pointer currently driving a drag; others are ignored
+    let activePointerId: number | null = null; // the pointer currently driving a drag; others are ignored
     let pressed = false; // pointer is down on the handle, but maybe not yet past the threshold
     let startClientX = 0; // pointer position where the press began
     let startClientY = 0;
     let originX = 0; // the x/y offset at the moment of the press; deltas add to this
     let originY = 0;
-    let grabLayout = null; // the element's layout box captured at grab, so clamping stays stable mid-drag
+    let grabLayout: {left: number; top: number; right: number; bottom: number;} | null = null; // the element's layout box captured at grab, so clamping stays stable mid-drag
 
-    function handlePointerDown(event) {
+    function handlePointerDown(event: {clientX: number; clientY: number; pointerId: number;}) {
         if (destroyed || isDisabled) return;
         if (activePointerId !== null) return; // a gesture is already in progress
 
@@ -380,7 +441,7 @@ export function createDraggable(element, config = {}) {
         handleElement.setPointerCapture(event.pointerId); // keep receiving moves even off the element
     }
 
-    function handlePointerMove(event) {
+    function handlePointerMove(event: PointerEvent) {
         if (destroyed || isDisabled) return;
 
         // No active gesture: keep the resize cursor in sync while hovering (resizable only)
@@ -404,14 +465,14 @@ export function createDraggable(element, config = {}) {
 
         dragging = true;
 
-        const clamped = clampOffset(originX + deltaX, originY + deltaY, grabLayout);
+        const clamped = clampOffset(originX + deltaX, originY + deltaY, grabLayout!);
         x = clamped.x;
         y = clamped.y;
 
         notify();
     }
 
-    function handlePointerUp(event) {
+    function handlePointerUp(event: {pointerId: number;}) {
         if (event.pointerId !== activePointerId) return;
 
         if (handleElement.hasPointerCapture(event.pointerId)) {
@@ -454,7 +515,7 @@ export function createDraggable(element, config = {}) {
     // endregion
 
     // region ===== Move Controls ======================================================================================
-    function setPosition(nextX, nextY) {
+    function setPosition(nextX: number, nextY: number): void {
         if (destroyed) return;
 
         if (typeof nextX !== "number" || !Number.isFinite(nextX) || typeof nextY !== "number" || !Number.isFinite(nextY)) {
@@ -469,13 +530,13 @@ export function createDraggable(element, config = {}) {
         notify();
     }
 
-    function reset() {
+    function reset(): void {
         if (destroyed) return;
 
         setPosition(0, 0);
     }
 
-    function setDisabled(value) {
+    function setDisabled(value: boolean): void {
         if (destroyed) return;
 
         if (typeof value !== "boolean") {
@@ -497,9 +558,9 @@ export function createDraggable(element, config = {}) {
     let width = 0; // the element's current width in px — managed only when resizable
     let height = 0; // current height
     let resizing = false; // true while a resize gesture is in progress
-    let resizeSide = null; // the edge driving the resize ("se", "n", ...), or null
-    let hoverSide = null; // the edge the idle pointer is over, for cursor feedback
-    let resizeLayout = null; // layout box captured at resize start
+    let resizeSide: DraggableResizeSide | null = null; // the edge driving the resize ("se", "n", ...), or null
+    let hoverSide: string | null = null; // the edge the idle pointer is over, for cursor feedback
+    let resizeLayout: ReturnType<typeof getLayoutRect> | null = null; // layout box captured at resize start
     let resizeStartClientX = 0;
     let resizeStartClientY = 0;
     let startWidth = 0;
@@ -514,7 +575,7 @@ export function createDraggable(element, config = {}) {
         height = rect.height;
     }
 
-    function updateHoverCursor(event) {
+    function updateHoverCursor(event: PointerEvent) {
         const side = detectResizeSide(element.getBoundingClientRect(), event.clientX, event.clientY, resizeEdgeSize, resizeHandles);
 
         if (side !== hoverSide) {
@@ -523,13 +584,13 @@ export function createDraggable(element, config = {}) {
         }
     }
 
-    function handleResizeMove(event) {
+    function handleResizeMove(event: {clientX: number; clientY: number;}) {
         const deltaX = event.clientX - resizeStartClientX;
         const deltaY = event.clientY - resizeStartClientY;
-        const movesEast = resizeSide.includes("e");
-        const movesWest = resizeSide.includes("w");
-        const movesSouth = resizeSide.includes("s");
-        const movesNorth = resizeSide.includes("n");
+        const movesEast = resizeSide!.includes("e");
+        const movesWest = resizeSide!.includes("w");
+        const movesSouth = resizeSide!.includes("s");
+        const movesNorth = resizeSide!.includes("n");
         const resizedDimensions = applyAspectAndClamp(startWidth + (movesEast ? deltaX : movesWest ? -deltaX : 0), startHeight + (movesSouth ? deltaY : movesNorth ? -deltaY : 0));
         const nextX = movesWest ? resizeStartX + (startWidth - resizedDimensions.width) : resizeStartX;
         const nextY = movesNorth ? resizeStartY + (startHeight - resizedDimensions.height) : resizeStartY;
@@ -543,7 +604,7 @@ export function createDraggable(element, config = {}) {
         notify();
     }
 
-    function applyAspectAndClamp(nextWidth, nextHeight) {
+    function applyAspectAndClamp(nextWidth: number, nextHeight: number) {
         if (aspectRatio !== null) {
             const ratio = aspectRatio === "auto" ? startWidth / startHeight : aspectRatio;
 
@@ -564,7 +625,7 @@ export function createDraggable(element, config = {}) {
         };
     }
 
-    function clampResizeToBounds(nextWidth, nextHeight, nextX, nextY) {
+    function clampResizeToBounds(nextWidth: number, nextHeight: number, nextX: number, nextY: number) {
         const boundsRect = getBoundsRect();
 
         if (!boundsRect || !resizeLayout) {
@@ -583,7 +644,7 @@ export function createDraggable(element, config = {}) {
         return {width: clampedWidth, height: clampedHeight, x: clampedX, y: clampedY};
     }
 
-    function setSize(nextWidth, nextHeight) {
+    function setSize(nextWidth: number, nextHeight: number): void {
         if (destroyed || !resizable) return;
 
         if (typeof nextWidth !== "number" || !Number.isFinite(nextWidth) || typeof nextHeight !== "number" || !Number.isFinite(nextHeight)) {
@@ -599,7 +660,7 @@ export function createDraggable(element, config = {}) {
     // endregion
 
     // region ===== Tear Down ==========================================================================================
-    function destroy() {
+    function destroy(): void {
         if (destroyed) return;
 
         destroyed = true; // make future work and future destroy calls harmless

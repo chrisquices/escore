@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {createFixture, addTestLayer, createOperation, modifiers} from './helpers/image.js';
+import {createFixture, addTestLayer, createOperation, modifiers} from './helpers/image.ts';
 
 function createLargeOperation(type, count, y = 0) {
     return {...createOperation(type), points: Array.from({length: count}, function (_, x) { return {x: x, y: y}; })};

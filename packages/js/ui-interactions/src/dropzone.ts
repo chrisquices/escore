@@ -1,7 +1,61 @@
-import {callConsumer, createErrorReporter} from './internal/core.js';
+import {callConsumer, createErrorReporter} from 'strata-packages/ui-interactions/internal/core';
+
+export interface DropzoneState {
+    files: File[]
+    count: number
+    totalSize: number
+    draggingOver: boolean
+    disabled: boolean
+}
+
+export interface DropzoneError {
+    id: string
+    message: string
+    metadata: {
+        files: File[]
+    } | null
+}
+
+export interface DropzoneAddResult {
+    accepted: File[]
+    errors: DropzoneError[]
+}
+
+export interface DropzoneConfig {
+    onChange?: (state: DropzoneState) => void
+    onError?: (error: DropzoneError) => void
+    accept?: string[]
+    exclude?: string[]
+    minSize?: number
+    maxSize?: number
+    maxFiles?: number
+    maxTotalSize?: number
+    multiple?: boolean
+    openOnClick?: boolean
+    disabled?: boolean
+    dedupe?: boolean
+    videoPreview?: boolean
+    generateImageThumbnail?: boolean
+    generateVideoThumbnail?: boolean
+}
+
+export interface DropzoneEngine {
+    getState(): DropzoneState
+    subscribe(listener: (state: DropzoneState) => void): () => void
+    addFiles(files: File | FileList | File[]): DropzoneAddResult
+    removeFile(file: File): boolean
+    clearFiles(): void
+    replaceFile(oldFile: File, newFile: File): boolean
+    getFileSize(file: File): {size: number; sizeFormatted: string}
+    openFilePicker(): void
+    createThumbnail(file: File): Promise<string | null>
+    createVideoPreview(file: File): string | null
+    setDisabled(value: boolean): void
+    destroy(): void
+}
 
 // region ===== Generic Helpers ========================================================================================
-function formatBytes(bytes, base = 1024) {
+function formatBytes(bytes: number, base = 1024) {
     const units = ["B", "KB", "MB", "GB", "TB"];
     let size = bytes;
     let unit = 0;
@@ -17,7 +71,7 @@ function formatBytes(bytes, base = 1024) {
 // endregion
 
 // region ===== File Collection ========================================================================================
-async function collectDroppedFiles(dataTransferItems) {
+async function collectDroppedFiles(dataTransferItems: DataTransferItemList): Promise<File[]> {
     const fileCollectionPromises = [];
 
     for (let index = 0; index < dataTransferItems.length; index++) {
@@ -50,10 +104,10 @@ async function collectDroppedFiles(dataTransferItems) {
     return collectedFileGroups.flat();
 }
 
-function collectFilesFromFileSystemEntry(fileSystemEntry) {
+function collectFilesFromFileSystemEntry(fileSystemEntry: FileSystemEntry): Promise<File[]> {
     if (fileSystemEntry.isFile) {
         return new Promise(function (resolve) {
-            fileSystemEntry.file(
+            (fileSystemEntry as FileSystemFileEntry).file(
                 function (file) {
                     resolve([file]); // return the file inside an array to match the folder-extraction result shape
                 },
@@ -64,8 +118,8 @@ function collectFilesFromFileSystemEntry(fileSystemEntry) {
         });
     }
 
-    const directoryReader = fileSystemEntry.createReader(); // create a reader that retrieves the directory's child file-system entries in batches
-    const collectedFiles = [];
+    const directoryReader = (fileSystemEntry as FileSystemDirectoryEntry).createReader(); // create a reader that retrieves the directory's child file-system entries in batches
+    const collectedFiles: File[] = [];
 
     return new Promise(function (resolve) {
 
@@ -111,7 +165,7 @@ function collectFilesFromFileSystemEntry(fileSystemEntry) {
 
 // endregion
 
-export function createDropzone(element, config = {}) {
+export function createDropzone(element: HTMLElement, config: DropzoneConfig = {}): DropzoneEngine {
     if (!element || typeof element.addEventListener !== "function") {
         throw new TypeError("createDropzone: 'element' must be a DOM element.");
     }
@@ -129,7 +183,7 @@ export function createDropzone(element, config = {}) {
     validateConfig();
 
     // Validate a list of dotted extensions (shared by 'accept' and 'exclude')
-    function validateExtensionList(value, optionName) {
+    function validateExtensionList(value: string[] | undefined, optionName: string) {
         if (!Array.isArray(value)) {
             throw new TypeError(`createDropzone: the '${optionName}' option must be an array of extension strings, e.g. ['.jpg', '.mp4'].`);
         }
@@ -248,15 +302,15 @@ export function createDropzone(element, config = {}) {
     // endregion
 
     // region ===== Event Listeners ====================================================================================
-    const listeners = new Set(); // change subscribers — each gets the full state on every collection change
-    const cleanups = []; // teardown functions, collected so everything can be undone at once
+    const listeners = new Set<(state: DropzoneState) => void>(); // change subscribers — each gets the full state on every collection change
+    const cleanups: (() => void)[] = []; // teardown functions, collected so everything can be undone at once
 
     // Register an event listener and remember how to remove it during teardown.
-    function registerEventListener(target, type, handler) {
-        target.addEventListener(type, handler);
+    function registerEventListener<K extends keyof HTMLElementEventMap>(target: EventTarget, type: K, handler: (event: HTMLElementEventMap[K]) => void) {
+        target.addEventListener(type, handler as EventListener);
 
         cleanups.push(function () {
-            target.removeEventListener(type, handler); // remember how to detach it
+            target.removeEventListener(type, handler as EventListener); // remember how to detach it
         });
     }
 
@@ -273,13 +327,13 @@ export function createDropzone(element, config = {}) {
             setDraggingOver(true);
         });
 
-        registerEventListener(element, "dragover", function (event) {
+        registerEventListener(element, "dragover", function (event: DragEvent) {
             if (isDisabled) return;
 
             if (!hasFiles(event.dataTransfer)) return; // leave non-file drags untouched
 
             event.preventDefault(); // without this on dragover, the browser refuses the drop entirely
-            event.dataTransfer.dropEffect = "copy"; // show the green "+" copy cursor instead of a move/no-drop one
+            event.dataTransfer!.dropEffect = "copy"; // show the green "+" copy cursor instead of a move/no-drop one
             setDraggingOver(true); // self-heal: dragover keeps firing, so the highlight recovers even if a dragenter was missed (e.g. after setDisabled toggling mid-drag)
         });
 
@@ -311,7 +365,7 @@ export function createDropzone(element, config = {}) {
                     }
                 );
             } else {
-                addFiles(transfer && transfer.files); // browser without items API: take the flat file list
+                addFiles(transfer?.files ?? []); // browser without items API: take the flat file list
             }
         });
 
@@ -321,7 +375,7 @@ export function createDropzone(element, config = {}) {
             resetDrag();
         });
 
-        registerEventListener(element.ownerDocument.defaultView, "blur", function () {
+        registerEventListener(element.ownerDocument.defaultView!, "blur", function () {
             resetDrag();
         });
 
@@ -331,7 +385,7 @@ export function createDropzone(element, config = {}) {
             if (!hasFiles(event.dataTransfer)) return; // leave non-file drags untouched
 
             event.preventDefault(); // claim the unhandled file drag so controlled drop behavior is permitted
-            event.dataTransfer.dropEffect = "none"; // nothing here accepts files — show a "can't drop" cursor
+            event.dataTransfer!.dropEffect = "none"; // nothing here accepts files — show a "can't drop" cursor
         });
 
         registerEventListener(element.ownerDocument, "drop", function (event) {
@@ -349,7 +403,7 @@ export function createDropzone(element, config = {}) {
         });
 
         registerEventListener(filePicker, "change", function () {
-            addFiles(filePicker.files);
+            addFiles(filePicker.files ?? []);
             filePicker.value = ""; // reset so the same file can be picked again next time
         });
     }
@@ -360,7 +414,7 @@ export function createDropzone(element, config = {}) {
     let lastStateSignature = ""; // last emitted state fingerprint, used to avoid duplicate no-op emits
 
     // A snapshot of what the dropzone currently holds — consumers render from this.
-    function getState() {
+    function getState(): DropzoneState {
         return {
             files: acceptedFiles.slice(), // a copy, so callers can't mutate the collection
             count: acceptedFiles.length,
@@ -374,7 +428,7 @@ export function createDropzone(element, config = {}) {
 
     // Subscribe to collection changes. The listener gets the state on every change (not
     // immediately — read getState() for the first paint). Returns an unsubscribe function.
-    function subscribe(listener) {
+    function subscribe(listener: (state: DropzoneState) => void): () => void {
         if (destroyed) return function unsubscribe() {}; // dead engine: nothing will fire, and nothing gets retained
 
         listeners.add(listener);
@@ -398,9 +452,9 @@ export function createDropzone(element, config = {}) {
     }
 
     // File objects don't JSON-serialize, so the fingerprint is built from what identifies the snapshot.
-    function getStateSignature(state) {
+    function getStateSignature(state: DropzoneState) {
         return JSON.stringify({
-            files: state.files.map(function (file) { return file.name + ":" + file.size; }),
+            files: state.files.map(function (file: File) {return file.name + ":" + file.size;}),
             draggingOver: state.draggingOver,
             disabled: state.disabled
         });
@@ -409,9 +463,9 @@ export function createDropzone(element, config = {}) {
     // endregion
 
     // region ===== Files ==============================================================================================
-    const acceptedFiles = []; // every file the dropzone currently holds, across all drops — the collection it owns
+    const acceptedFiles: File[] = []; // every file the dropzone currently holds, across all drops — the collection it owns
 
-    function getFileSize(file) {
+    function getFileSize(file: File): {size: number; sizeFormatted: string} {
         return {
             size: file.size,
             sizeFormatted: formatBytes(file.size, 1000)
@@ -419,7 +473,7 @@ export function createDropzone(element, config = {}) {
     }
 
     // Remove one file from the "files" array; returns whether a file was actually removed
-    function removeFile(file) {
+    function removeFile(file: File): boolean {
         if (destroyed) return false;
 
         const index = acceptedFiles.indexOf(file);
@@ -433,7 +487,7 @@ export function createDropzone(element, config = {}) {
     }
 
     // Remove all files from the "files" array
-    function clearFiles() {
+    function clearFiles(): void {
         if (destroyed) return;
         if (!acceptedFiles.length) return; // nothing to clear, nothing to announce
         acceptedFiles.length = 0; // empty the existing array without replacing its reference
@@ -445,7 +499,7 @@ export function createDropzone(element, config = {}) {
     // The intake for every source — drops, the picker, and programmatic callers alike. Filters the files
     // through validate → dedupe → limits, commits the accepted ones, notifies, and reports the outcome.
     // Takes a File, a FileList, or an array of File objects. Returns { accepted, errors }.
-    function addFiles(files) {
+    function addFiles(files: File | FileList | File[]): DropzoneAddResult {
         if (destroyed) {
             return {accepted: [], errors: []}; // dead instance — nothing acquired
         }
@@ -474,7 +528,7 @@ export function createDropzone(element, config = {}) {
 
     // Swap one held file for another in its place — for an edit flow (e.g. crop → save). Atomic: if the
     // replacement fails validation the original stays put and the reason fires at onError. Returns whether it swapped.
-    function replaceFile(oldFile, newFile) {
+    function replaceFile(oldFile: File, newFile: File): boolean {
         if (destroyed) return false;
 
         // The replacement must be a File BEFORE we touch the collection — a Blob (e.g. from canvas.toBlob) or null
@@ -509,10 +563,10 @@ export function createDropzone(element, config = {}) {
     // Used by both the 'accept' allowlist and the 'exclude' blocklist.
     // NOTE: matches on the filename only — a user-controlled, trivially-spoofable string.
     // accept/exclude are UX filters, NOT a security boundary; verify real file contents elsewhere.
-    function hasExtension(file, extensions) {
+    function hasExtension(file: File, extensions: string[]) {
         const name = file.name.toLowerCase();
 
-        return extensions.some(function (extension) {
+        return extensions.some(function (extension: string) {
             return name.endsWith(extension.toLowerCase());
         });
     }
@@ -527,7 +581,7 @@ export function createDropzone(element, config = {}) {
     }
 
     // How many times each (lowercased) name appears in a list of files.
-    function getNameCounts(files) {
+    function getNameCounts(files: File[]) {
         const counts = new Map();
         for (const file of files) {
             const name = file.name.toLowerCase();
@@ -538,11 +592,11 @@ export function createDropzone(element, config = {}) {
 
     // Build one error record: a stable `id` (matching / i18n), a default human `message`, and the files
     // it concerns carried in `metadata` — the uniform {id, message, metadata} shape every engine fires.
-    function createError(id, text, files) {
+    function createError(id: string, text: string, files: File[]): DropzoneError {
         return {id: id, message: text, metadata: {files: files}};
     }
 
-    function validateFiles(files) {
+    function validateFiles(files: File[]): DropzoneAddResult {
         const errors = [];
 
         // Phase 1 — type and size. One file per message.
@@ -651,7 +705,7 @@ export function createDropzone(element, config = {}) {
     let dragDepth = 0; // how many nested elements the drag is currently inside. This is the counter that stops the highlight flickering as the cursor crosses child elements
 
     // State Helpers
-    function setDraggingOver(value) {
+    function setDraggingOver(value: boolean) {
         if (isDraggingOver === value) return; // already in that state — don't re-fire
 
         isDraggingOver = value;
@@ -664,7 +718,7 @@ export function createDropzone(element, config = {}) {
     }
 
     // Public control — disabling gates everything: drag and click-to-open.
-    function setDisabled(value) {
+    function setDisabled(value: boolean): void {
         if (destroyed) return;
 
         isDisabled = value;
@@ -675,7 +729,7 @@ export function createDropzone(element, config = {}) {
     }
 
     // Does the drag carry files? Leave non-file drags (text, links) untouched.
-    function hasFiles(dataTransfer) {
+    function hasFiles(dataTransfer: DataTransfer | null) {
         return !!dataTransfer && Array.prototype.includes.call(dataTransfer.types, "Files");
     }
 
@@ -687,7 +741,7 @@ export function createDropzone(element, config = {}) {
     });
 
     // Open the native file picker when the dropzone is active.
-    function openFilePicker() {
+    function openFilePicker(): void {
         if (destroyed || isDisabled) return; // do nothing after teardown or while acquisition is disabled
 
         filePicker.click();
@@ -696,11 +750,11 @@ export function createDropzone(element, config = {}) {
     // endregion
 
     // region ===== Previews ===========================================================================================
-    const pendingThumbnails = new Set(); // in-flight video-thumbnail finishers, so destroy() can cancel a decode mid-flight
-    const thumbnails = new Map(); // file -> Promise of its thumbnail url; the dropzone revokes these when files leave
-    const videoPreviews = new Map(); // file -> video object url; the dropzone revokes these when files leave
+    const pendingThumbnails = new Set<(url: string | null) => void>(); // in-flight video-thumbnail finishers, so destroy() can cancel a decode mid-flight
+    const thumbnails = new Map<File, Promise<string | null>>(); // file -> Promise of its thumbnail url; the dropzone revokes these when files leave
+    const videoPreviews = new Map<File, string>(); // file -> video object url; the dropzone revokes these when files leave
 
-    function generateThumbnailIfEnabled(file) {
+    function generateThumbnailIfEnabled(file: File) {
         if ((generateImageThumbnail && file.type.startsWith("image/")) ||
             (generateVideoThumbnail && file.type.startsWith("video/"))) {
             createThumbnail(file);
@@ -709,9 +763,9 @@ export function createDropzone(element, config = {}) {
 
     // Build (or reuse) a thumbnail URL for a file. The dropzone OWNS the URL and revokes it when the file
     // leaves the collection — callers just render it and never revoke. Repeat calls reuse the same one.
-    function createThumbnail(file) {
+    function createThumbnail(file: File): Promise<string | null> {
         if (destroyed) return Promise.resolve(null); // don't start new decode work after teardown
-        if (thumbnails.has(file)) return thumbnails.get(file); // reuse the in-flight or finished result
+        if (thumbnails.has(file)) return thumbnails.get(file)!; // reuse the in-flight or finished result
 
         const thumbnail = resolveThumbnail(file).then(function (url) {
             // The file left mid-decode — drop the url now rather than leak it.
@@ -727,11 +781,11 @@ export function createDropzone(element, config = {}) {
     }
 
     // Build (or reuse) a playable video preview URL for a file.
-    function createVideoPreview(file) {
+    function createVideoPreview(file: File): string | null {
         if (destroyed) return null;
         if (!videoPreview) return null;
         if (!file.type.startsWith("video/")) return null;
-        if (videoPreviews.has(file)) return videoPreviews.get(file); // reuse the existing object url
+        if (videoPreviews.has(file)) return videoPreviews.get(file)!; // reuse the existing object url
 
         const videoPreviewUrl = URL.createObjectURL(file);
 
@@ -740,7 +794,7 @@ export function createDropzone(element, config = {}) {
     }
 
     // Images use their own data; videos yield a frame; audio can supply embedded artwork.
-    async function resolveThumbnail(file) {
+    async function resolveThumbnail(file: File) {
         if (file.type.startsWith("image/")) { // images can be displayed directly without generating a new preview
             return URL.createObjectURL(file); // the image itself is the thumbnail
         }
@@ -757,18 +811,18 @@ export function createDropzone(element, config = {}) {
     }
 
     // Revoke and forget a file's thumbnail — called when the file leaves the collection.
-    function revokeThumbnail(file) {
+    function revokeThumbnail(file: File) {
         const thumbnail = thumbnails.get(file);
         if (!thumbnail) return;
 
         thumbnails.delete(file);
-        thumbnail.then(function (url) {
+        thumbnail.then(function (url: string | null) {
             if (url) URL.revokeObjectURL(url);
         });
     }
 
     // Revoke and forget a file's video preview — called when the file leaves the collection.
-    function revokeVideoPreview(file) {
+    function revokeVideoPreview(file: File) {
         const videoPreviewUrl = videoPreviews.get(file);
         if (!videoPreviewUrl) return;
 
@@ -791,7 +845,7 @@ export function createDropzone(element, config = {}) {
     }
 
     // Generate a thumbnail by loading the video, seeking to a frame, and drawing it onto a canvas.
-    function createVideoThumbnail(file) {
+    function createVideoThumbnail(file: File): Promise<string | null> {
         return new Promise(function (resolve) {
             const sourceUrl = URL.createObjectURL(file); // the video is read straight from this blob url
             const video = element.ownerDocument.createElement("video"); // detached element, never added to the page
@@ -806,7 +860,7 @@ export function createDropzone(element, config = {}) {
             video.preload = "auto"; // fetch enough of the file to reach a seekable frame
 
             // Finish at once, release the source video URL, and resolve the thumbnail result.
-            function settleWith(thumbnailUrl) {
+            function settleWith(thumbnailUrl: string | null) {
                 if (settled) return; // ignore duplicate timeout, media, or canvas callbacks
 
                 settled = true; // prevent any later callback from completing the operation again
@@ -874,7 +928,7 @@ export function createDropzone(element, config = {}) {
     }
 
     // Read ordinary ID3v2.3/v2.4 JPEG/PNG artwork; unsupported tag variations return no thumbnail.
-    async function createAudioThumbnail(file) {
+    async function createAudioThumbnail(file: File): Promise<string | null> {
         try {
             const header = new Uint8Array(await file.slice(0, 10).arrayBuffer());
             if (destroyed || header.length !== 10 || String.fromCharCode(...header.subarray(0, 3)) !== "ID3") return null;
@@ -958,7 +1012,7 @@ export function createDropzone(element, config = {}) {
     // region ===== Tear Down ==========================================================================================
 
     // Tears down the whole dropzone: runs every registered cleanup, detaching all listeners it attached.
-    function destroy() {
+    function destroy(): void {
         if (destroyed) return;
 
         destroyed = true; // prevent further work and make future destroy calls harmless

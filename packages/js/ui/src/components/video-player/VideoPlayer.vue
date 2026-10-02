@@ -968,7 +968,7 @@ function clearSeekPreview() {
             <Separator/>
 
             <!-- Playback Speed -->
-            <Field class="px-4 pb-4">
+            <Field orientation="vertical" class="px-4 pb-4">
               <div class="flex items-center justify-between gap-4">
                 <div>
                   <Label :for="playerDomId('playbackSpeed')">

@@ -1,6 +1,205 @@
-import {callConsumer, createErrorReporter} from './internal/core.js';
+import {callConsumer, createErrorReporter} from 'strata-packages/ui-interactions/internal/core';
 
-export function formatTime(seconds) {
+interface VideoElement extends HTMLVideoElement {
+    webkitRequestFullscreen?: () => Promise<void> | void;
+    webkitDisplayingFullscreen?: boolean;
+    webkitEnterFullscreen?: () => void;
+    webkitExitFullscreen?: () => void;
+}
+interface VideoContainer extends HTMLElement {
+    webkitRequestFullscreen?: () => Promise<void> | void;
+}
+interface VideoDocument extends Document {
+    webkitFullscreenElement?: Element | null;
+    webkitExitFullscreen?: () => Promise<void> | void;
+}
+type VideoTap = {x: number; width: number; zone: string; time: number};
+
+export type VideoSource = {
+    src: string;
+    type?: string;
+};
+
+export type VideoCaption = {
+    src: string;
+    language: string;
+    label: string;
+    kind?: "subtitles" | "captions";
+    default?: boolean;
+};
+
+export type VideoArtwork = {
+    src: string;
+    sizes?: string;
+    type?: string;
+};
+
+export type VideoMediaSession = {
+    title?: string;
+    artist?: string;
+    album?: string;
+    artwork?: VideoArtwork[];
+} | null;
+
+export type VideoError = {
+    id: string;
+    message: string;
+};
+
+export type VideoCaptionTrackState = {
+    src: string;
+    language: string;
+    label: string;
+    kind: string;
+    active: boolean;
+    readyState: number;
+};
+
+export type VideoState = {
+    source: string;
+    sources: VideoSource[];
+    videoWidth: number;
+    videoHeight: number;
+    aspectRatio: number;
+    paused: boolean;
+    ended: boolean;
+    playing: boolean;
+    buffering: boolean;
+    seeking: boolean;
+    live: boolean;
+    currentTime: number;
+    currentTimeFormatted: string;
+    duration: number;
+    durationFormatted: string;
+    bufferedRanges: Array<{startPercent: number; endPercent: number}>;
+    remainingTime: number;
+    remainingTimeFormatted: string;
+    volume: number;
+    volumeFormatted: string;
+    muted: boolean;
+    playbackRate: number;
+    loop: boolean;
+    abLoopStart: number;
+    abLoopEnd: number;
+    abLoopStartFormatted: string;
+    abLoopEndFormatted: string;
+    abLoopReady: boolean;
+    abLoopPhase: "idle" | "pending" | "looping";
+    autoplay: boolean;
+    autoplayAttempted: boolean;
+    autoplayBlocked: boolean;
+    poster: string;
+    captions: {
+        enabled: boolean;
+        src: string;
+        language: string;
+        label: string;
+        tracks: VideoCaptionTrackState[];
+    };
+    fullscreen: boolean;
+    fullscreenSupported: boolean;
+    pictureInPicture: boolean;
+    pictureInPictureSupported: boolean;
+    keyboardShortcuts: boolean;
+    touchGestures: boolean;
+    persistSettings: boolean;
+    watchProgress: {
+        enabled: boolean;
+        restored: boolean;
+        savedTime: number;
+        savedTimeFormatted: string;
+        watchedPercent: number;
+    };
+};
+
+export type VideoConfig = {
+    onChange?: (state: VideoState) => void;
+    onError?: (error: VideoError) => void;
+    onSingleClick?: (tap: VideoTap) => void;
+    onDoubleClick?: (tap: VideoTap) => void;
+    onSingleTap?: (tap: VideoTap) => void;
+    onDoubleTap?: (tap: VideoTap) => void;
+    videoId?: string;
+    playerContainer?: VideoContainer;
+    autoplay?: boolean;
+    autoplayMuted?: boolean;
+    loop?: boolean;
+    poster?: string;
+    thumbnails?: string;
+    thumbnailScale?: number;
+    captions?: VideoCaption[];
+    sources?: VideoSource[];
+    keyboardShortcuts?: boolean;
+    keyboardSeekStep?: number;
+    keyboardVolumeStep?: number;
+    touchGestures?: boolean;
+    mediaSession?: VideoMediaSession;
+    watchProgress?: boolean;
+    watchProgressSaveInterval?: number;
+    persistSettings?: boolean;
+};
+
+export type VideoEngine = {
+    getState: () => VideoState;
+    subscribe: (listener: (state: VideoState) => void) => () => void;
+    load: () => boolean;
+    setSources: (sources: VideoSource[]) => boolean;
+    play: () => Promise<boolean>;
+    togglePlayback: () => void;
+    pause: () => boolean;
+    stop: () => boolean;
+    seek: (time: number) => boolean;
+    seekForward: (seconds?: number) => boolean;
+    seekBackward: (seconds?: number) => boolean;
+    seekToPercent: (percent: number) => boolean;
+    getSeekTimeAtPercent: (percent: number) => number;
+    getSeekPreviewAtPercent: (percent: number) => {
+        percent: number;
+        time: number;
+        timeFormatted: string;
+        remainingTime: number;
+        remainingTimeFormatted: string;
+        thumbnail: unknown;
+    };
+    getSeekPreviewAtPosition: (position: number, width: number) => {
+        percent: number;
+        time: number;
+        timeFormatted: string;
+        remainingTime: number;
+        remainingTimeFormatted: string;
+        thumbnail: unknown;
+    };
+    setVolume: (volume: number) => boolean;
+    increaseVolume: (step?: number) => boolean;
+    decreaseVolume: (step?: number) => boolean;
+    setMuted: (enabled: boolean) => boolean;
+    toggleMuted: () => boolean;
+    setAutoplay: (enabled: boolean) => Promise<boolean>;
+    setLoop: (enabled: boolean) => boolean;
+    toggleLoop: () => boolean;
+    setMediaSession: (mediaSession: VideoMediaSession) => boolean;
+    setAbLoopStart: (time?: number) => boolean;
+    setAbLoopEnd: (time?: number) => boolean;
+    clearAbLoop: () => boolean;
+    retry: () => Promise<boolean>;
+    clearPersistedSettings: () => boolean;
+    setPlaybackRate: (rate: number) => boolean;
+    increasePlaybackRate: (step?: number) => boolean;
+    decreasePlaybackRate: (step?: number) => boolean;
+    resetPlaybackRate: () => boolean;
+    setCaption: (caption: VideoCaptionTrackState | null) => boolean;
+    enterPictureInPicture: () => Promise<boolean>;
+    exitPictureInPicture: () => Promise<boolean>;
+    enterFullscreen: () => Promise<boolean>;
+    exitFullscreen: () => Promise<boolean>;
+    setKeyboardShortcuts: (enabled: boolean) => boolean;
+    listKeyboardShortcuts: () => Array<{id: string; keys: string[]; message: string}>;
+    setTouchGestures: (enabled: boolean) => boolean;
+    resumeWatchProgress: () => boolean;
+    destroy: () => void;
+};
+
+export function formatTime(seconds: number): string {
     const safeSeconds = Number.isFinite(seconds) ? Math.max(0, seconds) : 0;
     const minutes = Math.floor(safeSeconds / 60);
     const remainingSeconds = Math.floor(safeSeconds % 60).toString().padStart(2, "0");
@@ -8,15 +207,15 @@ export function formatTime(seconds) {
     return `${minutes}:${remainingSeconds}`;
 }
 
-function getLocalStorage(element) {
+function getLocalStorage(element: HTMLVideoElement) {
     try {
-        return element.ownerDocument.defaultView.localStorage;
+        return element.ownerDocument.defaultView!.localStorage;
     } catch {
         return null;
     }
 }
 
-export function createVideo(video, config = {}) {
+export function createVideo(video: VideoElement, config: VideoConfig = {}): VideoEngine {
     if (!video || typeof video.addEventListener !== "function" || typeof video.play !== "function" || typeof video.pause !== "function") {
         throw new TypeError("createVideo: 'video' must be a media element.");
     }
@@ -148,23 +347,7 @@ export function createVideo(video, config = {}) {
         });
 
         // Sources
-        if (!Array.isArray(sources)) {
-            throw new TypeError("createVideo: sources must be an array.");
-        }
-
-        sources.forEach(function (source) {
-            if (!source || typeof source !== "object") {
-                throw new TypeError("createVideo: each source must be an object.");
-            }
-
-            if (typeof source.src !== "string" || !source.src) {
-                throw new TypeError("createVideo: each source must include a non-empty src.");
-            }
-
-            if (source.type !== undefined && typeof source.type !== "string") {
-                throw new TypeError("createVideo: each source's type must be a string when provided.");
-            }
-        });
+        validateSources(sources);
 
         // Keyboard Shortcuts
         if (typeof keyboardShortcuts !== "boolean") {
@@ -210,14 +393,34 @@ export function createVideo(video, config = {}) {
         }
     }
 
-    function validateMediaSession(value) {
+    function validateSources(value: VideoSource[]) {
+        if (!Array.isArray(value)) {
+            throw new TypeError("createVideo: sources must be an array.");
+        }
+
+        value.forEach(function (source) {
+            if (!source || typeof source !== "object") {
+                throw new TypeError("createVideo: each source must be an object.");
+            }
+
+            if (typeof source.src !== "string" || !source.src) {
+                throw new TypeError("createVideo: each source must include a non-empty src.");
+            }
+
+            if (source.type !== undefined && typeof source.type !== "string") {
+                throw new TypeError("createVideo: each source's type must be a string when provided.");
+            }
+        });
+    }
+
+    function validateMediaSession(value: VideoMediaSession | undefined) {
         if (value === undefined || value === null) return;
 
         if (typeof value !== "object" || Array.isArray(value)) {
             throw new TypeError("createVideo: mediaSession must be a metadata object.");
         }
 
-        ["title", "artist", "album"].forEach(function (key) {
+        (["title", "artist", "album"] as const).forEach(function (key) {
             if (value[key] !== undefined && typeof value[key] !== "string") {
                 throw new TypeError(`createVideo: mediaSession.${key} must be a string when provided.`);
             }
@@ -249,8 +452,8 @@ export function createVideo(video, config = {}) {
     // endregion
 
     // region ===== Init ===============================================================================================
-    const ownerDocument = video.ownerDocument; // the video's own document, so PiP exit/state reads work across realms/iframes
-    const browserNavigator = ownerDocument.defaultView ? ownerDocument.defaultView.navigator : null;
+    const ownerDocument: VideoDocument = video.ownerDocument; // the video's own document, so PiP exit/state reads work across realms/iframes
+    const browserNavigator = ownerDocument.defaultView ? ownerDocument.defaultView!.navigator : null;
     let destroyed = false; // late media events must not still fire callbacks after teardown
 
     function init() {
@@ -284,14 +487,14 @@ export function createVideo(video, config = {}) {
     // endregion
 
     // region ===== Event Listeners ====================================================================================
-    const listeners = new Set(); // change subscribers — each gets the full state on every playback change
-    const cleanups = []; // teardown functions, collected so everything can be undone at once
+    const listeners = new Set<(state: VideoState) => void>(); // change subscribers — each gets the full state on every playback change
+    const cleanups: {(): void; (): void;}[] = []; // teardown functions, collected so everything can be undone at once
 
-    function registerEventListener(target, type, handler) {
-        target.addEventListener(type, handler);
+    function registerEventListener<K extends keyof HTMLElementEventMap | "enterpictureinpicture" | "leavepictureinpicture" | "webkitfullscreenchange" | "webkitbeginfullscreen" | "webkitendfullscreen">(target: EventTarget, type: K, handler: (event: K extends keyof HTMLElementEventMap ? HTMLElementEventMap[K] : Event) => void) {
+        target.addEventListener(type, handler as EventListener);
 
         cleanups.push(function () {
-            target.removeEventListener(type, handler); // detach the exact listener that was registered
+            target.removeEventListener(type, handler as EventListener); // detach the exact listener that was registered
         });
     }
 
@@ -423,7 +626,7 @@ export function createVideo(video, config = {}) {
     // region ===== Error Handling =====================================================================================
     const reportError = createErrorReporter(onError);
 
-    function reportMediaError(playbackError = null) {
+    function reportMediaError(playbackError: unknown = null) {
         const mediaError = video.error;
 
         if (mediaError) {
@@ -446,7 +649,7 @@ export function createVideo(video, config = {}) {
             return reportError("media-error", "The video could not be loaded.");
         }
 
-        if (playbackError && playbackError.name === "NotAllowedError") {
+        if (playbackError && (playbackError as {name?: unknown}).name === "NotAllowedError") {
             return reportError("playback-blocked", "Playback was blocked by the browser.");
         }
 
@@ -463,7 +666,7 @@ export function createVideo(video, config = {}) {
     let lastStateSignature = ""; // last emitted state fingerprint, used to avoid duplicate media-event echoes
 
     // Subscribe to playback changes. The listener gets the state on every change (not immediately — read getState() for the first paint). Returns an unsubscribe function.
-    function subscribe(listener) {
+    function subscribe(listener: (state: VideoState) => void): () => void {
         if (destroyed) return function unsubscribe() {}; // dead engine: nothing will fire, and nothing gets retained
 
         listeners.add(listener);
@@ -489,12 +692,12 @@ export function createVideo(video, config = {}) {
     }
 
     // getState() returns a new object every call, so notify() can't detect no-op changes by reference alone — this gives it a comparable string instead.
-    function getStateSignature(state) {
+    function getStateSignature(state: VideoState) {
         return JSON.stringify(state);
     }
 
     // A snapshot of the media element's current playback state — consumers render from this.
-    function getState() {
+    function getState(): VideoState {
         const source = getSource();
         const sources = getSources();
         const videoWidth = getVideoWidth();
@@ -635,8 +838,8 @@ export function createVideo(video, config = {}) {
         return buffering;
     }
 
-    function getBufferedRanges(duration) {
-        const ranges = [];
+    function getBufferedRanges(duration: number) {
+        const ranges: {startPercent: number; endPercent: number;}[] = [];
         if (!duration || !video.buffered) return ranges;
 
         for (let index = 0; index < video.buffered.length; index++) {
@@ -680,7 +883,7 @@ export function createVideo(video, config = {}) {
         return formatTime(getDuration());
     }
 
-    function getRemainingTime(currentTime, duration) {
+    function getRemainingTime(currentTime: number, duration: number) {
         if (!duration) return 0;
 
         return Math.max(0, duration - currentTime);
@@ -763,7 +966,7 @@ export function createVideo(video, config = {}) {
                 language: caption.language,
                 label: caption.label,
                 kind: trackElement ? trackElement.kind : (caption.kind || "subtitles"),
-                active: Boolean(selectedCaption) && caption.src === selectedCaption.src,
+                active: selectedCaption !== null && caption.src === selectedCaption.src,
                 readyState: trackElement ? trackElement.readyState : 0
             };
         });
@@ -790,7 +993,7 @@ export function createVideo(video, config = {}) {
     }
 
     function isPictureInPictureSupported() {
-        return Boolean(ownerDocument.pictureInPictureEnabled && video.requestPictureInPicture && ownerDocument.exitPictureInPicture && !video.disablePictureInPicture);
+        return Boolean(ownerDocument.pictureInPictureEnabled && typeof video.requestPictureInPicture === "function" && typeof ownerDocument.exitPictureInPicture === "function" && !video.disablePictureInPicture);
     }
 
     function isKeyboardShortcutsEnabled() {
@@ -805,7 +1008,7 @@ export function createVideo(video, config = {}) {
         return persistSettings;
     }
 
-    function getWatchProgressState(currentTime, duration) {
+    function getWatchProgressState(currentTime: number, duration: number) {
         const progress = getSavedWatchProgress();
         const savedTime = progress ? Number(progress.currentTime) : 0;
         const safeSavedTime = Number.isFinite(savedTime) && savedTime >= 0 ? savedTime : 0;
@@ -822,7 +1025,7 @@ export function createVideo(video, config = {}) {
     // endregion
 
     // region ===== Sources ============================================================================================
-    function load() {
+    function load(): boolean {
         if (destroyed) return false;
 
         // Clear transient media state
@@ -841,7 +1044,7 @@ export function createVideo(video, config = {}) {
         return true;
     }
 
-    function applySources(sources) {
+    function applySources(sources: VideoSource[]) {
         video.pause();
         video.removeAttribute("src");
 
@@ -851,7 +1054,7 @@ export function createVideo(video, config = {}) {
 
         const firstTrack = video.querySelector("track");
 
-        sources.forEach(function (source) {
+        sources.forEach(function (source: VideoSource) {
             const sourceElement = ownerDocument.createElement("source");
             sourceElement.src = source.src;
 
@@ -865,7 +1068,7 @@ export function createVideo(video, config = {}) {
         return load();
     }
 
-    function setSources(nextSources) {
+    function setSources(nextSources: VideoSource[]): boolean {
         if (destroyed) return false;
 
         validateSources(nextSources);
@@ -886,7 +1089,7 @@ export function createVideo(video, config = {}) {
     // region ===== Playback Controls ==================================================================================
     let buffering = false;
 
-    function setCurrentTime(time) {
+    function setCurrentTime(time: number) {
         const nextTime = clampSeekTime(time);
         if (getCurrentTime() === nextTime) return false;
 
@@ -895,14 +1098,14 @@ export function createVideo(video, config = {}) {
         return true;
     }
 
-    async function play() {
+    async function play(): Promise<boolean> {
         if (destroyed) return false;
         if (isPlaying()) return true;
 
         try {
             await video.play();
         } catch (error) {
-            if (error && error.name === "AbortError") return false; // superseded by a competing load — not a failure worth reporting
+            if (error && (error as {name?: unknown}).name === "AbortError") return false; // superseded by a competing load — not a failure worth reporting
 
             reportMediaError(error);
             return false;
@@ -915,7 +1118,7 @@ export function createVideo(video, config = {}) {
         return true;
     }
 
-    function pause() {
+    function pause(): boolean {
         if (destroyed) return false;
         if (video.paused) return true;
 
@@ -924,7 +1127,7 @@ export function createVideo(video, config = {}) {
         return true;
     }
 
-    function stop() {
+    function stop(): boolean {
         if (destroyed) return false;
 
         const wasPlaying = isPlaying();
@@ -936,14 +1139,14 @@ export function createVideo(video, config = {}) {
         return true;
     }
 
-    async function retry() {
+    async function retry(): Promise<boolean> {
         if (destroyed) return false;
 
         video.load();
         return play();
     }
 
-    function seek(value) {
+    function seek(value: number): boolean {
         if (destroyed) return false;
 
         const time = parseSeekTime(value);
@@ -954,7 +1157,7 @@ export function createVideo(video, config = {}) {
         return changed;
     }
 
-    function seekForward(seconds = 10) {
+    function seekForward(seconds: number = 10): boolean {
         if (destroyed) return false;
 
         const changed = setCurrentTime(getCurrentTime() + parseSeekStep(seconds));
@@ -964,7 +1167,7 @@ export function createVideo(video, config = {}) {
         return changed;
     }
 
-    function seekBackward(seconds = 10) {
+    function seekBackward(seconds: number = 10): boolean {
         if (destroyed) return false;
 
         const changed = setCurrentTime(getCurrentTime() - parseSeekStep(seconds));
@@ -974,7 +1177,7 @@ export function createVideo(video, config = {}) {
         return changed;
     }
 
-    function seekToPercent(value) {
+    function seekToPercent(value: number): boolean {
         if (destroyed) return false;
 
         const percent = parseSeekPercent(value);
@@ -985,7 +1188,7 @@ export function createVideo(video, config = {}) {
         return changed;
     }
 
-    function parseSeekTime(value) {
+    function parseSeekTime(value: number) {
         const time = Number(value);
 
         if (!Number.isFinite(time) || time < 0) {
@@ -995,7 +1198,7 @@ export function createVideo(video, config = {}) {
         return time;
     }
 
-    function parseSeekStep(seconds) {
+    function parseSeekStep(seconds: number) {
         const offset = Number(seconds);
 
         if (!Number.isFinite(offset) || offset <= 0) {
@@ -1005,7 +1208,7 @@ export function createVideo(video, config = {}) {
         return offset;
     }
 
-    function parseSeekPercent(value) {
+    function parseSeekPercent(value: number) {
         const percent = Number(value);
 
         if (!Number.isFinite(percent) || percent < 0 || percent > 100) {
@@ -1015,14 +1218,21 @@ export function createVideo(video, config = {}) {
         return percent;
     }
 
-    function getSeekTimeAtPercent(value) {
+    function getSeekTimeAtPercent(value: number): number {
         const percent = parseSeekPercent(value);
         if (isLive()) return getCurrentTime(); // live has no fixed length, so percent maps to no move
 
         return getDuration() * percent / 100;
     }
 
-    function getSeekPreviewAtPercent(value) {
+    function getSeekPreviewAtPercent(value: number): {
+        percent: number;
+        time: number;
+        timeFormatted: string;
+        remainingTime: number;
+        remainingTimeFormatted: string;
+        thumbnail: unknown;
+    } {
         const percent = parseSeekPercent(value);
         const time = getSeekTimeAtPercent(percent);
         const duration = getDuration();
@@ -1038,7 +1248,14 @@ export function createVideo(video, config = {}) {
         };
     }
 
-    function getSeekPreviewAtPosition(position, width) {
+    function getSeekPreviewAtPosition(position: number, width: number): {
+        percent: number;
+        time: number;
+        timeFormatted: string;
+        remainingTime: number;
+        remainingTimeFormatted: string;
+        thumbnail: unknown;
+    } {
         const seekPosition = Number(position);
         const seekWidth = Number(width);
 
@@ -1053,7 +1270,7 @@ export function createVideo(video, config = {}) {
         return getSeekPreviewAtPercent(Math.max(0, Math.min(seekPosition / seekWidth * 100, 100)));
     }
 
-    function clampSeekTime(time) {
+    function clampSeekTime(time: number) {
         const duration = getDuration();
         if (!duration) return Math.max(0, time); // duration unknown — only the lower bound is knowable
 
@@ -1066,7 +1283,7 @@ export function createVideo(video, config = {}) {
     const minimumPlaybackRate = 0.5;
     const maximumPlaybackRate = 2;
 
-    function setPlaybackRate(value) {
+    function setPlaybackRate(value: number): boolean {
         if (destroyed) return false;
 
         const rate = Number(value);
@@ -1083,7 +1300,7 @@ export function createVideo(video, config = {}) {
         return true;
     }
 
-    function increasePlaybackRate(step = 0.05) {
+    function increasePlaybackRate(step: number = 0.05): boolean {
         if (destroyed) return false;
 
         const amount = Number(step);
@@ -1095,7 +1312,7 @@ export function createVideo(video, config = {}) {
         return setPlaybackRate(Math.min(getPlaybackRate() + amount, maximumPlaybackRate));
     }
 
-    function decreasePlaybackRate(step = 0.05) {
+    function decreasePlaybackRate(step: number = 0.05): boolean {
         if (destroyed) return false;
 
         const amount = Number(step);
@@ -1107,7 +1324,7 @@ export function createVideo(video, config = {}) {
         return setPlaybackRate(Math.max(getPlaybackRate() - amount, minimumPlaybackRate));
     }
 
-    function resetPlaybackRate() {
+    function resetPlaybackRate(): boolean {
         if (destroyed) return false;
 
         return setPlaybackRate(1);
@@ -1116,7 +1333,7 @@ export function createVideo(video, config = {}) {
     // endregion
 
     // region ===== Loop Controls ======================================================================================
-    function setLoop(enabled) {
+    function setLoop(enabled: boolean): boolean {
         if (destroyed) return false;
 
         if (typeof enabled !== "boolean") {
@@ -1135,7 +1352,7 @@ export function createVideo(video, config = {}) {
         video.loop = loop;
     }
 
-    function toggleLoop() {
+    function toggleLoop(): boolean {
         if (destroyed) return false;
 
         return setLoop(!isLoopEnabled());
@@ -1147,7 +1364,7 @@ export function createVideo(video, config = {}) {
     let abLoopStart = 0;
     let abLoopEnd = 0;
 
-    function setAbLoopStart(value = getCurrentTime()) {
+    function setAbLoopStart(value: number = getCurrentTime()): boolean {
         if (destroyed) return false;
 
         const time = parseAbLoopTime(value);
@@ -1163,7 +1380,7 @@ export function createVideo(video, config = {}) {
         return true;
     }
 
-    function setAbLoopEnd(value = getCurrentTime()) {
+    function setAbLoopEnd(value: number = getCurrentTime()): boolean {
         if (destroyed) return false;
 
         const time = parseAbLoopTime(value);
@@ -1175,7 +1392,7 @@ export function createVideo(video, config = {}) {
         return true;
     }
 
-    function clearAbLoop() {
+    function clearAbLoop(): boolean {
         if (destroyed) return false;
         if (!getAbLoopStart() && !getAbLoopEnd()) return true;
 
@@ -1194,7 +1411,7 @@ export function createVideo(video, config = {}) {
         return true;
     }
 
-    function parseAbLoopTime(value) {
+    function parseAbLoopTime(value: number) {
         const time = Number(value);
 
         if (!Number.isFinite(time) || time < 0) {
@@ -1207,7 +1424,7 @@ export function createVideo(video, config = {}) {
     // endregion
 
     // region ===== Volume Controls ====================================================================================
-    function setVolume(value) {
+    function setVolume(value: number): boolean {
         if (destroyed) return false;
 
         const volume = parseVolume(value);
@@ -1229,7 +1446,7 @@ export function createVideo(video, config = {}) {
         return changed;
     }
 
-    function increaseVolume(step = 0.05) {
+    function increaseVolume(step: number = 0.05): boolean {
         if (destroyed) return false;
 
         const volumeStep = parseVolume(step);
@@ -1238,7 +1455,7 @@ export function createVideo(video, config = {}) {
         return setVolume(Math.min(getVolume() + volumeStep, 1));
     }
 
-    function decreaseVolume(step = 0.05) {
+    function decreaseVolume(step: number = 0.05): boolean {
         if (destroyed) return false;
 
         const volumeStep = parseVolume(step);
@@ -1247,7 +1464,7 @@ export function createVideo(video, config = {}) {
         return setVolume(Math.max(getVolume() - volumeStep, 0));
     }
 
-    function setMuted(enabled) {
+    function setMuted(enabled: boolean): boolean {
         if (destroyed) return false;
 
         if (typeof enabled !== "boolean") {
@@ -1262,13 +1479,13 @@ export function createVideo(video, config = {}) {
         return true;
     }
 
-    function toggleMuted() {
+    function toggleMuted(): boolean {
         if (destroyed) return false;
 
         return setMuted(!isMuted());
     }
 
-    function parseVolume(value) {
+    function parseVolume(value: number) {
         const volume = Number(value);
 
         if (!Number.isFinite(volume) || volume < 0 || volume > 1) {
@@ -1278,7 +1495,7 @@ export function createVideo(video, config = {}) {
         return volume;
     }
 
-    function formatVolume(value) {
+    function formatVolume(value: number) {
         return `${Math.round(value * 100)}%`;
     }
 
@@ -1289,7 +1506,7 @@ export function createVideo(video, config = {}) {
     let autoplayAttempted = false;
     let autoplayBlocked = false;
 
-    async function setAutoplay(enabled) {
+    async function setAutoplay(enabled: boolean): Promise<boolean> {
         if (destroyed) return false;
 
         if (typeof enabled !== "boolean") {
@@ -1327,7 +1544,7 @@ export function createVideo(video, config = {}) {
         try {
             await video.play();
         } catch (error) {
-            if (error && error.name === "AbortError") return false; // superseded by a competing load — not an autoplay policy block
+            if (error && (error as {name?: unknown}).name === "AbortError") return false; // superseded by a competing load — not an autoplay policy block
 
             autoplayBlocked = true;
             notify();
@@ -1357,10 +1574,10 @@ export function createVideo(video, config = {}) {
     // endregion
 
     // region ===== Captions ===========================================================================================
-    let selectedCaption = captions.find(caption => caption.default) || null; // a track marked `default` seeds captions on; persisted settings applied later override this
-    let captionTrackElements = [];
+    let selectedCaption: VideoCaption | VideoCaptionTrackState | null = captions.find(caption => caption.default) || null; // a track marked `default` seeds captions on; persisted settings applied later override this
+    let captionTrackElements: HTMLTrackElement[] = [];
 
-    function setCaption(caption) {
+    function setCaption(caption: VideoCaptionTrackState | null): boolean {
         if (destroyed) return false;
 
         const currentSrc = selectedCaption ? selectedCaption.src : null;
@@ -1381,7 +1598,7 @@ export function createVideo(video, config = {}) {
             track.src = caption.src;
             track.srclang = caption.language;
             track.label = caption.label;
-            track.default = caption.default;
+            track.default = caption.default ?? false;
 
             registerEventListener(track, "load", function () {
                 syncCaptionTracks();
@@ -1411,7 +1628,7 @@ export function createVideo(video, config = {}) {
 
             // Compare against captions' own src, not track.src — the DOM resolves that to an
             // absolute URL, which would never match the consumer's original (often relative) string.
-            track.track.mode = Boolean(selectedCaption) && captions[index].src === selectedCaption.src
+            track.track.mode = selectedCaption !== null && captions[index].src === selectedCaption.src
                 ? "showing"
                 : "disabled";
         });
@@ -1420,13 +1637,13 @@ export function createVideo(video, config = {}) {
     // endregion
 
     // region ===== Preview Thumbnails =================================================================================
-    let previewThumbnailItems = [];
+    let previewThumbnailItems: ReturnType<typeof parsePreviewThumbnailVtt> = [];
 
     async function loadPreviewThumbnails() {
         if (!thumbnails || destroyed) return false;
 
         try {
-            const response = await ownerDocument.defaultView.fetch(thumbnails);
+            const response = await ownerDocument.defaultView!.fetch(thumbnails);
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}`);
             }
@@ -1440,7 +1657,7 @@ export function createVideo(video, config = {}) {
         }
     }
 
-    function getPreviewThumbnail(time) {
+    function getPreviewThumbnail(time: number) {
         if (!previewThumbnailItems.length) return null;
 
         const thumbnail = previewThumbnailItems.find(function (item) {
@@ -1465,7 +1682,7 @@ export function createVideo(video, config = {}) {
         };
     }
 
-    function parsePreviewThumbnailVtt(text, source) {
+    function parsePreviewThumbnailVtt(text: string, source: string) {
         const lines = text.split(/\r?\n/);
         const thumbnails = [];
 
@@ -1473,7 +1690,7 @@ export function createVideo(video, config = {}) {
             const line = lines[index].trim();
             if (!line.includes("-->")) continue;
 
-            const [startText, endText] = line.split("-->").map(function (part) {
+            const [startText, endText] = line.split("-->").map(function (part: string) {
                 return part.trim();
             });
             const thumbnailText = findNextVttPayloadLine(lines, index + 1);
@@ -1496,14 +1713,14 @@ export function createVideo(video, config = {}) {
         return thumbnails;
     }
 
-    function findNextVttPayloadLine(lines, index) {
+    function findNextVttPayloadLine(lines: string[], index: number) {
         const line = index < lines.length ? lines[index].trim() : "";
         if (!line || line.includes("-->")) return ""; // blank or a new cue: this cue has no payload
 
         return line;
     }
 
-    function parsePreviewThumbnailPayload(value, source) {
+    function parsePreviewThumbnailPayload(value: string, source: string) {
         const match = value.match(/^(.+)#xywh=(\d+),(\d+),(\d+),(\d+)$/);
         if (!match) return null;
 
@@ -1516,7 +1733,7 @@ export function createVideo(video, config = {}) {
         };
     }
 
-    function resolvePreviewThumbnailUrl(value, source) {
+    function resolvePreviewThumbnailUrl(value: string, source: string) {
         try {
             return new URL(value, new URL(source, ownerDocument.baseURI)).toString();
         } catch {
@@ -1524,7 +1741,7 @@ export function createVideo(video, config = {}) {
         }
     }
 
-    function parseVttTime(value) {
+    function parseVttTime(value: string) {
         const parts = value.split(":");
         const seconds = Number(parts.pop());
         const minutes = Number(parts.pop() || 0);
@@ -1536,7 +1753,7 @@ export function createVideo(video, config = {}) {
     // endregion
 
     // region ===== Fullscreen Controls ================================================================================
-    async function enterFullscreen() {
+    async function enterFullscreen(): Promise<boolean> {
         if (destroyed) return false;
         if (!isFullscreenSupported()) return false;
         if (isFullscreenActive()) return true;
@@ -1561,7 +1778,7 @@ export function createVideo(video, config = {}) {
         return true;
     }
 
-    async function exitFullscreen() {
+    async function exitFullscreen(): Promise<boolean> {
         if (destroyed) return false;
         if (!isFullscreenActive()) return true;
 
@@ -1592,7 +1809,7 @@ export function createVideo(video, config = {}) {
     // endregion
 
     // region ===== Picture-in-Picture Controls ========================================================================
-    async function enterPictureInPicture() {
+    async function enterPictureInPicture(): Promise<boolean> {
         if (destroyed) return false;
         if (!isPictureInPictureSupported()) return false;
         if (isPictureInPictureActive()) return true;
@@ -1609,7 +1826,7 @@ export function createVideo(video, config = {}) {
         return true;
     }
 
-    async function exitPictureInPicture() {
+    async function exitPictureInPicture(): Promise<boolean> {
         if (destroyed) return false;
         if (!isPictureInPictureActive()) return true; // this video isn't the one in PiP — leave any other element's PiP alone
 
@@ -1630,7 +1847,7 @@ export function createVideo(video, config = {}) {
     // region ===== Keyboard Shortcuts =================================================================================
     let keyboardShortcutsEnabled = keyboardShortcuts;
 
-    function setKeyboardShortcuts(enabled) {
+    function setKeyboardShortcuts(enabled: boolean): boolean {
         if (destroyed) return false;
 
         if (typeof enabled !== "boolean") {
@@ -1644,7 +1861,7 @@ export function createVideo(video, config = {}) {
         return true;
     }
 
-    function listKeyboardShortcuts() {
+    function listKeyboardShortcuts(): Array<{id: string; keys: string[]; message: string}> {
         return [
             {id: "toggle-play", keys: ["Space"], message: "Play or pause"},
             {id: "seek-backward", keys: ["ArrowLeft"], message: `Seek backward ${keyboardSeekStep} seconds`},
@@ -1663,7 +1880,7 @@ export function createVideo(video, config = {}) {
         ];
     }
 
-    function handleKeyboardShortcut(event) {
+    function handleKeyboardShortcut(event: KeyboardEvent) {
         if (destroyed || !isKeyboardShortcutsEnabled()) return;
         if (shouldIgnoreKeyboardShortcut(event)) return;
 
@@ -1727,10 +1944,10 @@ export function createVideo(video, config = {}) {
         }
     }
 
-    function shouldIgnoreKeyboardShortcut(event) {
+    function shouldIgnoreKeyboardShortcut(event: KeyboardEvent) {
         if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return true;
 
-        const target = event.target;
+        const target = event.target as HTMLElement | null;
         if (!target || target === playerContainer || target === video) return false;
         if (target.isContentEditable) return true;
 
@@ -1742,10 +1959,10 @@ export function createVideo(video, config = {}) {
     // region ===== Pointer Events =====================================================================================
     const doubleTapDelay = 300;
     let touchGesturesEnabled = touchGestures;
-    let lastTouchTap = null;
+    let lastTouchTap: {time: number;} | null = null;
     let lastMouseClickTime = 0;
 
-    function setTouchGestures(enabled) {
+    function setTouchGestures(enabled: boolean): boolean {
         if (destroyed) return false;
 
         if (typeof enabled !== "boolean") {
@@ -1762,7 +1979,7 @@ export function createVideo(video, config = {}) {
         return true;
     }
 
-    function handlePointerEvent(event) {
+    function handlePointerEvent(event: PointerEvent) {
         if (destroyed) return;
         if (shouldIgnorePointerEvent(event)) return;
 
@@ -1780,7 +1997,7 @@ export function createVideo(video, config = {}) {
         handleTouchTap(tap);
     }
 
-    function handleMouseClick(tap) {
+    function handleMouseClick(tap: VideoTap) {
         if (lastMouseClickTime && tap.time - lastMouseClickTime <= doubleTapDelay) {
             lastMouseClickTime = 0;
 
@@ -1798,7 +2015,7 @@ export function createVideo(video, config = {}) {
         togglePlayback(); // instant — a desktop click shouldn't wait out the double-click window
     }
 
-    function handleTouchTap(tap) {
+    function handleTouchTap(tap: VideoTap) {
         if (lastTouchTap && tap.time - lastTouchTap.time <= doubleTapDelay) {
             lastTouchTap = null;
 
@@ -1825,7 +2042,7 @@ export function createVideo(video, config = {}) {
         }, doubleTapDelay);
     }
 
-    function togglePlayback() {
+    function togglePlayback(): void {
         if (isPlaying()) {
             pause();
         } else {
@@ -1841,7 +2058,7 @@ export function createVideo(video, config = {}) {
         }
     }
 
-    function getPointerTap(event) {
+    function getPointerTap(event: {clientX: number;}) {
         const rect = playerContainer.getBoundingClientRect ? playerContainer.getBoundingClientRect() : null;
         if (!rect) return null;
 
@@ -1855,10 +2072,10 @@ export function createVideo(video, config = {}) {
         };
     }
 
-    function shouldIgnorePointerEvent(event) {
+    function shouldIgnorePointerEvent(event: PointerEvent) {
         if (event.defaultPrevented) return true;
 
-        const target = event.target;
+        const target = event.target as HTMLElement | null;
         if (!target || target === playerContainer || target === video) return false;
         if (target.isContentEditable) return true;
 
@@ -1887,7 +2104,7 @@ export function createVideo(video, config = {}) {
     }
 
     function isMediaSessionSupported() {
-        return Boolean(browserNavigator && browserNavigator.mediaSession);
+        return Boolean(browserNavigator && browserNavigator!.mediaSession);
     }
 
     function applyMediaSession() {
@@ -1900,7 +2117,7 @@ export function createVideo(video, config = {}) {
         return true;
     }
 
-    function setMediaSession(nextMediaSession) {
+    function setMediaSession(nextMediaSession: VideoMediaSession): boolean {
         if (destroyed) return false;
 
         validateMediaSession(nextMediaSession);
@@ -1927,10 +2144,10 @@ export function createVideo(video, config = {}) {
         };
 
         try {
-            if (typeof ownerDocument.defaultView.MediaMetadata === "function") {
-                browserNavigator.mediaSession.metadata = new ownerDocument.defaultView.MediaMetadata(metadata);
+            if (typeof ownerDocument.defaultView!.MediaMetadata === "function") {
+                browserNavigator!.mediaSession.metadata = new ownerDocument.defaultView!.MediaMetadata(metadata);
             } else {
-                browserNavigator.mediaSession.metadata = metadata;
+                browserNavigator!.mediaSession.metadata = metadata;
             }
 
             return true;
@@ -1940,9 +2157,9 @@ export function createVideo(video, config = {}) {
     }
 
     function applyMediaSessionActionHandlers() {
-        if (!isMediaSessionSupported() || typeof browserNavigator.mediaSession.setActionHandler !== "function") return false;
+        if (!isMediaSessionSupported() || typeof browserNavigator!.mediaSession.setActionHandler !== "function") return false;
 
-        const handlers = {
+        const handlers: Partial<Record<MediaSessionAction, MediaSessionActionHandler>> = {
             play: function () {
                 void play();
             },
@@ -1952,10 +2169,10 @@ export function createVideo(video, config = {}) {
             stop: function () {
                 stop();
             },
-            seekbackward: function (details) {
+            seekbackward: function (details: MediaSessionActionDetails) {
                 seekBackward(details && details.seekOffset ? details.seekOffset : 10);
             },
-            seekforward: function (details) {
+            seekforward: function (details: MediaSessionActionDetails) {
                 seekForward(details && details.seekOffset ? details.seekOffset : 10);
             },
             seekto: function (details) {
@@ -1967,13 +2184,13 @@ export function createVideo(video, config = {}) {
                     return;
                 }
 
-                seek(details.seekTime);
+                seek(details.seekTime!);
             }
         };
 
-        Object.keys(handlers).forEach(function (action) {
+        (Object.keys(handlers) as MediaSessionAction[]).forEach(function (action) {
             try {
-                browserNavigator.mediaSession.setActionHandler(action, handlers[action]);
+                browserNavigator!.mediaSession.setActionHandler(action, handlers[action]!);
             } catch {
             }
         });
@@ -1981,22 +2198,22 @@ export function createVideo(video, config = {}) {
         return true;
     }
 
-    function syncMediaSessionState(state) {
+    function syncMediaSessionState(state: VideoState) {
         const mediaSessionState = getMediaSessionState();
         if (!mediaSessionState.enabled || !mediaSessionState.active) return false;
 
         // Sync the browser-level playback indicator.
         try {
-            browserNavigator.mediaSession.playbackState = state.playing ? "playing" : "paused";
+            browserNavigator!.mediaSession.playbackState = state.playing ? "playing" : "paused";
         } catch {
         }
 
-        if (typeof browserNavigator.mediaSession.setPositionState !== "function") return true;
+        if (typeof browserNavigator!.mediaSession.setPositionState !== "function") return true;
         if (!Number.isFinite(state.duration) || state.duration <= 0 || state.live) return true;
 
         // Sync lock-screen seek position when the media has a fixed duration.
         try {
-            browserNavigator.mediaSession.setPositionState({
+            browserNavigator!.mediaSession.setPositionState({
                 duration: state.duration,
                 playbackRate: state.playbackRate,
                 position: Math.min(state.currentTime, state.duration)
@@ -2010,16 +2227,16 @@ export function createVideo(video, config = {}) {
     function clearMediaSessionState() {
         if (isMediaSessionSupported()) {
             try {
-                browserNavigator.mediaSession.metadata = null;
-                browserNavigator.mediaSession.playbackState = "none";
+                browserNavigator!.mediaSession.metadata = null;
+                browserNavigator!.mediaSession.playbackState = "none";
             } catch {
             }
 
             // Clear browser media-session action handlers during teardown.
-            if (typeof browserNavigator.mediaSession.setActionHandler === "function") {
-                ["play", "pause", "stop", "seekbackward", "seekforward", "seekto"].forEach(function (action) {
+            if (typeof browserNavigator!.mediaSession.setActionHandler === "function") {
+                (["play", "pause", "stop", "seekbackward", "seekforward", "seekto"] as const).forEach(function (action) {
                     try {
-                        browserNavigator.mediaSession.setActionHandler(action, null);
+                        browserNavigator!.mediaSession.setActionHandler(action, null);
                     } catch {
                     }
                 });
@@ -2115,7 +2332,7 @@ export function createVideo(video, config = {}) {
         return true;
     }
 
-    function clearPersistedSettings() {
+    function clearPersistedSettings(): boolean {
         if (destroyed) return false;
         if (!isPersistSettingsEnabled()) return false;
 
@@ -2193,7 +2410,7 @@ export function createVideo(video, config = {}) {
         return true;
     }
 
-    function resumeWatchProgress() {
+    function resumeWatchProgress(): boolean {
         if (destroyed || !watchProgress || watchProgressRestored) return false;
 
         const progress = getSavedWatchProgress();
@@ -2231,7 +2448,7 @@ export function createVideo(video, config = {}) {
     // endregion
 
     // region ===== Tear Down ==========================================================================================
-    function destroy() {
+    function destroy(): void {
         if (destroyed) return;
 
         saveWatchProgress(true);
