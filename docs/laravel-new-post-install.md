@@ -74,7 +74,7 @@ Point the application's Composer scripts at the shared configurations:
       "rector process --config=../../tooling/rector/rector.php --dry-run"
     ],
     "types:check": [
-      "phpstan analyse --configuration=../../tooling/phpstan/phpstan.neon"
+      "phpstan analyse --configuration=../../tooling/phpstan/phpstan.neon.php"
     ]
   }
 }

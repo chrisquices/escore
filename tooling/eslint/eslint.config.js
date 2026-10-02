@@ -164,7 +164,8 @@ export default defineConfigWithVueTs(
             'resources/js/actions/**',
             'resources/js/components/ui/*',
             'resources/js/routes/**',
-            'resources/js/wayfinder/**'
+            'resources/js/wayfinder/**',
+            'nativephp/**',
         ]
     },
     {
