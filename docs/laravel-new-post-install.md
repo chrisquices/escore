@@ -57,7 +57,7 @@ Point the application's package scripts at the shared configurations:
 Install the tools in the application:
 
 ```sh
-composer require --dev deptrac/deptrac larastan/larastan laravel/pint rector/rector
+composer require --dev deptrac/deptrac larastan/larastan laravel/pint friendsofphp/php-cs-fixer rector/rector
 ```
 
 For applications using Pest, also install its PHPStan plugin so PHPStan can analyze Pest tests:
@@ -74,10 +74,12 @@ Point the application's Composer scripts at the shared configurations:
 {
   "scripts": {
     "lint": [
-      "pint --config=../strata/tooling/pint/pint.json"
+      "pint --config=../strata/tooling/pint/pint.json",
+      "php-cs-fixer fix --config=../strata/tooling/php-cs-fixer/php-cs-fixer.php"
     ],
     "lint:check": [
-      "pint --config=../strata/tooling/pint/pint.json --test"
+      "pint --config=../strata/tooling/pint/pint.json --test",
+      "php-cs-fixer fix --config=../strata/tooling/php-cs-fixer/php-cs-fixer.php --dry-run --diff"
     ],
     "architecture:check": [
       "deptrac analyse --config-file=../strata/tooling/deptrac/deptrac.php"

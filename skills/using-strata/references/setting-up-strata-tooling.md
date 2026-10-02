@@ -2,26 +2,33 @@
 
 For a Laravel project beside the `strata` folder.
 
-Apply each tool's setup only when its required packages are installed in the project. 
+Apply each tool's setup only when its required packages are installed in the project.
 
 If any are missing, warn the user and skip that tool, do not install packages or add its scripts/configuration.
 
 ---
 
-## Pint
-
-Formats PHP code using shared style rules.
+## PHP Formatting
 
 Requires these packages installed in the project:
 
 - `laravel/pint`
+- `friendsofphp/php-cs-fixer`
 
 Update the `scripts` section in the project's `composer.json`:
 
 ```json
-"lint": "pint --config=../strata/tooling/pint/pint.json",
-"lint:check": "pint --test --config=../strata/tooling/pint/pint.json"
+"lint": [
+    "pint --config=../strata/tooling/pint/pint.json",
+    "php-cs-fixer fix --config=../strata/tooling/php-cs-fixer/php-cs-fixer.php"
+],
+"lint:check": [
+    "pint --test --config=../strata/tooling/pint/pint.json",
+    "php-cs-fixer fix --config=../strata/tooling/php-cs-fixer/php-cs-fixer.php --dry-run --diff"
+]
 ```
+
+For an existing Pint setup missing PHP-CS-Fixer, retain the existing Pint commands and report the missing package. Once both packages are available, use the combined commands above.
 
 To check violations:
 
@@ -38,8 +45,6 @@ composer lint
 ---
 
 ## PHPStan
-
-Finds PHP type errors and potential bugs without running the application.
 
 Requires these packages installed in the project:
 
@@ -62,8 +67,6 @@ composer types:check
 ---
 
 ## Rector
-
-Automatically refactors PHP code using shared transformation rules.
 
 Requires these packages installed in the project:
 
@@ -92,8 +95,6 @@ composer refactor
 
 ## Deptrac
 
-Checks that dependencies between application layers follow the shared architecture rules.
-
 Requires these packages installed in the project:
 
 - `deptrac/deptrac`
@@ -113,8 +114,6 @@ composer architecture:check
 ---
 
 ## ESLint
-
-Checks JavaScript, TypeScript, and Vue code for issues and fixes supported violations.
 
 Requires these packages installed in the project:
 
@@ -149,9 +148,7 @@ npm run lint
 
 ## Quality
 
-Runs the configured checks or fixes through one Composer command for ease of use.
-
-`@script` calls a script in `composer.json`; `npm run script` calls one in `package.json`. Define the ESLint scripts above first, then include them below so the quality commands cover both PHP and JavaScript. Commands run in order and stop on failure.
+Define the ESLint scripts above before including them in the quality commands below.
 
 Update the `scripts` section in the project's `composer.json`:
 
@@ -170,7 +167,7 @@ Update the `scripts` section in the project's `composer.json`:
 ]
 ```
 
-Include only scripts configured for installed tools. PHPStan and Deptrac have no automatic fixes.
+Include only scripts configured for installed tools.
 
 To check violations:
 

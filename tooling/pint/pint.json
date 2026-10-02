@@ -4,6 +4,7 @@
     "method_argument_space": {
       "on_multiline": "ensure_single_line"
     },
-    "use_arrow_functions": false
+    "use_arrow_functions": false,
+    "no_blank_lines_after_class_opening": false
   }
 }
