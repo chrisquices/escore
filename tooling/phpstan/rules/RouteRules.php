@@ -57,6 +57,12 @@ class RouteRules implements Rule
     /** @var \WeakMap<Node, bool>|null */
     private ?\WeakMap $processed = null;
 
+    /** @var \WeakMap<Node, Group>|null */
+    private ?\WeakMap $routeGroups = null;
+
+    /** @var \WeakMap<Node, array{controller: string, reported: bool}>|null */
+    private ?\WeakMap $groupControllers = null;
+
     private ?string $file = null;
 
     public function getNodeType(): string
@@ -73,6 +79,8 @@ class RouteRules implements Rule
             $this->file = $scope->getFile();
             $this->parents = new \WeakMap;
             $this->processed = new \WeakMap;
+            $this->routeGroups = new \WeakMap;
+            $this->groupControllers = new \WeakMap;
 
             if ($this->isRouteFile($scope)) {
                 foreach ($node->getNodes() as $statement) {
@@ -114,8 +122,13 @@ class RouteRules implements Rule
             return $inertiaErrors;
         }
 
-        $groups = $this->enclosingGroups($node, $scope);
         $group = $method === 'group' ? $this->describeGroup($node, $scope) : null;
+
+        if ($group !== null) {
+            $this->routeGroups[$node] = $group;
+        }
+
+        $groups = $this->enclosingGroups($node);
 
         return [
             ...$inertiaErrors,
@@ -125,6 +138,7 @@ class RouteRules implements Rule
             ...($group !== null ? $this->noPrefixInMiddlewares($group) : []),
             ...($group !== null ? $this->enforceGroupComment($group) : []),
             ...($group === null ? $this->enforceControllerAction($node, $scope) : []),
+            ...($group === null ? $this->noMixedControllersInGroups($node, $scope, $groups) : []),
             ...($group === null ? $this->enforceRouteName($node, $scope) : []),
             ...$this->enforceTopLevelMiddlewareGroup($node, $group, $groups),
         ];
@@ -322,7 +336,7 @@ class RouteRules implements Rule
      *
      * @return list<Group>
      */
-    private function enclosingGroups(Node $node, Scope $scope): array
+    private function enclosingGroups(Node $node): array
     {
         $groups = [];
 
@@ -333,8 +347,7 @@ class RouteRules implements Rule
                 continue;
             }
 
-            if ((! $node instanceof Closure && ! $node instanceof ArrowFunction)
-                || ($outerScope = $scope->getParentScope()) === null) {
+            if (! $node instanceof Closure && ! $node instanceof ArrowFunction) {
                 break;
             }
 
@@ -349,20 +362,15 @@ class RouteRules implements Rule
 
             $call = $parent instanceof Arg ? ($this->parents[$parent] ?? null) : null;
 
-            if (! $call instanceof Expr || ! $this->isCall($call) || $call->isFirstClassCallable()
-                || $this->methodName($call, $outerScope) !== 'group'
-                || $this->receiverKind($call, $outerScope) === null) {
-                break;
-            }
+            // Use attributes resolved at the group declaration. Arrow scopes
+            // do not expose their immediate enclosing scope via getParentScope().
+            $group = $call !== null ? ($this->routeGroups[$call] ?? null) : null;
 
-            $group = $this->describeGroup($call, $outerScope);
-
-            if ($group['callback'] !== $callback) {
+            if ($group === null || $group['callback'] !== $callback) {
                 break;
             }
 
             $groups[] = $group;
-            $scope = $outerScope;
         }
 
         return $groups;
@@ -515,13 +523,21 @@ class RouteRules implements Rule
      */
     private function enforceControllerAction(Expr $call, Scope $scope): array
     {
-        $method = $this->methodName($call, $scope);
-
-        if ($method === null) {
+        if ($this->methodName($call, $scope) === null) {
             return [$this->error($call, __FUNCTION__, 'Cannot determine what this dynamic routing call registers. Use a statically determinable routing method so its group and endpoint requirements can be checked.')];
         }
 
-        $position = match ($method) {
+        if ($this->controllerAction($call, $scope) !== null) {
+            return [];
+        }
+
+        return [$this->error($call, __FUNCTION__, "Every HTTP endpoint action must be a literal [SomeController::class, 'methodName'] pair with an explicit class and nonempty method. Replace shorthand and shortcut registrations with explicit controller routes. Every route group must relate to a model, module, or domain and use methods on a controller for that model, module, or domain.")];
+    }
+
+    /** @param RouteCall $call */
+    private function controllerAction(Expr $call, Scope $scope): ?Name
+    {
+        $position = match ($this->methodName($call, $scope)) {
             'get', 'head', 'post', 'put', 'patch', 'delete', 'options', 'any' => 1,
             'match', 'addroute' => 2,
             'fallback' => 0,
@@ -541,11 +557,50 @@ class RouteRules implements Rule
                 && $controller->value->name instanceof Identifier
                 && strtolower($controller->value->name->toString()) === 'class'
                 && $methodName->value instanceof String_ && $methodName->value->value !== '') {
-                return [];
+                return $controller->value->class;
             }
         }
 
-        return [$this->error($call, __FUNCTION__, "Every HTTP endpoint action must be a literal [SomeController::class, 'methodName'] pair with an explicit class and nonempty method. Replace shorthand and shortcut registrations with explicit controller routes. Every route group must relate to a model, module, or domain and use methods on a controller for that model, module, or domain.")];
+        return null;
+    }
+
+    /**
+     * @param RouteCall $call
+     * @param list<Group> $groups
+     * @return list<RuleError>
+     */
+    private function noMixedControllersInGroups(Expr $call, Scope $scope, array $groups): array
+    {
+        if ($groups === [] || $this->groupControllers === null) {
+            return [];
+        }
+
+        $controller = $this->controllerAction($call, $scope);
+
+        // Invalid actions already belong to enforceControllerAction().
+        if ($controller === null) {
+            return [];
+        }
+
+        $class = $scope->resolveName($controller);
+
+        // Only the nearest group owns this route. Nested groups are independent.
+        $group = $groups[0]['call'];
+        $previous = $this->groupControllers[$group] ?? null;
+
+        if ($previous === null) {
+            $this->groupControllers[$group] = ['controller' => $class, 'reported' => false];
+
+            return [];
+        }
+
+        if ($previous['reported'] || strcasecmp($previous['controller'], $class) === 0) {
+            return [];
+        }
+
+        $this->groupControllers[$group] = ['controller' => $previous['controller'], 'reported' => true];
+
+        return [$this->error($group, __FUNCTION__, sprintf('This route group uses multiple controllers: %s, %s. Use one controller per group. Split these routes into separate groups with their own prefixes and names, each related to a model, module, or domain.', $previous['controller'], $class))];
     }
 
     /** @return list<RuleError> */

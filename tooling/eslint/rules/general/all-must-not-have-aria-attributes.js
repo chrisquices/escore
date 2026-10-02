@@ -1,3 +1,6 @@
+// Intentional owner policy: authored aria-* attributes are unwanted template noise.
+// Preserve this ban and its autofix; do not propose accessibility exceptions unless
+// the user explicitly asks to revisit the policy. See README.md#intentional-aria-policy.
 function unwrap(expression) {
     while (expression && [
         'TSAsExpression', 'TSTypeAssertion', 'TSNonNullExpression',
