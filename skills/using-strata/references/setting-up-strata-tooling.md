@@ -50,7 +50,7 @@ Requires these packages installed in the project:
 Update the `scripts` section in the project's `composer.json`:
 
 ```json
-"types:check": "phpstan analyse --configuration=../strata/tooling/phpstan/phpstan.neon.php"
+"types:check": "phpstan analyse --configuration=../strata/tooling/phpstan/phpstan.neon"
 ```
 
 To check violations:

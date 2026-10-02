@@ -45,6 +45,7 @@ use PhpParser\Node\Stmt\GroupUse;
 use PhpParser\Node\Stmt\Use_;
 use PhpParser\Node\UnionType;
 use PHPStan\Analyser\Scope;
+use PHPStan\Node\InClassNode;
 use PHPStan\Node\MethodReturnStatementsNode;
 use PHPStan\Reflection\ReflectionProvider;
 use PHPStan\Rules\Rule;
@@ -69,16 +70,14 @@ class ControllerRules implements Rule
     /** @return list<RuleError> */
     public function processNode(Node $node, Scope $scope): array
     {
+        if ($node instanceof InClassNode) {
+            return $this->noInvokableControllers($node, $scope);
+        }
+
         // Imports are visited outside the class scope. Limit this file-level check
         // to conventional controller namespaces or source directories.
         if ($node instanceof Use_ || $node instanceof GroupUse) {
-            $namespace = $scope->getNamespace() ?? '';
-            $file = str_replace('\\', '/', $scope->getFile());
-            $isControllerFile = $namespace === 'App\\Http\\Controllers'
-                || str_starts_with($namespace, 'App\\Http\\Controllers\\')
-                || str_contains($file, '/app/Http/Controllers/');
-
-            return $isControllerFile ? $this->noModelUsage($node, $scope) : [];
+            return $this->isControllerFile($scope) ? $this->noModelUsage($node, $scope) : [];
         }
 
         $controller = $scope->getClassReflection();
@@ -101,6 +100,37 @@ class ControllerRules implements Rule
             ...$this->noArithmeticOperations($node, $scope),
             ...$this->noLoopStatements($node),
             ...$this->noPositionalArguments($node),
+        ];
+    }
+
+    private function isControllerFile(Scope $scope): bool
+    {
+        $namespace = $scope->getNamespace() ?? '';
+        $file = str_replace('\\', '/', $scope->getFile());
+
+        return $namespace === 'App\\Http\\Controllers'
+            || str_starts_with($namespace, 'App\\Http\\Controllers\\')
+            || str_contains($file, '/app/Http/Controllers/');
+    }
+
+    /** @return list<RuleError> */
+    private function noInvokableControllers(InClassNode $node, Scope $scope): array
+    {
+        $controller = $node->getClassReflection();
+
+        if (! $node->getOriginalNode() instanceof Node\Stmt\Class_
+            || (! $this->isControllerFile($scope)
+                && ! $controller->is('App\\Http\\Controllers\\Controller')
+                && ! $controller->is(Controller::class))
+            || ! $controller->hasNativeMethod('__invoke')) {
+            return [];
+        }
+
+        return [
+            RuleErrorBuilder::message('Invokable controllers are forbidden. Do not define or inherit __invoke(). Move the action into an explicitly named method on a controller for its model, module, or domain.')
+                ->identifier('strata.controller.noInvokableControllers')
+                ->line($node->getStartLine())
+                ->build(),
         ];
     }
 

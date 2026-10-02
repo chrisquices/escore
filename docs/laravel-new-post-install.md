@@ -66,7 +66,7 @@ For applications using Pest, also install its PHPStan plugin so PHPStan can anal
 composer require --dev pestphp/pest-plugin-phpstan
 ```
 
-The shared PHPStan configuration loads this extension when it is installed.
+The shared PHPStan configuration directly includes this extension, so it must be installed when using that configuration.
 
 Point the application's Composer scripts at the shared configurations:
 
@@ -89,7 +89,7 @@ Point the application's Composer scripts at the shared configurations:
       "rector process --config=../strata/tooling/rector/rector.php --dry-run"
     ],
     "types:check": [
-      "phpstan analyse --configuration=../strata/tooling/phpstan/phpstan.neon.php"
+      "phpstan analyse --configuration=../strata/tooling/phpstan/phpstan.neon"
     ],
     "quality:check": [
       "@lint:check",

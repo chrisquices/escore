@@ -1,0 +1,34 @@
+includes:
+    - phpstan.neon.php
+    - %currentWorkingDirectory%/vendor/larastan/larastan/extension.neon
+    - %currentWorkingDirectory%/vendor/nesbot/carbon/extension.neon
+    - %currentWorkingDirectory%/vendor/pestphp/pest-plugin-phpstan/extension.neon
+
+rules:
+    - Strata\PHPStan\ControllerRules
+    - Strata\PHPStan\ServiceRules
+    - Strata\PHPStan\GeneralRules
+    - Strata\PHPStan\ModelRules
+    - Strata\PHPStan\RouteRules
+
+services:
+    -
+        class: Strata\PHPStan\EloquentRules
+        arguments:
+            parser: @defaultAnalysisParser
+        tags:
+            - phpstan.rules.rule
+
+parameters:
+    parallel:
+        # Run in the main process; even one worker requires a local socket.
+        maximumNumberOfProcesses: 0
+
+    paths:
+        - %currentWorkingDirectory%/app/
+        - %currentWorkingDirectory%/bootstrap/app.php
+        - %currentWorkingDirectory%/database/
+        - %currentWorkingDirectory%/routes/
+        # - %currentWorkingDirectory%/tests/ # Skip tests
+
+    level: 7
