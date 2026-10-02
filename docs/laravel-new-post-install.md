@@ -18,29 +18,7 @@ If Laravel Boost is not already installed, install it in the application:
 composer require --dev laravel/boost
 ```
 
-Publish `config/boost.php` before running the installer. Do not create the config file manually:
-
-```sh
-php artisan vendor:publish --tag=boost-config
-```
-
-Merge these entries into the published configuration, preserving existing settings. Keep all generated guidelines in this one application-local file; never point Boost's output at the Strata checkout:
-
-```php
-'agents' => [
-    'codex' => [
-        'guidelines_path' => base_path('docs/laravel-boost-guidelines.md'),
-    ],
-    'claude_code' => [
-        'guidelines_path' => base_path('docs/laravel-boost-guidelines.md'),
-    ],
-    'cursor' => [
-        'guidelines_path' => base_path('docs/laravel-boost-guidelines.md'),
-    ],
-],
-```
-
-Apply the same application-local guidelines path to any other agents selected during installation. Keep MCP configuration and skills application-local.
+Keep MCP configuration and skills application-local.
 
 Then run:
 
@@ -48,13 +26,7 @@ Then run:
 php artisan boost:install
 ```
 
-After installation, delete only the generated guidelines file from the application root:
-
-```sh
-rm -- docs/laravel-boost-guidelines.md
-```
-
-Preserve all other documentation, skills, and MCP configuration. If an earlier installation added a `<laravel-boost-guidelines>` block to an existing agent instruction file, remove only that block and preserve the other instructions.
+After installation, delete the application-local file containing only generated Boost guidelines. If Boost added a `<laravel-boost-guidelines>` block to a file containing other instructions, remove only that block. Preserve all other documentation, skills, MCP configuration, and agent instructions.
 
 Set `"guidelines": false` in the application's `boost.json`, preserving all other settings, so `boost:update` does not recreate the generated guidelines. For subsequent installations, use `php artisan boost:install --mcp --skills`.
 

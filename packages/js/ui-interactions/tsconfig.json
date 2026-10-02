@@ -5,5 +5,16 @@
     "checkJs": true,
     "lib": ["ES2022", "DOM", "DOM.Iterable"]
   },
+  "files": [
+    "src/audio.js",
+    "src/draggable.js",
+    "src/droppable.js",
+    "src/dropzone.js",
+    "src/image.js",
+    "src/selection.js",
+    "src/video.js",
+    "src/virtualize.js",
+    "src/internal/core.js"
+  ],
   "include": ["src/**/*.js", "src/**/*.d.ts"]
 }
