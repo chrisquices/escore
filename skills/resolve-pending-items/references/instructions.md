@@ -7,7 +7,7 @@ This document defines queue management, suggestions, approval, continuation, and
 1. Work through only the first unresolved item.
 2. Under `PENDING ITEMS`, list every inactive unresolved item as `- **TITLE**`. Omit the section when no inactive items remain.
 3. Exclude anything resolved, completed, patched, rejected as unnecessary, or otherwise closed.
-4. Present the active item as `🔴 **TITLE**`.
+4. Present the active item as `⚪ **TITLE**`.
 5. Explain what is wrong or missing, why it matters, and the concrete consequence. For an explicitly invoked decision or option, explain its criteria and meaningful tradeoffs without presenting it as defective.
 6. For code or files, provide a precise location when known; otherwise provide a short searchable excerpt.
 
@@ -16,26 +16,24 @@ This document defines queue management, suggestions, approval, continuation, and
 1. Present one concrete primary fix, choice, or course of action under `🟢 **SUGGESTION**`.
 2. Include a focused code example when the active item concerns code and the suggestion would otherwise be ambiguous.
 3. Add a separate `🟢 **ALTERNATIVE**` section only for a genuinely useful alternative. Repeat it for additional alternatives in descending order of usefulness.
-4. Add `🟡 **Risk:** <risk>` only when a genuine risk exists.
-5. Identify every exact file and required operation before requesting approval for a file-changing suggestion.
+4. Add `🔴 **Risk:** <risk>` only when a genuine risk exists.
+5. Identify every exact file and required operation in an `Operations` section before requesting approval for a file-changing suggestion, using the format below.
 6. Allow a suggestion to create, modify, delete, rename, or move files only when the solution requires those operations.
 7. Stop and wait for explicit approval, rejection, modification, or selection.
 
+## Operations
+
+1. For every file-changing suggestion or alternative, place an `**Operations**` section after its complete description and any code examples, before any risk note or approval question. Omit it when no files change.
+2. Use a numbered list with one entry per file operation. Start each entry with the operation and filename, followed by the exact project-relative path in parentheses, as shown in Required Format.
+3. After a blank line, add an indented description under that entry explaining exactly what will be done in the file. Keep it part of the same numbered item, not a separate bullet or numbered item.
+4. Use the applicable operation: Create, Modify, Delete, Rename, or Move. For Rename or Move, show both source and destination project-relative paths. Identify the project when operations span multiple projects.
+
 ## Approval and Continuation
 
-1. Treat an unqualified positive instruction such as `go`, `add it`, or `do it` as approval of the primary suggestion. Apply an alternative only when explicitly selected; clarify ambiguous selections.
+1. Treat an unqualified positive instruction such as `diy`, `go`, `add it`, or `do it` as approval of the primary suggestion. Apply an alternative only when explicitly selected; clarify ambiguous selections.
 2. Treat approval of a file-changing suggestion as authorization to delegate only the active suggestion to one fresh-context subagent.
-3. Do not request an additional delegation confirmation after the user approves an active file-changing suggestion.
-4. Never apply file changes in the coordinating agent.
 5. Give the editing subagent every exact file and operation identified in the approved suggestion.
-6. Allow the editing subagent to modify only the files identified in the approved suggestion.
-7. Allow the editing subagent to perform only the operations identified in the approved suggestion.
 8. Do not allow the editing subagent to modify another file because the approved solution depends on it.
-9. Stop and request separate approval when the solution requires an additional file or operation.
-10. Do not run tests, linters, builds, type checks, application commands, formatters, generators, or other verification or follow-up commands.
-11. Allow `generate-codex-skills` as the sole exception to the prohibition against generators when the approved active suggestion explicitly requires it as the primary operation.
-12. Do not treat the `generate-codex-skills` exception as authorization for tests, formatters, verification, or unrelated follow-up commands.
-13. Inspect changed code only by reading it.
 14. End the file-change authorization when the active item is resolved.
 15. Require separate approval for every subsequent item.
 16. Apply only the approved fix or choice. For a decision, perform follow-up implementation only when requested or already part of the active task.
@@ -46,7 +44,7 @@ This document defines queue management, suggestions, approval, continuation, and
 
 ## Required Format
 
-Use this structure, omitting `PENDING ITEMS`, `ALTERNATIVE`, or `Risk` when its content does not exist:
+Use this structure, omitting `PENDING ITEMS`, `ALTERNATIVE`, `Operations`, or `Risk` when its content does not exist:
 
 ```md
 ---
@@ -57,7 +55,7 @@ Use this structure, omitting `PENDING ITEMS`, `ALTERNATIVE`, or `Risk` when its 
 
 ---
 
-🔴 **FIRST UNRESOLVED ITEM**
+⚪ **FIRST UNRESOLVED ITEM**
 
 Explain the item or decision, why it matters, its concrete consequences or tradeoffs, and where it is located when applicable.
 
@@ -67,9 +65,17 @@ Explain the item or decision, why it matters, its concrete consequences or trade
 
 Explain the concrete fix, choice, or course of action. Include useful code examples when applicable.
 
-For a file-changing suggestion, identify every exact file and required operation.
+**Operations**
 
-🟡 **Risk:** State a genuine risk when one exists.
+1. **Create NodeRenameRequest.php** (`app/Http/Requests/NodeRenameRequest.php`)
+
+   Validate the name.
+
+2. **Modify NodeController.php** (`app/Http/Controllers/NodeController.php`)
+
+   Add `rename()` with resource/JSON responses.
+
+🔴 **Risk:** State a genuine risk when one exists.
 
 ---
 
@@ -77,6 +83,11 @@ For a file-changing suggestion, identify every exact file and required operation
 
 Explain the alternative fix, choice, or course of action. Include useful code examples when applicable.
 
-For a file-changing alternative, identify every exact file and required operation.
+**Operations**
 
-🟡 **Risk:** State a genuine risk when one exists.
+1. **Modify filename.ext** (`project/relative/path/filename.ext`)
+
+   Describe exactly what this alternative changes in the file.
+
+🔴 **Risk:** State a genuine risk when one exists.
+```

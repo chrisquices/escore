@@ -1,6 +1,13 @@
 # Setting Up Strata
 
-Install all dependencies and complete every setup section in this guide.
+Complete the setup sections that apply to the project’s stack and requested Strata features. Projects may include Laravel applications, standalone frontends, and browser extensions.
+
+- Use the package setup when consuming `strata-packages`. Vue components and theme setup apply when using Strata UI; interaction engines have their own [integration requirements](../../../packages/js/ui-interactions/README.md).
+- Apply the Vite example only when the project uses Vite. Otherwise configure the existing bundler to compile the imported Strata source.
+- Use JavaScript tooling for compatible frontend projects. The current shared ESLint configuration uses Vue/TypeScript tooling, even when the consuming project has no Laravel backend.
+- Apply the Composer tooling below only to Laravel projects. Other PHP projects need configurations appropriate to their own structure and dependencies.
+
+For browser extensions, preserve the existing manifest, entry points, and extension build configuration. Check the chosen exports against their target runtime; framework independence does not imply support in every extension context. Verify the resulting extension build in its intended browser context.
 
 Merge configuration examples into existing files, preserving other entries.
 
@@ -21,6 +28,8 @@ Examples use npm. If the application already uses another package manager, trans
 ## Strata Packages (`strata-packages`, `/strata/packages`)
 
 ### 1. Install Dependencies
+
+For Strata’s Vue UI:
 
 ```sh
 npm add @lucide/vue
@@ -65,7 +74,7 @@ server: {
 },
 ```
 
-This shares Vue and Inertia instances with the app and allows access to Strata's source.
+This shares Vue and Inertia instances with the app and allows access to Strata's source. Keep dedupe entries for the libraries the project uses; a Vue project without Inertia needs only `vue` here.
 
 --- 
 
@@ -93,7 +102,9 @@ Use package exports in components, for example:
 import { Button } from 'strata-packages/ui/button';
 ```
 
-Exports and dependencies are managed in `strata/packages/js/package.json`. 
+Exports and dependencies are managed in `strata/packages/js/package.json`.
+
+The package currently declares Vue, Tailwind, Inertia, and Vue Sonner as required peers, including for consumers using only UI or interaction exports. Account for these installation requirements; importing a non-Inertia export does not make the package’s Inertia peer optional. Use `strata-packages/inertia-plus` only in an Inertia application. 
 
 No TypeScript aliases are needed with bundler module resolution.
 
@@ -103,9 +114,15 @@ No TypeScript aliases are needed with bundler module resolution.
 
 ### 1. Install Dependencies
 
+For the shared Vue/TypeScript ESLint configuration:
+
 ```sh
 npm install --save-dev eslint @stylistic/eslint-plugin @vue/eslint-config-typescript eslint-import-resolver-typescript eslint-plugin-import-x eslint-plugin-vue typescript typescript-eslint vue-tsc
+```
 
+For Laravel projects only:
+
+```sh
 composer require --dev deptrac/deptrac phpstan/phpstan larastan/larastan laravel/pint friendsofphp/php-cs-fixer rector/rector pestphp/pest-plugin-phpstan nesbot/carbon
 ```
 
@@ -120,7 +137,11 @@ composer require --dev deptrac/deptrac phpstan/phpstan larastan/larastan laravel
 "types:check": "vue-tsc --noEmit"
 ```
 
-### 3. Add to `composer.json` under the `scripts` section:
+Use `vue-tsc` for Vue projects; otherwise preserve the project’s existing type-check command, such as `tsc --noEmit` for TypeScript. Adapt lint coverage and generated-output ignores to the project’s source layout. The shared ESLint config includes Laravel-oriented ignores; these are not a required directory structure for other projects.
+
+For projects without Composer, use the package-manager scripts directly. If aggregate quality scripts are needed, define them in `package.json` using the applicable existing checks and fixes.
+
+### 3. Laravel only: add to `composer.json` under the `scripts` section:
 
 ```json
 "architecture:check": "deptrac analyse --config-file=../strata/tooling/deptrac/deptrac.php",
@@ -158,13 +179,13 @@ composer require --dev deptrac/deptrac phpstan/phpstan larastan/larastan laravel
 
 Each individual command runs its specific tool. 
 
-`composer quality:check` runs all checks.
+For Laravel projects configured above, `composer quality:check` runs all checks.
 
-`composer quality:fix` runs all supported automatic fixes.
+For those projects, `composer quality:fix` runs all supported automatic fixes.
 
 Run an individual command for a specific tool, or a quality command for the complete set.
 
-To check violations:
+Run only commands configured for the project. To check violations:
 
 ```sh
 npm run lint:check

@@ -22,11 +22,17 @@ use PHPStan\Reflection\InitializerExprTypeResolver;
 use PHPStan\Rules\Rule;
 use PHPStan\Rules\RuleError;
 use PHPStan\Rules\RuleErrorBuilder;
+use PHPStan\Type\BooleanType;
 use PHPStan\Type\Constant\ConstantArrayType;
 use PHPStan\Type\Constant\ConstantStringType;
+use PHPStan\Type\FloatType;
+use PHPStan\Type\IntegerType;
 use PHPStan\Type\NeverType;
+use PHPStan\Type\NullType;
 use PHPStan\Type\ObjectType;
+use PHPStan\Type\StringType;
 use PHPStan\Type\Type;
+use PHPStan\Type\TypeCombinator;
 use TypeError;
 
 /** @implements Rule<InClassNode> */
@@ -68,6 +74,10 @@ class ModelRules implements Rule
             ...$this->requirePropertyHiddenToBeArray($node, $scope),
             ...$this->requirePropertyHiddenToContainOnlyStrings($node, $scope),
             ...$this->requirePropertyHiddenToHaveUniqueValues($node, $scope),
+            ...$this->requirePropertyAttributesToBeProtected($node),
+            ...$this->requirePropertyAttributesToBeArray($node, $scope),
+            ...$this->requirePropertyAttributesToHaveStringKeys($node, $scope),
+            ...$this->requirePropertyAttributesToContainRawValues($node, $scope),
             ...$this->requirePropertyCasts($node),
             ...$this->requirePropertyCastsToBeProtected($node),
             ...$this->requirePropertyCastsToBeArray($node, $scope),
@@ -79,7 +89,7 @@ class ModelRules implements Rule
     private function requirePropertiesToBeAllowed(InClassNode $node): array
     {
         $class = $node->getOriginalNode();
-        $allowed = ['table', 'guarded', 'fillable', 'hidden', 'casts', 'primaryKey'];
+        $allowed = ['table', 'guarded', 'fillable', 'hidden', 'attributes', 'casts', 'primaryKey'];
         $declarations = [];
 
         foreach ($class->getProperties() as $property) {
@@ -194,7 +204,7 @@ class ModelRules implements Rule
     /** @return list<RuleError> */
     private function requireMemberOrder(InClassNode $node): array
     {
-        $propertyRanks = ['table' => 1, 'primaryKey' => 2, 'guarded' => 3, 'fillable' => 4, 'hidden' => 5, 'casts' => 6];
+        $propertyRanks = ['table' => 1, 'primaryKey' => 2, 'guarded' => 3, 'fillable' => 4, 'hidden' => 5, 'attributes' => 6, 'casts' => 7];
         $declarations = [];
 
         foreach ($node->getOriginalNode()->stmts as $statement) {
@@ -217,7 +227,7 @@ class ModelRules implements Rule
                     $declarations[] = ['name' => 'property $'.$name, 'rank' => $propertyRanks[$name], 'line' => $item->getStartLine()];
                 }
             } elseif ($statement instanceof Node\Stmt\ClassMethod) {
-                $declarations[] = ['name' => 'method '.$statement->name->toString().'()', 'rank' => 7, 'line' => $statement->getStartLine()];
+                $declarations[] = ['name' => 'method '.$statement->name->toString().'()', 'rank' => 8, 'line' => $statement->getStartLine()];
             }
         }
 
@@ -226,7 +236,7 @@ class ModelRules implements Rule
 
         foreach ($declarations as $declaration) {
             if ($declaration['rank'] < $highestRank) {
-                $errors[] = RuleErrorBuilder::message('Model '.$declaration['name'].' is out of order. Arrange declared members in this order: direct trait uses, $table, optional $primaryKey, $guarded, $fillable, $hidden, $casts, then all methods in any order. Constants are ignored. Move declarations without removing behavior.')
+                $errors[] = RuleErrorBuilder::message('Model '.$declaration['name'].' is out of order. Arrange declared members in this order: direct trait uses, $table, optional $primaryKey, $guarded, $fillable, $hidden, optional $attributes, $casts, then all methods in any order. Constants are ignored. Move declarations without removing behavior.')
                     ->identifier('strata.model.requireMemberOrder')
                     ->line($declaration['line'])
                     ->build();
@@ -971,6 +981,175 @@ class ModelRules implements Rule
             RuleErrorBuilder::message('Model must explicitly declare a $casts property.')
                 ->identifier('strata.model.requirePropertyCasts')
                 ->line($node->getStartLine())
+                ->build(),
+        ];
+    }
+
+    /** @return list<RuleError> */
+    private function requirePropertyAttributesToBeProtected(InClassNode $node): array
+    {
+        $class = $node->getOriginalNode();
+        $property = $class->getProperty('attributes');
+
+        if ($property === null) {
+            foreach ($class->getMethod('__construct')?->params ?? [] as $parameter) {
+                if ($parameter->isPromoted() && $parameter->var instanceof Expr\Variable && $parameter->var->name === 'attributes') {
+                    $property = $parameter;
+
+                    break;
+                }
+            }
+        }
+
+        if ($property === null || $property->isProtected()) {
+            return [];
+        }
+
+        return [
+            RuleErrorBuilder::message('$attributes must be protected.')
+                ->identifier('strata.model.requirePropertyAttributesToBeProtected')
+                ->line($property->getStartLine())
+                ->build(),
+        ];
+    }
+
+    /** @return list<RuleError> */
+    private function requirePropertyAttributesToBeArray(InClassNode $node, Scope $scope): array
+    {
+        $class = $node->getOriginalNode();
+        $property = $class->getProperty('attributes');
+        $declaration = null;
+
+        if ($property !== null) {
+            foreach ($property->props as $item) {
+                if ($item->name->toString() === 'attributes') {
+                    $declaration = $item;
+
+                    break;
+                }
+            }
+        } else {
+            foreach ($class->getMethod('__construct')?->params ?? [] as $parameter) {
+                if ($parameter->isPromoted() && $parameter->var instanceof Expr\Variable && $parameter->var->name === 'attributes') {
+                    $declaration = $parameter;
+
+                    break;
+                }
+            }
+        }
+
+        if ($declaration === null) {
+            return [];
+        }
+
+        $default = $declaration->default;
+
+        if ($default !== null && $scope->getType($default)->isArray()->yes()) {
+            return [];
+        }
+
+        return [
+            RuleErrorBuilder::message('$attributes must have an array default.')
+                ->identifier('strata.model.requirePropertyAttributesToBeArray')
+                ->line(($default ?? $declaration)->getStartLine())
+                ->build(),
+        ];
+    }
+
+    /** @return list<RuleError> */
+    private function requirePropertyAttributesToHaveStringKeys(InClassNode $node, Scope $scope): array
+    {
+        $class = $node->getOriginalNode();
+        $property = $class->getProperty('attributes');
+        $declaration = null;
+
+        if ($property !== null) {
+            foreach ($property->props as $item) {
+                if ($item->name->toString() === 'attributes') {
+                    $declaration = $item;
+
+                    break;
+                }
+            }
+        } else {
+            foreach ($class->getMethod('__construct')?->params ?? [] as $parameter) {
+                if ($parameter->isPromoted() && $parameter->var instanceof Expr\Variable && $parameter->var->name === 'attributes') {
+                    $declaration = $parameter;
+
+                    break;
+                }
+            }
+        }
+
+        if ($declaration === null || $declaration->default === null) {
+            return [];
+        }
+
+        $default = $declaration->default;
+        $attributesType = $scope->getType($default);
+
+        if (! $attributesType->isArray()->yes() || $attributesType->isIterableAtLeastOnce()->no()) {
+            return [];
+        }
+
+        if ($attributesType->getIterableKeyType()->isString()->yes()) {
+            return [];
+        }
+
+        return [
+            RuleErrorBuilder::message('$attributes must use string attribute names as array keys.')
+                ->identifier('strata.model.requirePropertyAttributesToHaveStringKeys')
+                ->line($default->getStartLine())
+                ->build(),
+        ];
+    }
+
+    /** @return list<RuleError> */
+    private function requirePropertyAttributesToContainRawValues(InClassNode $node, Scope $scope): array
+    {
+        $class = $node->getOriginalNode();
+        $property = $class->getProperty('attributes');
+        $declaration = null;
+
+        if ($property !== null) {
+            foreach ($property->props as $item) {
+                if ($item->name->toString() === 'attributes') {
+                    $declaration = $item;
+
+                    break;
+                }
+            }
+        } else {
+            foreach ($class->getMethod('__construct')?->params ?? [] as $parameter) {
+                if ($parameter->isPromoted() && $parameter->var instanceof Expr\Variable && $parameter->var->name === 'attributes') {
+                    $declaration = $parameter;
+
+                    break;
+                }
+            }
+        }
+
+        if ($declaration === null || $declaration->default === null) {
+            return [];
+        }
+
+        $default = $declaration->default;
+        $attributesType = $scope->getType($default);
+
+        if (! $attributesType->isArray()->yes() || $attributesType->isIterableAtLeastOnce()->no()) {
+            return [];
+        }
+
+        $rawValueType = TypeCombinator::union(new StringType, new IntegerType, new FloatType, new BooleanType, new NullType);
+
+        if ($rawValueType->isSuperTypeOf($attributesType->getIterableValueType())->yes()) {
+            return [];
+        }
+
+        return [
+            RuleErrorBuilder::message('$attributes must contain raw database values: strings, integers, floats, booleans, or null. Encode arrays and cast objects before using them as defaults.')
+                ->identifier('strata.model.requirePropertyAttributesToContainRawValues')
+                ->line($default->getStartLine())
                 ->build(),
         ];
     }

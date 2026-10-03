@@ -1,5 +1,5 @@
 import SignalsmithStretchModule from 'strata-packages/ui-interactions/internal/vendor/signalsmith-stretch';
-import {callConsumer, createErrorReporter} from 'strata-packages/ui-interactions/internal/core';
+import {createErrorReporter, createNotifier} from 'strata-packages/ui-interactions/internal/core';
 
 interface StretchNode extends AudioWorkletNode {
     schedule(options: {semitones: number; active?: boolean}): Promise<unknown>;
@@ -355,14 +355,16 @@ export function createAudio(audio: HTMLAudioElement, config: AudioConfig = {}): 
     // endregion
 
     // region ===== Event Listeners ====================================================================================
-    const listeners = new Set<(state: AudioState) => void>(); // change subscribers — each gets the full state on every playback change
     const cleanups: (() => void)[] = []; // teardown functions, collected so everything can be undone at once
 
     function registerEventListener<K extends keyof HTMLElementEventMap>(target: EventTarget, type: K, handler: (event: HTMLElementEventMap[K]) => void) {
-        target.addEventListener(type, handler as EventListener);
+        const guardedHandler = function (event: Event) {
+            if (!destroyed) handler(event as HTMLElementEventMap[K]);
+        };
+        target.addEventListener(type, guardedHandler);
 
         cleanups.push(function () {
-            target.removeEventListener(type, handler as EventListener); // detach the exact listener that was registered
+            target.removeEventListener(type, guardedHandler); // detach the exact listener that was registered
         });
     }
 
@@ -376,6 +378,7 @@ export function createAudio(audio: HTMLAudioElement, config: AudioConfig = {}): 
         // AB Loop Controls / Watch Progress
         registerEventListener(audio, "timeupdate", function () {
             syncAbLoop();
+            if (destroyed) return;
             saveWatchProgress(false);
             notify();
         });
@@ -400,13 +403,13 @@ export function createAudio(audio: HTMLAudioElement, config: AudioConfig = {}): 
         });
 
         registerEventListener(audio, "pause", function () {
-            buffering = false;
+            setBuffering(false);
             saveWatchProgress(true);
             notify();
         });
 
         registerEventListener(audio, "ended", function () {
-            buffering = false;
+            setBuffering(false);
             saveWatchProgress(true);
             notify();
         });
@@ -417,22 +420,22 @@ export function createAudio(audio: HTMLAudioElement, config: AudioConfig = {}): 
 
         // State
         registerEventListener(audio, "waiting", function () {
-            buffering = true;
+            setBuffering(true);
             notify();
         });
 
         registerEventListener(audio, "stalled", function () {
-            buffering = true;
+            setBuffering(true);
             notify();
         });
 
         registerEventListener(audio, "playing", function () {
-            buffering = false;
+            setBuffering(false);
             notify();
         });
 
         registerEventListener(audio, "canplay", function () {
-            buffering = false;
+            setBuffering(false);
             notify();
         });
 
@@ -504,37 +507,83 @@ export function createAudio(audio: HTMLAudioElement, config: AudioConfig = {}): 
     // endregion
 
     // region ===== State ==============================================================================================
-    let lastStateSignature = ""; // last emitted state fingerprint, used to avoid duplicate media-event echoes
+    let stateChanged = false; // engine-owned primitives mark changes at their mutation sites
+    let hasNotified = false;
+    let observedMedia: ReturnType<typeof getMediaObservation>;
+    let notifiedPitchSemitones = 0;
+    let notifiedPitchActive = false;
+    const subscriptions = new WeakMap<(state: AudioState) => void, (state: AudioState) => void>();
+    const notifier = createNotifier(function () {
+        const state = getState();
+        syncMediaSessionState(state);
+        return state;
+    });
 
-    // Subscribe to playback changes. The listener gets the state on every change (not immediately — read getState() for the first paint). Returns an unsubscribe function.
+    // Subscription is silent. Stable wrappers preserve Set identity while each consumer owns its nested snapshots.
     function subscribe(listener: (state: AudioState) => void): () => void {
-        if (destroyed) return function unsubscribe() {}; // dead engine: nothing will fire, and nothing gets retained
+        if (typeof listener !== "function") {
+            throw new TypeError("createNotifier: 'listener' must be a function.");
+        }
+        if (destroyed) return function unsubscribe() {};
 
-        listeners.add(listener);
+        let wrapped = subscriptions.get(listener);
+        if (!wrapped) {
+            wrapped = function (state) {
+                listener({
+                    ...state,
+                    sources: state.sources.map(function (source) { return {...source}; }),
+                    bufferedRanges: state.bufferedRanges.map(function (range) { return {...range}; }),
+                    pitchShift: {...state.pitchShift},
+                    watchProgress: {...state.watchProgress}
+                });
+            };
+            subscriptions.set(listener, wrapped);
+        }
 
-        return function unsubscribe() {
-            listeners.delete(listener);
+        return notifier.subscribe(wrapped);
+    }
+
+    // Native media properties and storage can change outside this engine. Observe their published
+    // primitives without formatting or serializing the full state; public reads always remain live.
+    function getMediaObservation() {
+        return {
+            source: getSource(), sources: getSources(), paused: isPaused(), ended: hasEnded(),
+            seeking: isSeeking(), live: isLive(), currentTime: getCurrentTime(), duration: getDuration(),
+            bufferedRanges: getBufferedRanges(getDuration()), volume: getVolume(), muted: isMuted(),
+            playbackRate: getPlaybackRate(), loop: isLoopEnabled(),
+            pitchSupported: isPitchShiftSupported(), savedTime: getSavedWatchTime()
         };
     }
 
-    // Emit the current state to every subscriber. Called after any meaningful playback change.
     function notify() {
         if (destroyed) return;
-        const state = getState();
-        const stateSignature = getStateSignature(state);
-        if (stateSignature === lastStateSignature) return;
-
-        lastStateSignature = stateSignature;
-        syncMediaSessionState(state);
-
-        for (const listener of listeners) {
-            callConsumer(listener, state);
+        const next = getMediaObservation();
+        const previous = observedMedia;
+        const pitchActive = isPitchShiftActive();
+        const changed = stateChanged
+            || pitchSemitones !== notifiedPitchSemitones || pitchActive !== notifiedPitchActive
+            || next.source !== previous.source || next.paused !== previous.paused || next.ended !== previous.ended
+            || next.seeking !== previous.seeking || next.live !== previous.live || next.currentTime !== previous.currentTime
+            || next.duration !== previous.duration || next.volume !== previous.volume || next.muted !== previous.muted
+            || next.playbackRate !== previous.playbackRate || next.loop !== previous.loop
+            || next.pitchSupported !== previous.pitchSupported || next.savedTime !== previous.savedTime
+            || next.sources.length !== previous.sources.length
+            || next.sources.some(function (source, index) {
+                return source.src !== previous.sources[index].src || source.type !== previous.sources[index].type;
+            })
+            || next.bufferedRanges.length !== previous.bufferedRanges.length
+            || next.bufferedRanges.some(function (range, index) {
+                return range.startPercent !== previous.bufferedRanges[index].startPercent
+                    || range.endPercent !== previous.bufferedRanges[index].endPercent;
+            });
+        observedMedia = next;
+        notifiedPitchSemitones = pitchSemitones;
+        notifiedPitchActive = pitchActive;
+        stateChanged = false;
+        if (changed) {
+            hasNotified = true;
+            notifier.notify();
         }
-    }
-
-    // getState() returns a new object every call, so notify() can't detect no-op changes by reference alone — this gives it a comparable string instead.
-    function getStateSignature(state: AudioState) {
-        return JSON.stringify(state);
     }
 
     // A snapshot of the media element's current playback state — consumers render from this.
@@ -770,9 +819,7 @@ export function createAudio(audio: HTMLAudioElement, config: AudioConfig = {}): 
     }
 
     function getWatchProgressState(currentTime: number, duration: number) {
-        const progress = getSavedWatchProgress();
-        const savedTime = progress ? Number(progress.currentTime) : 0;
-        const safeSavedTime = Number.isFinite(savedTime) && savedTime >= 0 ? savedTime : 0;
+        const safeSavedTime = getSavedWatchTime();
 
         return {
             enabled: watchProgress,
@@ -790,6 +837,7 @@ export function createAudio(audio: HTMLAudioElement, config: AudioConfig = {}): 
         if (destroyed) return false;
 
         // Clear transient media state
+        stateChanged ||= buffering || abLoopStart !== 0 || abLoopEnd !== 0 || watchProgressRestored;
         buffering = false;
         abLoopStart = 0;
         abLoopEnd = 0;
@@ -804,6 +852,7 @@ export function createAudio(audio: HTMLAudioElement, config: AudioConfig = {}): 
 
     function applySources(sources: AudioSource[]) {
         audio.pause();
+        if (destroyed) return false;
         audio.removeAttribute("src");
 
         audio.querySelectorAll("source").forEach(function (source) {
@@ -829,9 +878,11 @@ export function createAudio(audio: HTMLAudioElement, config: AudioConfig = {}): 
 
         validateSources(nextSources);
         const playbackRate = getPlaybackRate();
+        const rateRevision = playbackRateRevision;
         const loaded = applySources(nextSources);
+        if (destroyed) return false;
 
-        if (getPlaybackRate() !== playbackRate) {
+        if (rateRevision === playbackRateRevision && getPlaybackRate() !== playbackRate) {
             audio.playbackRate = playbackRate;
         }
 
@@ -846,6 +897,12 @@ export function createAudio(audio: HTMLAudioElement, config: AudioConfig = {}): 
 
     // region ===== Playback Controls ==================================================================================
     let buffering = false;
+
+    function setBuffering(enabled: boolean) {
+        if (buffering === enabled) return;
+        buffering = enabled;
+        stateChanged = true;
+    }
 
     function setCurrentTime(time: number) {
         const nextTime = clampSeekTime(time);
@@ -863,6 +920,7 @@ export function createAudio(audio: HTMLAudioElement, config: AudioConfig = {}): 
         try {
             await audio.play();
         } catch (error) {
+            if (destroyed) return false;
             if (error && (error as {name?: unknown}).name === "AbortError") return false; // superseded by a competing load — not a failure worth reporting
 
             reportMediaError(error);
@@ -1044,6 +1102,7 @@ export function createAudio(audio: HTMLAudioElement, config: AudioConfig = {}): 
     // region ===== Playback Rate Controls =============================================================================
     const minimumPlaybackRate = 0.5;
     const maximumPlaybackRate = 2;
+    let playbackRateRevision = 0;
 
     function setPlaybackRate(value: number): boolean {
         if (destroyed) return false;
@@ -1054,6 +1113,7 @@ export function createAudio(audio: HTMLAudioElement, config: AudioConfig = {}): 
             throw new TypeError(`createAudio: playback rate must be a number from ${minimumPlaybackRate} to ${maximumPlaybackRate}.`);
         }
 
+        playbackRateRevision++; // a reentrant explicit choice owns the rate, even if native load already reset it there
         if (getPlaybackRate() === rate) return false;
 
         audio.playbackRate = rate;
@@ -1133,6 +1193,7 @@ export function createAudio(audio: HTMLAudioElement, config: AudioConfig = {}): 
         if (getAbLoopStart() === time) return true;
 
         abLoopStart = time;
+        stateChanged = true;
 
         if (getAbLoopEnd() && getAbLoopEnd() <= getAbLoopStart()) {
             abLoopEnd = 0;
@@ -1150,6 +1211,7 @@ export function createAudio(audio: HTMLAudioElement, config: AudioConfig = {}): 
         if (getAbLoopEnd() === time) return true;
 
         abLoopEnd = time;
+        stateChanged = true;
         notify();
         return true;
     }
@@ -1160,6 +1222,7 @@ export function createAudio(audio: HTMLAudioElement, config: AudioConfig = {}): 
 
         abLoopStart = 0;
         abLoopEnd = 0;
+        stateChanged = true;
         notify();
         return true;
     }
@@ -1267,6 +1330,7 @@ export function createAudio(audio: HTMLAudioElement, config: AudioConfig = {}): 
     let autoplayEnabled = autoplay;
     let autoplayAttempted = false;
     let autoplayBlocked = false;
+    let autoplayAttempt = 0;
 
     async function setAutoplay(enabled: boolean): Promise<boolean> {
         if (destroyed) return false;
@@ -1276,14 +1340,17 @@ export function createAudio(audio: HTMLAudioElement, config: AudioConfig = {}): 
         }
 
         if (!enabled) {
+            autoplayAttempt++; // an older play rejection cannot re-block disabled autoplay
             if (!isAutoplayEnabled() && !isAutoplayBlocked()) return true;
 
             autoplayEnabled = false;
             autoplayBlocked = false;
+            stateChanged = true;
             notify();
             return true;
         }
 
+        if (!autoplayEnabled) stateChanged = true;
         autoplayEnabled = true;
         return startAutoplay();
     }
@@ -1291,21 +1358,26 @@ export function createAudio(audio: HTMLAudioElement, config: AudioConfig = {}): 
     async function startAutoplay() {
         if (destroyed) return false;
 
+        const attempt = ++autoplayAttempt;
+        stateChanged ||= !autoplayAttempted || autoplayBlocked;
         autoplayAttempted = true;
         autoplayBlocked = false;
         notify();
+        if (destroyed || attempt !== autoplayAttempt) return false;
 
         try {
             await audio.play();
         } catch (error) {
+            if (destroyed || attempt !== autoplayAttempt) return false;
             if (error && (error as {name?: unknown}).name === "AbortError") return false; // superseded by a competing load — not an autoplay policy block
 
+            if (!autoplayBlocked) stateChanged = true;
             autoplayBlocked = true;
             notify();
             return false;
         }
 
-        if (destroyed) return false;
+        if (destroyed || attempt !== autoplayAttempt) return false;
 
         notify();
         return true;
@@ -1326,6 +1398,7 @@ export function createAudio(audio: HTMLAudioElement, config: AudioConfig = {}): 
         if (isKeyboardShortcutsEnabled() === enabled) return true;
 
         keyboardShortcutsEnabled = enabled;
+        stateChanged = true;
         notify();
         return true;
     }
@@ -1505,6 +1578,7 @@ export function createAudio(audio: HTMLAudioElement, config: AudioConfig = {}): 
                 seekForward(details && details.seekOffset ? details.seekOffset : 10);
             },
             seekto: function (details) {
+                if (destroyed) return;
                 if (!details || !Number.isFinite(Number(details.seekTime))) return;
 
                 if (details.fastSeek && typeof audio.fastSeek === "function") {
@@ -1707,6 +1781,12 @@ export function createAudio(audio: HTMLAudioElement, config: AudioConfig = {}): 
         }
     }
 
+    function getSavedWatchTime() {
+        const progress = getSavedWatchProgress();
+        const time = progress ? Number(progress.currentTime) : 0;
+        return Number.isFinite(time) && time >= 0 ? time : 0;
+    }
+
     function saveWatchProgress(force = true) {
         if (!watchProgress) return false;
 
@@ -1743,34 +1823,35 @@ export function createAudio(audio: HTMLAudioElement, config: AudioConfig = {}): 
     function resumeWatchProgress(): boolean {
         if (destroyed || !watchProgress || watchProgressRestored) return false;
 
+        watchProgressRestored = true;
+        stateChanged = true;
         const progress = getSavedWatchProgress();
         if (!progress || progress.ended) {
-            watchProgressRestored = true;
+            notify();
             return false;
         }
 
         const source = getSource();
         if (progress.source && source && progress.source !== source) {
-            watchProgressRestored = true;
+            notify();
             return false;
         }
 
         const duration = getDuration();
         const time = Number(progress.currentTime);
         if (!Number.isFinite(time) || time <= 0) {
-            watchProgressRestored = true;
+            notify();
             return false;
         }
 
         if (duration && time >= duration - 2) {
-            watchProgressRestored = true;
+            notify();
             return false;
         }
 
-        watchProgressRestored = true;
         const changed = setCurrentTime(time);
 
-        if (changed) notify();
+        notify();
 
         return changed;
     }
@@ -1811,11 +1892,13 @@ export function createAudio(audio: HTMLAudioElement, config: AudioConfig = {}): 
         }
 
         if (!pitchShiftNode) {
-            if (!pitchShiftGraphPromise) {
-                pitchShiftGraphPromise = createPitchShiftGraph();
+            let graphBuild = pitchShiftGraphPromise;
+            if (!graphBuild) {
+                graphBuild = createPitchShiftGraph();
+                // An error consumer may synchronously start a newer build before this call returns.
+                if (!destroyed && !pitchShiftGraphPromise) pitchShiftGraphPromise = graphBuild;
             }
 
-            const graphBuild = pitchShiftGraphPromise; // the exact build this call is awaiting, to tell it apart from a newer one
             const graphReady = await graphBuild;
             if (destroyed) return false;
 
@@ -1970,7 +2053,10 @@ export function createAudio(audio: HTMLAudioElement, config: AudioConfig = {}): 
     async function createPitchShiftNode(context: AudioContext) {
         try {
             const node = await SignalsmithStretch(context);
-            if (destroyed) return null; // destroy() closed the context during the worklet registration — bail
+            if (destroyed) {
+                node.disconnect(); // readiness may arrive after teardown closed the context
+                return null;
+            }
 
             pitchShiftNode = node;
             node.schedule({active: true, semitones: getPitchSemitones()}); // active = pass live input through; a segment left inactive outputs silence
@@ -2007,6 +2093,7 @@ export function createAudio(audio: HTMLAudioElement, config: AudioConfig = {}): 
             return false;
         }
 
+        sourceTap.disconnect(); // a previous failed worklet build may have installed a direct fallback route
         sourceTap.connect(node);
         node.connect(context.destination);
         return true;
@@ -2036,6 +2123,8 @@ export function createAudio(audio: HTMLAudioElement, config: AudioConfig = {}): 
     // region ===== Tear Down ==========================================================================================
     function destroy(): void {
         if (destroyed) return;
+        destroyed = true; // external cleanup cannot re-enter a live engine
+        notifier.destroy();
 
         saveWatchProgress(true);
 
@@ -2043,19 +2132,19 @@ export function createAudio(audio: HTMLAudioElement, config: AudioConfig = {}): 
 
         clearPitchShiftGraph();
 
-        destroyed = true; // make future work and future destroy calls harmless
-
         cleanups.forEach(function (cleanup) {
             cleanup();
         });
 
         cleanups.length = 0; // release references to the cleanup functions and their event targets
-        listeners.clear(); // release all subscribers
     }
 
     // endregion
 
+    observedMedia = getMediaObservation();
     init();
+    // Silent setup becomes the baseline; keep any published setup snapshot until its async work settles.
+    if (!hasNotified) observedMedia = getMediaObservation();
 
     return {
         getState,

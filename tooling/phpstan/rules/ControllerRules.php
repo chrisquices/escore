@@ -100,6 +100,7 @@ class ControllerRules implements Rule
             ...$this->noArithmeticOperations($node, $scope),
             ...$this->noLoopStatements($node),
             ...$this->noPositionalArguments($node),
+            ...$this->requireRawSuffixForServiceGetResults($node),
         ];
     }
 
@@ -716,6 +717,43 @@ class ControllerRules implements Rule
         }
 
         return $errors;
+    }
+
+    /** @return list<RuleError> */
+    private function requireRawSuffixForServiceGetResults(Node $node): array
+    {
+        if ((! $node instanceof Node\Expr\Assign && ! $node instanceof Node\Expr\AssignRef)
+            || ! $node->var instanceof Variable
+            || ! is_string($node->var->name)
+            || str_ends_with($node->var->name, 'Raw')) {
+            return [];
+        }
+
+        $call = $node->expr;
+
+        if ((! $call instanceof MethodCall && ! $call instanceof NullsafeMethodCall)
+            || ! $call->name instanceof Identifier
+            || ! str_starts_with(strtolower($call->name->toString()), 'get')
+            || $call->isFirstClassCallable()) {
+            return [];
+        }
+
+        $service = $call->var;
+
+        if (! $service instanceof PropertyFetch
+            || ! $service->var instanceof Variable
+            || $service->var->name !== 'this'
+            || ! $service->name instanceof Identifier
+            || ! str_ends_with($service->name->toString(), 'Service')) {
+            return [];
+        }
+
+        return [
+            RuleErrorBuilder::message("Variables assigned service get*() results in controllers must end in Raw. Rename \${$node->var->name} to \${$node->var->name}Raw.")
+                ->identifier('strata.controller.requireRawSuffixForServiceGetResults')
+                ->line($node->var->getStartLine())
+                ->build(),
+        ];
     }
 
     private function getInertiaProps(Node $node, Scope $scope): ?Array_

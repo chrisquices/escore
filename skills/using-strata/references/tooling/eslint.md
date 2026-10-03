@@ -2,6 +2,8 @@
 
 Shared tooling lives in `tooling/eslint`. Dependencies and quality commands belong to the consuming project; the config resolves dependencies from that project's working directory.
 
+The shared configuration targets Vue/TypeScript and does not require Laravel. Its current ignores include Laravel paths; consuming projects such as browser extensions must account for their own generated output and source layout. Keep extension-specific build configuration and type declarations in the consuming project.
+
 ## Naming
 
 Use kebab-case rule IDs: `<subject>-must-<requirement>` or `<subject>-must-not-<prohibition>`.

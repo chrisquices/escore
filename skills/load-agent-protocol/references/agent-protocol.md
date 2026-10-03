@@ -65,9 +65,14 @@ This document defines the controlling protocol for every agent action and respon
 
 ### Code Quality
 
-- After each completed set of code changes, run `composer quality:fix` from the affected project's root before the final response.
+- After each completed set of code changes, run the affected project’s configured quality commands from its root before the final response. Use `composer quality:fix` when defined; for JavaScript/TypeScript projects, use the existing package-manager scripts for the affected code.
 - Do not fix reported violations unless the user asked you to fix violations/findings.
-- If the script is missing or the command cannot run, report that explicitly.
+- If no applicable script exists or a command cannot run, report that explicitly. Do not add Composer or another toolchain just to satisfy this rule.
+
+### Project Scope
+
+- Identify the project’s stack from its manifests, configuration, and existing code before selecting skills, setup steps, or commands. Projects may be Laravel applications, browser extensions, standalone frontend apps, or libraries.
+- Apply Laravel, PHP, Vue, and Inertia guidance only where the corresponding technology is used. Preserve the project’s existing framework, build system, directories, and runtime constraints.
 
 ---
 

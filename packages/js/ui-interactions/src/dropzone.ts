@@ -1,4 +1,4 @@
-import {callConsumer, createErrorReporter} from 'strata-packages/ui-interactions/internal/core';
+import {createErrorReporter, createNotifier} from 'strata-packages/ui-interactions/internal/core';
 
 export interface DropzoneState {
     files: File[]
@@ -302,15 +302,18 @@ export function createDropzone(element: HTMLElement, config: DropzoneConfig = {}
     // endregion
 
     // region ===== Event Listeners ====================================================================================
-    const listeners = new Set<(state: DropzoneState) => void>(); // change subscribers — each gets the full state on every collection change
     const cleanups: (() => void)[] = []; // teardown functions, collected so everything can be undone at once
 
     // Register an event listener and remember how to remove it during teardown.
     function registerEventListener<K extends keyof HTMLElementEventMap>(target: EventTarget, type: K, handler: (event: HTMLElementEventMap[K]) => void) {
-        target.addEventListener(type, handler as EventListener);
+        const guardedHandler = function (event: HTMLElementEventMap[K]) {
+            if (destroyed) return;
+            handler(event);
+        };
+        target.addEventListener(type, guardedHandler as EventListener);
 
         cleanups.push(function () {
-            target.removeEventListener(type, handler as EventListener); // remember how to detach it
+            target.removeEventListener(type, guardedHandler as EventListener); // remember how to detach it
         });
     }
 
@@ -352,6 +355,7 @@ export function createDropzone(element: HTMLElement, config: DropzoneConfig = {}
             event.preventDefault(); // prevent the browser from opening or navigating to the dropped file
             dragDepth = 0; // a drop fires no dragleave, so reset the counter by hand
             setDraggingOver(false);
+            if (destroyed) return; // a highlight subscriber may tear down the engine
 
             const transfer = event.dataTransfer;
 
@@ -411,7 +415,8 @@ export function createDropzone(element: HTMLElement, config: DropzoneConfig = {}
     // endregion
 
     // region ===== State ==============================================================================================
-    let lastStateSignature = ""; // last emitted state fingerprint, used to avoid duplicate no-op emits
+    const notifier = createNotifier(getState);
+    const subscriptions = new WeakMap<(state: DropzoneState) => void, (state: DropzoneState) => void>();
 
     // A snapshot of what the dropzone currently holds — consumers render from this.
     function getState(): DropzoneState {
@@ -429,35 +434,25 @@ export function createDropzone(element: HTMLElement, config: DropzoneConfig = {}
     // Subscribe to collection changes. The listener gets the state on every change (not
     // immediately — read getState() for the first paint). Returns an unsubscribe function.
     function subscribe(listener: (state: DropzoneState) => void): () => void {
+        if (typeof listener !== "function") {
+            throw new TypeError("createNotifier: 'listener' must be a function.");
+        }
         if (destroyed) return function unsubscribe() {}; // dead engine: nothing will fire, and nothing gets retained
 
-        listeners.add(listener);
-        return function unsubscribe() {
-            listeners.delete(listener);
-        };
+        let wrapped = subscriptions.get(listener);
+        if (!wrapped) {
+            wrapped = function (state) {
+                listener({...state, files: state.files.slice()});
+            };
+            subscriptions.set(listener, wrapped);
+        }
+
+        return notifier.subscribe(wrapped);
     }
 
     // Emit the current state to every subscriber. Called after any change to the emitted state — the collection, the drag-over highlight, or the disabled flag.
     function notify() {
-        if (destroyed) return;
-        const state = getState();
-        const stateSignature = getStateSignature(state);
-        if (stateSignature === lastStateSignature) return;
-
-        lastStateSignature = stateSignature;
-
-        for (const listener of listeners) {
-            callConsumer(listener, state);
-        }
-    }
-
-    // File objects don't JSON-serialize, so the fingerprint is built from what identifies the snapshot.
-    function getStateSignature(state: DropzoneState) {
-        return JSON.stringify({
-            files: state.files.map(function (file: File) {return file.name + ":" + file.size;}),
-            draggingOver: state.draggingOver,
-            disabled: state.disabled
-        });
+        notifier.notify();
     }
 
     // endregion
@@ -480,8 +475,10 @@ export function createDropzone(element: HTMLElement, config: DropzoneConfig = {}
         if (index === -1) return false; // not held — nothing removed
 
         acceptedFiles.splice(index, 1);
-        revokeThumbnail(file); // release the file's thumbnail url
-        revokeVideoPreview(file); // release the file's video preview url
+        if (!acceptedFiles.includes(file)) {
+            revokeThumbnail(file); // release previews when the last reference leaves
+            revokeVideoPreview(file);
+        }
         notify(); // the collection changed — tell subscribers
         return true;
     }
@@ -520,6 +517,7 @@ export function createDropzone(element: HTMLElement, config: DropzoneConfig = {}
 
         // Fire each rejection/limit once at onError, fire-and-forget
         for (const error of errors) {
+            if (destroyed) break;
             reportError(error.id, error.message, error.metadata);
         }
 
@@ -539,14 +537,17 @@ export function createDropzone(element: HTMLElement, config: DropzoneConfig = {}
 
         const index = acceptedFiles.indexOf(oldFile);
         if (index === -1) return false; // not held — nothing to replace
+        if (oldFile === newFile) return true; // identity is unchanged; preserve its cached previews
 
         acceptedFiles.splice(index, 1); // tentatively pull the old one so dedupe/limits judge the new one as if it's already gone
         const {accepted, errors} = validateFiles([newFile]);
 
         if (accepted.length) {
             acceptedFiles.splice(index, 0, newFile); // drop the replacement into the same slot — position preserved
-            revokeThumbnail(oldFile); // release the old thumbnail before generating the replacement
-            revokeVideoPreview(oldFile); // release the old video preview; the new one mints on the next render
+            if (!acceptedFiles.includes(oldFile)) {
+                revokeThumbnail(oldFile); // release previews when the last reference leaves
+                revokeVideoPreview(oldFile);
+            }
             generateThumbnailIfEnabled(newFile);
             notify();
             return true;
@@ -554,6 +555,7 @@ export function createDropzone(element: HTMLElement, config: DropzoneConfig = {}
 
         acceptedFiles.splice(index, 0, oldFile); // rejected — restore the original in place; nothing changed
         for (const error of errors) {
+            if (destroyed) break;
             reportError(error.id, error.message, error.metadata);
         }
         return false;
@@ -719,11 +721,14 @@ export function createDropzone(element: HTMLElement, config: DropzoneConfig = {}
 
     // Public control — disabling gates everything: drag and click-to-open.
     function setDisabled(value: boolean): void {
-        if (destroyed) return;
+        if (destroyed || isDisabled === value) return;
 
         isDisabled = value;
 
-        if (value) resetDrag(); // clear any highlight left over from a drag that was in progress
+        if (value) {
+            dragDepth = 0;
+            isDraggingOver = false; // publish disabling and clearing the highlight together
+        }
 
         notify();
     }
@@ -769,7 +774,7 @@ export function createDropzone(element: HTMLElement, config: DropzoneConfig = {}
 
         const thumbnail = resolveThumbnail(file).then(function (url) {
             // The file left mid-decode — drop the url now rather than leak it.
-            if (url && !acceptedFiles.includes(file)) {
+            if (url && (destroyed || !acceptedFiles.includes(file) || thumbnails.get(file) !== thumbnail)) {
                 URL.revokeObjectURL(url);
                 return null;
             }
@@ -1016,14 +1021,14 @@ export function createDropzone(element: HTMLElement, config: DropzoneConfig = {}
         if (destroyed) return;
 
         destroyed = true; // prevent further work and make future destroy calls harmless
+        notifier.destroy();
 
         cleanups.forEach(function (cleanup) {
             cleanup();
         });
 
         cleanups.length = 0; // release references to the cleanup functions and their event targets
-        resetDrag(); // clear the drag counter and notify the consumer if the drag-over state was active
-        listeners.clear(); // release all subscribers
+        resetDrag(); // clear the drag counter without notifying after teardown
 
         // Cancel any in-flight thumbnail decodes — otherwise a detached <video> keeps decoding until its
         // own 10s timeout. settleWith is idempotent, so this just tears each one down now (resolving it null).

@@ -1,5 +1,7 @@
 # Using Inertia Plus
 
+Apply this reference only to Vue projects using Inertia. Standalone frontends and browser extensions without Inertia should use their existing state and request patterns.
+
 Import from `strata-packages/inertia-plus`. Reuse Strata's behavior instead of implementing it again.
 
 ## Organization and Const Names

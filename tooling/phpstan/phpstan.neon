@@ -7,12 +7,17 @@ includes:
 rules:
     - Strata\PHPStan\ControllerRules
     - Strata\PHPStan\ServiceRules
-    - Strata\PHPStan\GeneralRules
     - Strata\PHPStan\ModelRules
     - Strata\PHPStan\RouteRules
     - Strata\PHPStan\RequestRules
 
 services:
+    -
+        class: Strata\PHPStan\GeneralRules
+        arguments:
+            parser: @defaultAnalysisParser
+        tags:
+            - phpstan.rules.rule
     -
         class: Strata\PHPStan\EloquentRules
         arguments:

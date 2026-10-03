@@ -1,4 +1,4 @@
-import {callConsumer, createErrorReporter} from 'strata-packages/ui-interactions/internal/core';
+import {createNotifier, createErrorReporter} from 'strata-packages/ui-interactions/internal/core';
 
 export type VirtualizerStrategy = "css" | "virtual" | "auto";
 
@@ -144,7 +144,6 @@ export function createVirtualizer(config: VirtualizerConfig): VirtualizerEngine 
     // endregion
 
     // region ===== Event Listeners ====================================================================================
-    const listeners = new Set<(state: VirtualizerState) => void>(); // change subscribers — each gets the full state on every change
     const cleanups: {(): void; (): void;}[] = []; // teardown functions, collected so everything can be undone at once
 
     function registerEventListener<K extends keyof HTMLElementEventMap>(target: EventTarget, type: K, handler: (event: HTMLElementEventMap[K]) => void, options?: AddEventListenerOptions) {
@@ -163,11 +162,11 @@ export function createVirtualizer(config: VirtualizerConfig): VirtualizerEngine 
                 handleResize();
             });
 
-            resizeObserver.observe(gridElement);
-
             cleanups.push(function () {
                 resizeObserver!.disconnect();
             });
+
+            resizeObserver.observe(gridElement);
         }
 
         // Scroll — the window recomputes as the user scrolls (only meaningful in the virtual strategy)
@@ -184,35 +183,75 @@ export function createVirtualizer(config: VirtualizerConfig): VirtualizerEngine 
     // endregion
 
     // region ===== State ==============================================================================================
-    let lastStateSignature = ""; // last emitted state fingerprint, used to avoid duplicate echoes
+    let lastLayout: ReturnType<typeof getLayout> | null = null;
+    let lastKeys: (string | number)[] = [];
+    let preparationRevision = 0;
+    const notifier = createNotifier(function () {return getSnapshot(lastLayout!, lastKeys);});
+    const subscriptions = new WeakMap<(state: VirtualizerState) => void, (state: VirtualizerState) => void>();
 
     // Subscribe to changes. The listener gets state on every change (not immediately — read getState() for the first paint). Returns an unsubscribe function.
     function subscribe(listener: (state: VirtualizerState) => void): () => void {
+        if (typeof listener !== "function") {
+            throw new TypeError("createNotifier: 'listener' must be a function.");
+        }
         if (destroyed) return function unsubscribe() {};
 
-        listeners.add(listener);
+        let wrapped = subscriptions.get(listener);
+        if (!wrapped) {
+            wrapped = function (state) {
+                listener({
+                    ...state,
+                    items: state.items.map(function (item) {return {...item, style: {...item.style}};}),
+                    containerStyle: {...state.containerStyle},
+                    ...(state.range ? {range: {...state.range}} : {})
+                });
+            };
+            subscriptions.set(listener, wrapped);
+        }
 
-        return function unsubscribe() {
-            listeners.delete(listener);
-        };
+        // Stable wrappers retain duplicate subscription identity while isolating owned snapshots.
+        return notifier.subscribe(wrapped);
     }
 
-    // Emit the current state to every subscriber, deduped against the last snapshot so no-op changes cost nothing.
+    // Compare only published geometry and key identity; no-op events need no item/style snapshots.
     function notify() {
         if (destroyed) return;
-        const state = getState();
-        const stateSignature = JSON.stringify(state);
-        if (stateSignature === lastStateSignature) return;
+        const revision = ++preparationRevision;
+        const layout = getLayout();
+        const keys = getKeys(layout, revision);
+        if (destroyed || revision !== preparationRevision) return;
+        const previous = lastLayout;
+        const changed = !previous ||
+            layout.columns !== previous.columns ||
+            layout.cellWidth !== previous.cellWidth || layout.cellHeight !== previous.cellHeight ||
+            layout.hasIntrinsicSize !== previous.hasIntrinsicSize || layout.hasAutoRows !== previous.hasAutoRows ||
+            layout.startIndex !== previous.startIndex || layout.endIndex !== previous.endIndex ||
+            layout.totalSize !== previous.totalSize ||
+            layout.paddingTop !== previous.paddingTop || layout.paddingBottom !== previous.paddingBottom ||
+            keys.length !== lastKeys.length || keys.some(function (key, index) {return !Object.is(key, lastKeys[index]);});
+        if (!changed) return;
 
-        lastStateSignature = stateSignature;
-
-        for (const listener of listeners) {
-            callConsumer(listener, state);
-        }
+        lastLayout = layout;
+        lastKeys = keys;
+        notifier.notify();
     }
 
     function getState(): VirtualizerState {
-        return resolvedStrategy() === "virtual" ? buildVirtualState() : buildCssState();
+        const layout = getLayout();
+        return getSnapshot(layout, getKeys(layout));
+    }
+
+    function getKeys(layout: ReturnType<typeof getLayout>, revision?: number) {
+        const keys = [];
+        for (let index = layout.startIndex; index <= layout.endIndex; index++) {
+            if (revision !== undefined && (destroyed || revision !== preparationRevision)) break;
+            keys.push(getItemKey(index));
+        }
+        return keys;
+    }
+
+    function getSnapshot(layout: ReturnType<typeof getLayout>, keys: (string | number)[]): VirtualizerState {
+        return layout.strategy === "virtual" ? buildVirtualState(layout, keys) : buildCssState(layout, keys);
     }
 
     // endregion
@@ -224,8 +263,8 @@ export function createVirtualizer(config: VirtualizerConfig): VirtualizerEngine 
     let cellAspect = 0; // a cell's height/width ratio, measured once before the rows are pinned
     let rowGap = 0; // the gap between rows
     let colGap = 0; // the gap between columns
-    let scrollTop = 0; // the scroll container's current scroll position (virtual strategy)
-    let scrollScheduled = false; // coalesces a burst of scroll events into one per frame
+    let scrollTop = scrollElement.scrollTop; // include an already-scrolled container in the initial window
+    let scrollFrame: number | null = null; // coalesces scroll events and owns the pending frame for teardown
     let resizeObserver: ResizeObserver | null = null; // re-reads geometry when the container width changes
 
     // Read the browser's RESOLVED grid: columns + track width from computed style; cell aspect measured once.
@@ -254,15 +293,15 @@ export function createVirtualizer(config: VirtualizerConfig): VirtualizerEngine 
         if (destroyed) return;
 
         readGeometry();
+        scrollTop = scrollElement.scrollTop;
         notify();
     }
 
     function handleScroll() {
-        if (destroyed || scrollScheduled) return;
+        if (destroyed || scrollFrame !== null) return;
 
-        scrollScheduled = true;
-        defaultView.requestAnimationFrame(function () {
-            scrollScheduled = false;
+        scrollFrame = defaultView.requestAnimationFrame(function () {
+            scrollFrame = null;
             if (destroyed) return;
 
             scrollTop = scrollElement.scrollTop;
@@ -273,24 +312,21 @@ export function createVirtualizer(config: VirtualizerConfig): VirtualizerEngine 
     // endregion
 
     // region ===== CSS Strategy =======================================================================================
-    function buildCssState(): VirtualizerState {
-        const itemStyle: Record<string, string | number> = cellWidth && cellHeight ? {contentVisibility: "auto", containIntrinsicSize: roundTo(cellWidth, 2) + "px " + roundTo(cellHeight, 2) + "px"} : {contentVisibility: "auto"};
+    function buildCssState(layout: ReturnType<typeof getLayout>, keys: (string | number)[]): VirtualizerState {
+        const itemStyle: Record<string, string | number> = layout.hasIntrinsicSize ? {contentVisibility: "auto", containIntrinsicSize: layout.cellWidth + "px " + layout.cellHeight + "px"} : {contentVisibility: "auto"};
 
         // Pin the grid's row height so off-screen (size-contained) rows can't collapse and overlap.
-        const containerStyle: Record<string, string | number> = cellAspect && cellHeight ? {gridAutoRows: roundTo(cellHeight, 2) + "px"} : {};
-        const items = [];
-        for (let index = 0; index < count; index++) {
-            items.push({key: getItemKey(index), index: index, start: null, size: null, style: itemStyle});
-        }
+        const containerStyle: Record<string, string | number> = layout.hasAutoRows ? {gridAutoRows: layout.cellHeight + "px"} : {};
+        const items = keys.map(function (key, index) {return {key: key, index: index, start: null, size: null, style: {...itemStyle}};});
 
         return {
             strategy: "css",
             items: items,
             totalSize: null,
             containerStyle: containerStyle,
-            columns: columns,
-            cellWidth: roundTo(cellWidth, 2),
-            cellHeight: roundTo(cellHeight, 2),
+            columns: layout.columns,
+            cellWidth: layout.cellWidth,
+            cellHeight: layout.cellHeight,
             count: count
         };
     }
@@ -304,31 +340,43 @@ export function createVirtualizer(config: VirtualizerConfig): VirtualizerEngine 
         return count > threshold ? "virtual" : "css";
     }
 
-    function buildVirtualState(): VirtualizerState {
+    function getLayout() {
+        const currentStrategy = resolvedStrategy();
         const rowHeight = cellHeight + rowGap;
         const totalRows = Math.ceil(count / columns);
         const viewportHeight = scrollElement.clientHeight;
-        const firstRow = rowHeight > 0 ? Math.floor(scrollTop / rowHeight) : 0;
+        const firstRow = rowHeight > 0 ? Math.max(0, Math.min(totalRows - 1, Math.floor(scrollTop / rowHeight))) : 0;
         const visibleRows = rowHeight > 0 ? Math.ceil(viewportHeight / rowHeight) : 0;
         const startRow = Math.max(0, firstRow - overscan);
         const endRow = Math.min(totalRows - 1, firstRow + visibleRows + overscan);
-        const startIndex = startRow * columns;
-        const endIndex = Math.min(count - 1, (endRow + 1) * columns - 1);
-        const items = [];
-        for (let index = startIndex; index <= endIndex; index++) {
-            items.push({key: getItemKey(index), index: index, start: null, size: null, style: {}});
-        }
+        return {
+            strategy: currentStrategy,
+            columns: columns,
+            cellWidth: roundTo(cellWidth, 2),
+            cellHeight: roundTo(cellHeight, 2),
+            hasIntrinsicSize: currentStrategy === "css" && count > 0 && !!(cellWidth && cellHeight),
+            hasAutoRows: currentStrategy === "virtual" || !!(cellAspect && cellHeight),
+            startIndex: currentStrategy === "virtual" ? startRow * columns : 0,
+            endIndex: currentStrategy === "virtual" ? Math.min(count - 1, (endRow + 1) * columns - 1) : count - 1,
+            totalSize: currentStrategy === "virtual" ? roundTo(totalRows ? totalRows * rowHeight - rowGap : 0, 2) : null,
+            paddingTop: currentStrategy === "virtual" ? roundTo(startRow * rowHeight, 2) : 0,
+            paddingBottom: currentStrategy === "virtual" ? roundTo(Math.max(0, totalRows - 1 - endRow) * rowHeight, 2) : 0
+        };
+    }
+
+    function buildVirtualState(layout: ReturnType<typeof getLayout>, keys: (string | number)[]): VirtualizerState {
+        const items = keys.map(function (key, index) {return {key: key, index: layout.startIndex + index, start: null, size: null, style: {}};});
 
         return {
             strategy: "virtual",
             items: items,
-            totalSize: roundTo(totalRows * rowHeight - rowGap, 2),
-            containerStyle: {gridAutoRows: roundTo(cellHeight, 2) + "px", paddingTop: roundTo(startRow * rowHeight, 2) + "px", paddingBottom: roundTo(Math.max(0, totalRows - 1 - endRow) * rowHeight, 2) + "px"},
-            columns: columns,
-            cellWidth: roundTo(cellWidth, 2),
-            cellHeight: roundTo(cellHeight, 2),
+            totalSize: layout.totalSize,
+            containerStyle: {gridAutoRows: layout.cellHeight + "px", paddingTop: layout.paddingTop + "px", paddingBottom: layout.paddingBottom + "px"},
+            columns: layout.columns,
+            cellWidth: layout.cellWidth,
+            cellHeight: layout.cellHeight,
             count: count,
-            range: {startIndex: startIndex, endIndex: endIndex}
+            range: {startIndex: layout.startIndex, endIndex: layout.endIndex}
         };
     }
 
@@ -370,7 +418,7 @@ export function createVirtualizer(config: VirtualizerConfig): VirtualizerEngine 
         if (rowHeight <= 0 || colWidth <= 0) return [];
 
         const startRow = Math.max(0, Math.floor(rect.y / rowHeight));
-        const endRow = Math.floor((rect.y + rect.height) / rowHeight);
+        const endRow = Math.min(Math.ceil(count / columns) - 1, Math.floor((rect.y + rect.height) / rowHeight));
         const startCol = Math.max(0, Math.floor(rect.x / colWidth));
         const endCol = Math.min(columns - 1, Math.floor((rect.x + rect.width) / colWidth));
         const indices = [];
@@ -391,18 +439,25 @@ export function createVirtualizer(config: VirtualizerConfig): VirtualizerEngine 
         if (destroyed) return;
 
         destroyed = true; // make future work and future destroy calls harmless
+        notifier.destroy();
+        if (scrollFrame !== null) defaultView.cancelAnimationFrame(scrollFrame);
+        scrollFrame = null;
 
         cleanups.forEach(function (cleanup) {
             cleanup();
         });
 
         cleanups.length = 0; // release references to the cleanup functions and their event targets
-        listeners.clear();
     }
 
     // endregion
 
-    init();
+    try {
+        init();
+    } catch (error) {
+        destroy();
+        throw error;
+    }
 
     return {
         getState,

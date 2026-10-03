@@ -1,6 +1,6 @@
 ---
 name: using-laravel
-description: "General guidelines for managing Laravel codebases. Use when working with controllers, form requests, services, helpers, Artisan commands, migrations, routes, models, resources, policies, jobs, events, listeners, and client-side routing, including links and AJAX requests."
+description: "Guidelines for Laravel codebases. Use for Laravel backend work and frontend calls to Laravel routes, including links and AJAX requests. Does not apply to routing or requests in projects without Laravel."
 ---
 
 ## Required Docs
@@ -8,6 +8,8 @@ description: "General guidelines for managing Laravel codebases. Use when workin
 - None
 
 ## Instructions
+
+Apply this skill only to the Laravel portion of a project. A browser extension calling an external API does not by itself require Laravel routing helpers.
 
 Read and apply only the files relevant to the current task in hand, do not read all of them.
 

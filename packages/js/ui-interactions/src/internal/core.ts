@@ -91,6 +91,9 @@ export function createNotifier<T, F>(getState: () => T, config: {requestFrame?: 
 
         const currentRevision = revision;
         const state = getState();
+
+        if (destroyed || revision !== currentRevision) return;
+
         emittedRevision = currentRevision;
 
         for (const listener of listeners) {

@@ -2,6 +2,9 @@
 
 namespace Strata\PHPStan;
 
+use Illuminate\Routing\PendingResourceRegistration;
+use Illuminate\Routing\PendingSingletonResourceRegistration;
+use Illuminate\Routing\Route;
 use Illuminate\Routing\RouteRegistrar;
 use Illuminate\Routing\Router;
 use Illuminate\Support\Facades\Route as RouteFacade;
@@ -94,35 +97,36 @@ class RouteRules implements Rule
         }
 
         $this->processed[$node] = true;
-        $inertiaErrors = $this->noInertiaControllerUsage($node, $scope);
+        $errors = $this->noInertiaControllerUsage($node, $scope);
 
         if (! $this->isCall($node) || $node->isFirstClassCallable()) {
-            return $inertiaErrors;
+            return $errors;
         }
 
+        array_push($errors, ...$this->noNamedArguments($node, $scope));
         $method = $this->methodName($node, $scope);
 
         if ($method === null) {
             if ($this->receiverKind($node, $scope) === null) {
-                return $inertiaErrors;
+                return $errors;
             }
 
-            return [...$inertiaErrors, ...$this->enforceControllerAction($node, $scope)];
+            return [...$errors, ...$this->enforceControllerAction($node, $scope)];
         }
 
         if ($method !== 'group' && ! in_array($method, self::ENDPOINTS, true)) {
-            return $inertiaErrors;
+            return $errors;
         }
 
         if ($this->receiverKind($node, $scope) === null) {
-            return $inertiaErrors;
+            return $errors;
         }
 
         $groups = $this->enclosingGroups($node, $scope);
         $group = $method === 'group' ? $this->describeGroup($node, $scope) : null;
 
         return [
-            ...$inertiaErrors,
+            ...$errors,
             ...($group === null ? $this->enforcePrefix($node, $groups) : []),
             ...($group !== null ? $this->enforceGroupName($group) : []),
             ...($group !== null ? $this->enforcePrefixNameMatch($group) : []),
@@ -402,6 +406,38 @@ class RouteRules implements Rule
         }
 
         return null;
+    }
+
+    /**
+     * @param  RouteCall  $call
+     * @return list<RuleError>
+     */
+    private function noNamedArguments(Expr $call, Scope $scope): array
+    {
+        $errors = [];
+
+        foreach ($call->getArgs() as $argument) {
+            if ($argument->name !== null) {
+                $errors[] = $this->error($argument, __FUNCTION__, sprintf('Route declarations must use positional arguments. Remove the "%s:" label and pass the value in the declared parameter order.', $argument->name->toString()));
+            }
+        }
+
+        if ($errors === [] || $this->receiverKind($call, $scope) !== null) {
+            return $errors;
+        }
+
+        // Endpoint modifiers operate on Route or pending resource objects,
+        // whereas group declarations operate on Router or RouteRegistrar.
+        $receiver = $call instanceof StaticCall ? $call->class : $call->var;
+        $type = $receiver instanceof Name ? $scope->resolveTypeByName($receiver) : $scope->getType($receiver);
+
+        if ($call instanceof StaticCall) {
+            $type = $type->getObjectTypeOrClassStringObjectType();
+        }
+
+        $routingType = TypeCombinator::union(new ObjectType(Route::class), new ObjectType(PendingResourceRegistration::class), new ObjectType(PendingSingletonResourceRegistration::class));
+
+        return $routingType->isSuperTypeOf(TypeCombinator::removeNull($type))->yes() ? $errors : [];
     }
 
     /**

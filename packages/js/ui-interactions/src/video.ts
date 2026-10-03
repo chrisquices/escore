@@ -1,4 +1,4 @@
-import {callConsumer, createErrorReporter} from 'strata-packages/ui-interactions/internal/core';
+import {callConsumer, createErrorReporter, createNotifier} from 'strata-packages/ui-interactions/internal/core';
 
 interface VideoElement extends HTMLVideoElement {
     webkitRequestFullscreen?: () => Promise<void> | void;
@@ -487,14 +487,16 @@ export function createVideo(video: VideoElement, config: VideoConfig = {}): Vide
     // endregion
 
     // region ===== Event Listeners ====================================================================================
-    const listeners = new Set<(state: VideoState) => void>(); // change subscribers — each gets the full state on every playback change
-    const cleanups: {(): void; (): void;}[] = []; // teardown functions, collected so everything can be undone at once
+    const cleanups: (() => void)[] = []; // teardown functions, collected so everything can be undone at once
 
     function registerEventListener<K extends keyof HTMLElementEventMap | "enterpictureinpicture" | "leavepictureinpicture" | "webkitfullscreenchange" | "webkitbeginfullscreen" | "webkitendfullscreen">(target: EventTarget, type: K, handler: (event: K extends keyof HTMLElementEventMap ? HTMLElementEventMap[K] : Event) => void) {
-        target.addEventListener(type, handler as EventListener);
+        const guardedHandler = function (event: Event) {
+            if (!destroyed) (handler as EventListener)(event);
+        };
+        target.addEventListener(type, guardedHandler);
 
         cleanups.push(function () {
-            target.removeEventListener(type, handler as EventListener); // detach the exact listener that was registered
+            target.removeEventListener(type, guardedHandler); // detach the exact listener that was registered
         });
     }
 
@@ -509,6 +511,7 @@ export function createVideo(video: VideoElement, config: VideoConfig = {}): Vide
         // AB Loop Controls / Watch Progress
         registerEventListener(video, "timeupdate", function () {
             syncAbLoop();
+            if (destroyed) return;
             saveWatchProgress(false);
             notify();
         });
@@ -533,13 +536,13 @@ export function createVideo(video: VideoElement, config: VideoConfig = {}): Vide
         });
 
         registerEventListener(video, "pause", function () {
-            buffering = false;
+            setBuffering(false);
             saveWatchProgress(true);
             notify();
         });
 
         registerEventListener(video, "ended", function () {
-            buffering = false;
+            setBuffering(false);
             saveWatchProgress(true);
             notify();
         });
@@ -550,22 +553,22 @@ export function createVideo(video: VideoElement, config: VideoConfig = {}): Vide
 
         // State
         registerEventListener(video, "waiting", function () {
-            buffering = true;
+            setBuffering(true);
             notify();
         });
 
         registerEventListener(video, "stalled", function () {
-            buffering = true;
+            setBuffering(true);
             notify();
         });
 
         registerEventListener(video, "playing", function () {
-            buffering = false;
+            setBuffering(false);
             notify();
         });
 
         registerEventListener(video, "canplay", function () {
-            buffering = false;
+            setBuffering(false);
             notify();
         });
 
@@ -663,37 +666,88 @@ export function createVideo(video: VideoElement, config: VideoConfig = {}): Vide
     // endregion
 
     // region ===== State ==============================================================================================
-    let lastStateSignature = ""; // last emitted state fingerprint, used to avoid duplicate media-event echoes
+    let stateChanged = false; // engine-owned primitives mark changes at their mutation sites
+    let hasNotified = false;
+    let observedMedia: ReturnType<typeof getMediaObservation>;
+    const subscriptions = new WeakMap<(state: VideoState) => void, (state: VideoState) => void>();
+    const notifier = createNotifier(function () {
+        const state = getState();
+        syncMediaSessionState(state);
+        return state;
+    });
 
-    // Subscribe to playback changes. The listener gets the state on every change (not immediately — read getState() for the first paint). Returns an unsubscribe function.
+    // Subscription is silent. Stable wrappers preserve Set identity while each consumer owns its nested snapshots.
     function subscribe(listener: (state: VideoState) => void): () => void {
-        if (destroyed) return function unsubscribe() {}; // dead engine: nothing will fire, and nothing gets retained
+        if (typeof listener !== "function") {
+            throw new TypeError("createNotifier: 'listener' must be a function.");
+        }
+        if (destroyed) return function unsubscribe() {};
 
-        listeners.add(listener);
+        let wrapped = subscriptions.get(listener);
+        if (!wrapped) {
+            wrapped = function (state) {
+                listener({
+                    ...state,
+                    sources: state.sources.map(function (source) { return {...source}; }),
+                    bufferedRanges: state.bufferedRanges.map(function (range) { return {...range}; }),
+                    captions: {...state.captions, tracks: state.captions.tracks.map(function (track) { return {...track}; })},
+                    watchProgress: {...state.watchProgress}
+                });
+            };
+            subscriptions.set(listener, wrapped);
+        }
 
-        return function unsubscribe() {
-            listeners.delete(listener);
+        return notifier.subscribe(wrapped);
+    }
+
+    // Observe published browser-owned primitives; state reads remain live and do not acknowledge changes.
+    function getMediaObservation() {
+        return {
+            source: getSource(), sources: getSources(), paused: isPaused(), ended: hasEnded(),
+            seeking: isSeeking(), live: isLive(), currentTime: getCurrentTime(), duration: getDuration(),
+            bufferedRanges: getBufferedRanges(getDuration()), volume: getVolume(), muted: isMuted(),
+            playbackRate: getPlaybackRate(), loop: isLoopEnabled(), savedTime: getSavedWatchTime(),
+            videoWidth: getVideoWidth(), videoHeight: getVideoHeight(), poster: getPoster(),
+            fullscreen: isFullscreenActive(), fullscreenSupported: isFullscreenSupported(),
+            pictureInPicture: isPictureInPictureActive(), pictureInPictureSupported: isPictureInPictureSupported(),
+            tracks: captions.map(function (caption, index) {
+                const track = captionTrackElements[index];
+                return {kind: track ? track.kind : (caption.kind || "subtitles"), readyState: track ? track.readyState : 0};
+            })
         };
     }
 
-    // Emit the current state to every subscriber. Called after any meaningful playback change.
     function notify() {
         if (destroyed) return;
-        const state = getState();
-        const stateSignature = getStateSignature(state);
-        if (stateSignature === lastStateSignature) return;
-
-        lastStateSignature = stateSignature;
-        syncMediaSessionState(state);
-
-        for (const listener of listeners) {
-            callConsumer(listener, state);
+        const next = getMediaObservation();
+        const previous = observedMedia;
+        const changed = stateChanged
+            || next.source !== previous.source || next.paused !== previous.paused || next.ended !== previous.ended
+            || next.seeking !== previous.seeking || next.live !== previous.live || next.currentTime !== previous.currentTime
+            || next.duration !== previous.duration || next.volume !== previous.volume || next.muted !== previous.muted
+            || next.playbackRate !== previous.playbackRate || next.loop !== previous.loop || next.savedTime !== previous.savedTime
+            || next.videoWidth !== previous.videoWidth || next.videoHeight !== previous.videoHeight || next.poster !== previous.poster
+            || next.fullscreen !== previous.fullscreen || next.fullscreenSupported !== previous.fullscreenSupported
+            || next.pictureInPicture !== previous.pictureInPicture || next.pictureInPictureSupported !== previous.pictureInPictureSupported
+            || next.sources.length !== previous.sources.length
+            || next.sources.some(function (source, index) {
+                return source.src !== previous.sources[index].src || source.type !== previous.sources[index].type;
+            })
+            || next.bufferedRanges.length !== previous.bufferedRanges.length
+            || next.bufferedRanges.some(function (range, index) {
+                return range.startPercent !== previous.bufferedRanges[index].startPercent
+                    || range.endPercent !== previous.bufferedRanges[index].endPercent;
+            })
+            || next.tracks.length !== previous.tracks.length
+            || next.tracks.some(function (track, index) {
+                return track.kind !== previous.tracks[index].kind || track.readyState !== previous.tracks[index].readyState;
+            });
+        observedMedia = next;
+        stateChanged = false;
+        if (changed) {
+            hasNotified = true;
+            notifier.notify();
         }
-    }
-
-    // getState() returns a new object every call, so notify() can't detect no-op changes by reference alone — this gives it a comparable string instead.
-    function getStateSignature(state: VideoState) {
-        return JSON.stringify(state);
     }
 
     // A snapshot of the media element's current playback state — consumers render from this.
@@ -1008,10 +1062,14 @@ export function createVideo(video: VideoElement, config: VideoConfig = {}): Vide
         return persistSettings;
     }
 
-    function getWatchProgressState(currentTime: number, duration: number) {
+    function getSavedWatchTime() {
         const progress = getSavedWatchProgress();
         const savedTime = progress ? Number(progress.currentTime) : 0;
-        const safeSavedTime = Number.isFinite(savedTime) && savedTime >= 0 ? savedTime : 0;
+        return Number.isFinite(savedTime) && savedTime >= 0 ? savedTime : 0;
+    }
+
+    function getWatchProgressState(currentTime: number, duration: number) {
+        const safeSavedTime = getSavedWatchTime();
 
         return {
             enabled: watchProgress,
@@ -1029,7 +1087,8 @@ export function createVideo(video: VideoElement, config: VideoConfig = {}): Vide
         if (destroyed) return false;
 
         // Clear transient media state
-        buffering = false;
+        setBuffering(false);
+        stateChanged ||= abLoopStart !== 0 || abLoopEnd !== 0 || watchProgressRestored;
         abLoopStart = 0;
         abLoopEnd = 0;
         previewThumbnailItems = [];
@@ -1046,6 +1105,7 @@ export function createVideo(video: VideoElement, config: VideoConfig = {}): Vide
 
     function applySources(sources: VideoSource[]) {
         video.pause();
+        if (destroyed) return false;
         video.removeAttribute("src");
 
         video.querySelectorAll("source").forEach(function (source) {
@@ -1073,9 +1133,11 @@ export function createVideo(video: VideoElement, config: VideoConfig = {}): Vide
 
         validateSources(nextSources);
         const playbackRate = getPlaybackRate();
+        const rateRevision = playbackRateRevision;
         const loaded = applySources(nextSources);
+        if (destroyed) return false;
 
-        if (getPlaybackRate() !== playbackRate) {
+        if (rateRevision === playbackRateRevision && getPlaybackRate() !== playbackRate) {
             video.playbackRate = playbackRate;
         }
 
@@ -1088,6 +1150,12 @@ export function createVideo(video: VideoElement, config: VideoConfig = {}): Vide
 
     // region ===== Playback Controls ==================================================================================
     let buffering = false;
+
+    function setBuffering(enabled: boolean) {
+        if (buffering === enabled) return;
+        buffering = enabled;
+        stateChanged = true;
+    }
 
     function setCurrentTime(time: number) {
         const nextTime = clampSeekTime(time);
@@ -1105,6 +1173,7 @@ export function createVideo(video: VideoElement, config: VideoConfig = {}): Vide
         try {
             await video.play();
         } catch (error) {
+            if (destroyed) return false;
             if (error && (error as {name?: unknown}).name === "AbortError") return false; // superseded by a competing load — not a failure worth reporting
 
             reportMediaError(error);
@@ -1282,6 +1351,7 @@ export function createVideo(video: VideoElement, config: VideoConfig = {}): Vide
     // region ===== Playback Rate Controls =============================================================================
     const minimumPlaybackRate = 0.5;
     const maximumPlaybackRate = 2;
+    let playbackRateRevision = 0;
 
     function setPlaybackRate(value: number): boolean {
         if (destroyed) return false;
@@ -1292,6 +1362,7 @@ export function createVideo(video: VideoElement, config: VideoConfig = {}): Vide
             throw new TypeError(`createVideo: playback rate must be a number from ${minimumPlaybackRate} to ${maximumPlaybackRate}.`);
         }
 
+        playbackRateRevision++; // a reentrant explicit choice owns the rate, even if native load already reset it there
         if (getPlaybackRate() === rate) return false;
 
         video.playbackRate = rate;
@@ -1371,6 +1442,7 @@ export function createVideo(video: VideoElement, config: VideoConfig = {}): Vide
         if (getAbLoopStart() === time) return true;
 
         abLoopStart = time;
+        stateChanged = true;
 
         if (getAbLoopEnd() && getAbLoopEnd() <= getAbLoopStart()) {
             abLoopEnd = 0;
@@ -1388,6 +1460,7 @@ export function createVideo(video: VideoElement, config: VideoConfig = {}): Vide
         if (getAbLoopEnd() === time) return true;
 
         abLoopEnd = time;
+        stateChanged = true;
         notify();
         return true;
     }
@@ -1398,6 +1471,7 @@ export function createVideo(video: VideoElement, config: VideoConfig = {}): Vide
 
         abLoopStart = 0;
         abLoopEnd = 0;
+        stateChanged = true;
         notify();
         return true;
     }
@@ -1505,6 +1579,7 @@ export function createVideo(video: VideoElement, config: VideoConfig = {}): Vide
     let autoplayEnabled = autoplay;
     let autoplayAttempted = false;
     let autoplayBlocked = false;
+    let autoplayAttempt = 0;
 
     async function setAutoplay(enabled: boolean): Promise<boolean> {
         if (destroyed) return false;
@@ -1514,15 +1589,18 @@ export function createVideo(video: VideoElement, config: VideoConfig = {}): Vide
         }
 
         if (!enabled) {
+            autoplayAttempt++; // stale completions cannot re-block disabled autoplay
             if (!isAutoplayEnabled() && !isAutoplayBlocked()) return true;
 
             autoplayEnabled = false;
             autoplayBlocked = false;
+            stateChanged = true;
             savePersistedSettings();
             notify();
             return true;
         }
 
+        if (!autoplayEnabled) stateChanged = true;
         autoplayEnabled = true;
         savePersistedSettings();
         return startAutoplay();
@@ -1531,6 +1609,8 @@ export function createVideo(video: VideoElement, config: VideoConfig = {}): Vide
     async function startAutoplay() {
         if (destroyed) return false;
 
+        const attempt = ++autoplayAttempt;
+        stateChanged ||= !autoplayAttempted || autoplayBlocked;
         autoplayAttempted = true;
         autoplayBlocked = false;
 
@@ -1540,18 +1620,21 @@ export function createVideo(video: VideoElement, config: VideoConfig = {}): Vide
 
         video.playsInline = true; // mobile browsers usually require inline muted playback before autoplay is allowed
         notify();
+        if (destroyed || attempt !== autoplayAttempt) return false;
 
         try {
             await video.play();
         } catch (error) {
+            if (destroyed || attempt !== autoplayAttempt) return false;
             if (error && (error as {name?: unknown}).name === "AbortError") return false; // superseded by a competing load — not an autoplay policy block
 
+            if (!autoplayBlocked) stateChanged = true;
             autoplayBlocked = true;
             notify();
             return false;
         }
 
-        if (destroyed) return false;
+        if (destroyed || attempt !== autoplayAttempt) return false;
 
         notify();
         return true;
@@ -1584,7 +1667,8 @@ export function createVideo(video: VideoElement, config: VideoConfig = {}): Vide
         const nextSrc = caption ? caption.src : null;
         if (currentSrc === nextSrc) return true;
 
-        selectedCaption = caption || null;
+        selectedCaption = caption ? {...caption} : null;
+        stateChanged = true;
         syncCaptionTracks();
         savePersistedSettings();
         notify();
@@ -1638,27 +1722,33 @@ export function createVideo(video: VideoElement, config: VideoConfig = {}): Vide
 
     // region ===== Preview Thumbnails =================================================================================
     let previewThumbnailItems: ReturnType<typeof parsePreviewThumbnailVtt> = [];
+    let previewThumbnailRequest = 0;
 
     async function loadPreviewThumbnails() {
         if (!thumbnails || destroyed) return false;
 
+        const request = ++previewThumbnailRequest;
         try {
             const response = await ownerDocument.defaultView!.fetch(thumbnails);
+            if (destroyed || request !== previewThumbnailRequest) return false;
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}`);
             }
 
-            previewThumbnailItems = parsePreviewThumbnailVtt(await response.text(), thumbnails);
+            const text = await response.text();
+            if (destroyed || request !== previewThumbnailRequest) return false;
+            previewThumbnailItems = parsePreviewThumbnailVtt(text, thumbnails);
             notify();
             return true;
         } catch {
+            if (destroyed || request !== previewThumbnailRequest) return false;
             reportError("preview-thumbnails-load-failed", "Preview thumbnails could not be loaded.");
             return false;
         }
     }
 
     function getPreviewThumbnail(time: number) {
-        if (!previewThumbnailItems.length) return null;
+        if (destroyed || !previewThumbnailItems.length) return null;
 
         const thumbnail = previewThumbnailItems.find(function (item) {
             return time >= item.start && time < item.end;
@@ -1857,6 +1947,7 @@ export function createVideo(video: VideoElement, config: VideoConfig = {}): Vide
         if (isKeyboardShortcutsEnabled() === enabled) return true;
 
         keyboardShortcutsEnabled = enabled;
+        stateChanged = true;
         notify();
         return true;
     }
@@ -1961,6 +2052,7 @@ export function createVideo(video: VideoElement, config: VideoConfig = {}): Vide
     let touchGesturesEnabled = touchGestures;
     let lastTouchTap: {time: number;} | null = null;
     let lastMouseClickTime = 0;
+    let touchTapTimer: ReturnType<typeof setTimeout> | null = null;
 
     function setTouchGestures(enabled: boolean): boolean {
         if (destroyed) return false;
@@ -1972,8 +2064,9 @@ export function createVideo(video: VideoElement, config: VideoConfig = {}): Vide
         if (isTouchGesturesEnabled() === enabled) return true;
 
         touchGesturesEnabled = enabled;
+        stateChanged = true;
 
-        if (!enabled) lastTouchTap = null;
+        if (!enabled) clearTouchTap();
 
         notify();
         return true;
@@ -2004,6 +2097,7 @@ export function createVideo(video: VideoElement, config: VideoConfig = {}): Vide
             if (onDoubleClick) return callConsumer(onDoubleClick, tap);
 
             togglePlayback(); // undo the first click's toggle so a double-click leaves playback as it started
+            if (destroyed) return;
             toggleFullscreen();
             return;
         }
@@ -2015,9 +2109,15 @@ export function createVideo(video: VideoElement, config: VideoConfig = {}): Vide
         togglePlayback(); // instant — a desktop click shouldn't wait out the double-click window
     }
 
+    function clearTouchTap() {
+        if (touchTapTimer !== null) clearTimeout(touchTapTimer);
+        touchTapTimer = null;
+        lastTouchTap = null;
+    }
+
     function handleTouchTap(tap: VideoTap) {
         if (lastTouchTap && tap.time - lastTouchTap.time <= doubleTapDelay) {
-            lastTouchTap = null;
+            clearTouchTap();
 
             if (onDoubleTap) return callConsumer(onDoubleTap, tap);
 
@@ -2029,11 +2129,13 @@ export function createVideo(video: VideoElement, config: VideoConfig = {}): Vide
             return;
         }
 
+        clearTouchTap();
         lastTouchTap = tap;
 
-        setTimeout(function () {
+        touchTapTimer = setTimeout(function () {
             if (!lastTouchTap || lastTouchTap !== tap || destroyed || !isTouchGesturesEnabled()) return;
 
+            touchTapTimer = null;
             lastTouchTap = null;
 
             if (onSingleTap) return callConsumer(onSingleTap, tap);
@@ -2073,7 +2175,7 @@ export function createVideo(video: VideoElement, config: VideoConfig = {}): Vide
     }
 
     function shouldIgnorePointerEvent(event: PointerEvent) {
-        if (event.defaultPrevented) return true;
+        if (event.defaultPrevented || (event.pointerType === "mouse" && event.button !== 0)) return true;
 
         const target = event.target as HTMLElement | null;
         if (!target || target === playerContainer || target === video) return false;
@@ -2176,7 +2278,7 @@ export function createVideo(video: VideoElement, config: VideoConfig = {}): Vide
                 seekForward(details && details.seekOffset ? details.seekOffset : 10);
             },
             seekto: function (details) {
-                if (!details || !Number.isFinite(Number(details.seekTime))) return;
+                if (destroyed || !details || !Number.isFinite(Number(details.seekTime))) return;
 
                 if (details.fastSeek && typeof video.fastSeek === "function") {
                     video.fastSeek(Number(details.seekTime));
@@ -2323,10 +2425,12 @@ export function createVideo(video: VideoElement, config: VideoConfig = {}): Vide
             video.loop = settings.loop;
         }
 
-        // Apply persisted caption selection (null included — typeof null is "object"). A stale object
-        // (track no longer configured) is harmless — it matches no mounted track, so nothing shows.
-        if (typeof settings.selectedCaption === "object") {
-            selectedCaption = settings.selectedCaption;
+        // Resolve saved selection against the configured tracks; storage cannot supply current metadata.
+        if (settings.selectedCaption === null) {
+            selectedCaption = null;
+        } else if (settings.selectedCaption && typeof settings.selectedCaption === "object"
+            && !Array.isArray(settings.selectedCaption) && typeof settings.selectedCaption.src === "string") {
+            selectedCaption = captions.find(function (caption) { return caption.src === settings.selectedCaption.src; }) || null;
         }
 
         return true;
@@ -2413,34 +2517,35 @@ export function createVideo(video: VideoElement, config: VideoConfig = {}): Vide
     function resumeWatchProgress(): boolean {
         if (destroyed || !watchProgress || watchProgressRestored) return false;
 
+        watchProgressRestored = true;
+        stateChanged = true;
         const progress = getSavedWatchProgress();
         if (!progress || progress.ended) {
-            watchProgressRestored = true;
+            notify();
             return false;
         }
 
         const source = getSource();
         if (progress.source && source && progress.source !== source) {
-            watchProgressRestored = true;
+            notify();
             return false;
         }
 
         const duration = getDuration();
         const time = Number(progress.currentTime);
         if (!Number.isFinite(time) || time <= 0) {
-            watchProgressRestored = true;
+            notify();
             return false;
         }
 
         if (duration && time >= duration - 2) {
-            watchProgressRestored = true;
+            notify();
             return false;
         }
 
-        watchProgressRestored = true;
         const changed = setCurrentTime(time);
 
-        if (changed) notify();
+        notify();
 
         return changed;
     }
@@ -2450,25 +2555,29 @@ export function createVideo(video: VideoElement, config: VideoConfig = {}): Vide
     // region ===== Tear Down ==========================================================================================
     function destroy(): void {
         if (destroyed) return;
+        destroyed = true; // external cleanup cannot re-enter a live engine
+        notifier.destroy();
+        clearTouchTap();
+        previewThumbnailItems = [];
 
         saveWatchProgress(true);
 
         clearMediaSessionState();
         clearPoster();
 
-        destroyed = true; // make future work and future destroy calls harmless
-
         cleanups.forEach(function (cleanup) {
             cleanup();
         });
 
         cleanups.length = 0; // release references to the cleanup functions and their event targets
-        listeners.clear(); // release all subscribers
     }
 
     // endregion
 
+    observedMedia = getMediaObservation();
     init();
+    // Silent setup becomes the baseline; keep any published setup snapshot until its async work settles.
+    if (!hasNotified) observedMedia = getMediaObservation();
 
     return {
         getState,

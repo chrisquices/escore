@@ -6,7 +6,7 @@
 <h1 align="center">Strata</h1>
 
 <p align="center">
-    Shared UI components, interaction engines, development tooling, and agent instructions for Laravel applications using Vue and Inertia.<br />
+    Shared UI components, interaction engines, development tooling, and agent instructions for projects including Laravel applications and browser extensions.<br />
     <br />
     <br />
     <a href="https://laravel.com">
@@ -24,7 +24,9 @@
 
 ## Repository
 
-Strata holds reusable code and conventions consumed by other applications. Each top-level folder has a separate purpose:
+Strata holds reusable code and conventions consumed by other applications. Select packages, tooling, and skills that match the project’s stack. Vue UI components and framework-independent interaction engines do not require Laravel; Inertia helpers require Inertia, and Laravel tooling and guides apply only to Laravel projects. See the [setup guide](skills/using-strata/references/setting-up-strata.md) for integration requirements and current package dependency constraints.
+
+Each top-level folder has a separate purpose:
 
 | Folder | What it contains and why it exists |
 | --- | --- |
@@ -93,7 +95,7 @@ See the [JetBrains README](ide-integration/jetbrains/README.md) for building and
 | Folder | Purpose |
 | --- | --- |
 | [load-agent-protocol/](skills/load-agent-protocol/) | Shared working instructions for coding agents. |
-| [using-strata/](skills/using-strata/) | Strata setup, tooling, and Vue/Inertia development workflows. |
+| [using-strata/](skills/using-strata/) | Strata setup, tooling, shared UI and interactions, and conditional Vue/Inertia workflows. |
 | [using-laravel/](skills/using-laravel/) | Laravel development workflows and supporting references. |
 | [resolve-pending-items/](skills/resolve-pending-items/) | A workflow for working through pending items one at a time. |
 
