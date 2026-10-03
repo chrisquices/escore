@@ -57,9 +57,6 @@ class RouteRules implements Rule
     /** @var \WeakMap<Node, bool>|null */
     private ?\WeakMap $processed = null;
 
-    /** @var \WeakMap<Node, Group>|null */
-    private ?\WeakMap $routeGroups = null;
-
     /** @var \WeakMap<Node, array{controller: string, reported: bool}>|null */
     private ?\WeakMap $groupControllers = null;
 
@@ -79,7 +76,6 @@ class RouteRules implements Rule
             $this->file = $scope->getFile();
             $this->parents = new \WeakMap;
             $this->processed = new \WeakMap;
-            $this->routeGroups = new \WeakMap;
             $this->groupControllers = new \WeakMap;
 
             if ($this->isRouteFile($scope)) {
@@ -122,13 +118,8 @@ class RouteRules implements Rule
             return $inertiaErrors;
         }
 
+        $groups = $this->enclosingGroups($node, $scope);
         $group = $method === 'group' ? $this->describeGroup($node, $scope) : null;
-
-        if ($group !== null) {
-            $this->routeGroups[$node] = $group;
-        }
-
-        $groups = $this->enclosingGroups($node);
 
         return [
             ...$inertiaErrors,
@@ -336,7 +327,7 @@ class RouteRules implements Rule
      *
      * @return list<Group>
      */
-    private function enclosingGroups(Node $node): array
+    private function enclosingGroups(Node $node, Scope $scope): array
     {
         $groups = [];
 
@@ -351,6 +342,14 @@ class RouteRules implements Rule
                 break;
             }
 
+            // Arrow functions retain the enclosing variables but do not add
+            // a parent scope in PHPStan, unlike regular closures.
+            $outerScope = $node instanceof ArrowFunction ? $scope : $scope->getParentScope();
+
+            if ($outerScope === null) {
+                break;
+            }
+
             $callback = $node;
             $parent = $this->parents[$callback] ?? null;
 
@@ -362,15 +361,20 @@ class RouteRules implements Rule
 
             $call = $parent instanceof Arg ? ($this->parents[$parent] ?? null) : null;
 
-            // Use attributes resolved at the group declaration. Arrow scopes
-            // do not expose their immediate enclosing scope via getParentScope().
-            $group = $call !== null ? ($this->routeGroups[$call] ?? null) : null;
+            if (! $call instanceof Expr || ! $this->isCall($call) || $call->isFirstClassCallable()
+                || $this->methodName($call, $outerScope) !== 'group'
+                || $this->receiverKind($call, $outerScope) === null) {
+                break;
+            }
 
-            if ($group === null || $group['callback'] !== $callback) {
+            $group = $this->describeGroup($call, $outerScope);
+
+            if ($group['callback'] !== $callback) {
                 break;
             }
 
             $groups[] = $group;
+            $scope = $outerScope;
         }
 
         return $groups;
