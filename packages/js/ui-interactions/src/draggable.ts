@@ -1,4 +1,4 @@
-import {callConsumer, createErrorReporter} from 'strata-packages/ui-interactions/internal/core';
+import {createNotifier, createErrorReporter} from 'strata-packages/ui-interactions/internal/core';
 
 export type DraggableAxis = "both" | "x" | "y"
 export type DraggableBounds =
@@ -237,7 +237,6 @@ export function createDraggable(element: HTMLElement, config: DraggableConfig = 
     // endregion
 
     // region ===== Event Listeners ====================================================================================
-    const listeners = new Set<(state: DraggableState) => void>(); // change subscribers — each gets the full state on every change
     const cleanups: (() => void)[] = []; // teardown functions, collected so everything can be undone at once
 
     function registerEventListener<K extends keyof HTMLElementEventMap>(target: EventTarget, type: K, handler: (event: HTMLElementEventMap[K]) => void, options?: AddEventListenerOptions) {
@@ -269,9 +268,11 @@ export function createDraggable(element: HTMLElement, config: DraggableConfig = 
 
         // Hover cursor — clear the resize cursor when the pointer leaves the element
         registerEventListener(handleElement, "pointerleave", function () {
+            if (destroyed) return;
+
             if (resizable && hoverSide !== null) {
                 hoverSide = null;
-                notify();
+                if (!resizing) notify();
             }
         });
     }
@@ -284,35 +285,27 @@ export function createDraggable(element: HTMLElement, config: DraggableConfig = 
     // endregion
 
     // region ===== State ==============================================================================================
-    let lastStateSignature = ""; // last emitted state fingerprint, used to avoid duplicate echoes
+    const notifier = createNotifier(getState);
+    const subscriptions = new WeakMap<(state: DraggableState) => void, (state: DraggableState) => void>();
+    const notify = notifier.notify;
 
     // Subscribe to drag changes. The listener gets state on every change (not immediately — read getState() for the first paint). Returns an unsubscribe function.
     function subscribe(listener: (state: DraggableState) => void): () => void {
-        if (destroyed) {
-            return function unsubscribe() {};
+        if (typeof listener !== "function") {
+            throw new TypeError("createNotifier: 'listener' must be a function.");
+        }
+        if (destroyed) return function unsubscribe() {};
+
+        let wrapped = subscriptions.get(listener);
+        if (!wrapped) {
+            wrapped = function (state) {
+                listener({...state});
+            };
+            subscriptions.set(listener, wrapped);
         }
 
-        listeners.add(listener);
-
-        return function unsubscribe() {
-            listeners.delete(listener);
-        };
-    }
-
-    // Emit the current state to every subscriber, deduped against the last snapshot so no-op changes cost nothing.
-    function notify() {
-        if (destroyed) return;
-
-        const state = getState();
-        const stateSignature = JSON.stringify(state);
-
-        if (stateSignature === lastStateSignature) return;
-
-        lastStateSignature = stateSignature;
-
-        for (const listener of listeners) {
-            callConsumer(listener, state);
-        }
+        // Stable wrappers preserve duplicate subscriptions while isolating each consumer's snapshot.
+        return notifier.subscribe(wrapped);
     }
 
     function getState(): DraggableState {
@@ -463,17 +456,18 @@ export function createDraggable(element: HTMLElement, config: DraggableConfig = 
         // Below the threshold it's still a click, not a drag
         if (!dragging && Math.hypot(deltaX, deltaY) < threshold) return;
 
-        dragging = true;
-
         const clamped = clampOffset(originX + deltaX, originY + deltaY, grabLayout!);
+        const changed = !dragging || roundTo(x, 2) !== roundTo(clamped.x, 2) || roundTo(y, 2) !== roundTo(clamped.y, 2);
+
+        dragging = true;
         x = clamped.x;
         y = clamped.y;
 
-        notify();
+        if (changed) notify();
     }
 
     function handlePointerUp(event: {pointerId: number;}) {
-        if (event.pointerId !== activePointerId) return;
+        if (destroyed || event.pointerId !== activePointerId) return;
 
         if (handleElement.hasPointerCapture(event.pointerId)) {
             handleElement.releasePointerCapture(event.pointerId);
@@ -523,11 +517,12 @@ export function createDraggable(element: HTMLElement, config: DraggableConfig = 
         }
 
         const clamped = clampOffset(axis === "y" ? x : nextX, axis === "x" ? y : nextY, getLayoutRect());
+        const changed = roundTo(x, 2) !== roundTo(clamped.x, 2) || roundTo(y, 2) !== roundTo(clamped.y, 2);
 
         x = clamped.x;
         y = clamped.y;
 
-        notify();
+        if (changed) notify();
     }
 
     function reset(): void {
@@ -543,13 +538,14 @@ export function createDraggable(element: HTMLElement, config: DraggableConfig = 
             throw new TypeError("setDisabled: the value must be a boolean.");
         }
 
+        const changed = isDisabled !== value || (value && (dragging || resizing || hoverSide !== null));
         isDisabled = value;
 
         if (isDisabled) {
             cancelGesture();
         }
 
-        notify();
+        if (changed) notify();
     }
 
     // endregion
@@ -579,8 +575,9 @@ export function createDraggable(element: HTMLElement, config: DraggableConfig = 
         const side = detectResizeSide(element.getBoundingClientRect(), event.clientX, event.clientY, resizeEdgeSize, resizeHandles);
 
         if (side !== hoverSide) {
+            const changed = resizeCursor(side || "") !== resizeCursor(hoverSide || "");
             hoverSide = side;
-            notify();
+            if (changed) notify();
         }
     }
 
@@ -595,13 +592,15 @@ export function createDraggable(element: HTMLElement, config: DraggableConfig = 
         const nextX = movesWest ? resizeStartX + (startWidth - resizedDimensions.width) : resizeStartX;
         const nextY = movesNorth ? resizeStartY + (startHeight - resizedDimensions.height) : resizeStartY;
         const clamped = clampResizeToBounds(resizedDimensions.width, resizedDimensions.height, nextX, nextY);
+        const changed = roundTo(width, 2) !== roundTo(clamped.width, 2) || roundTo(height, 2) !== roundTo(clamped.height, 2)
+            || roundTo(x, 2) !== roundTo(clamped.x, 2) || roundTo(y, 2) !== roundTo(clamped.y, 2);
 
         width = clamped.width;
         height = clamped.height;
         x = clamped.x;
         y = clamped.y;
 
-        notify();
+        if (changed) notify();
     }
 
     function applyAspectAndClamp(nextWidth: number, nextHeight: number) {
@@ -638,10 +637,34 @@ export function createDraggable(element: HTMLElement, config: DraggableConfig = 
         const maxBottom = boundsRect.bottom - resizeLayout.top;
         const clampedX = clamp(nextX, minX, maxRight - minWidth);
         const clampedY = clamp(nextY, minY, maxBottom - minHeight);
-        const clampedWidth = clamp(nextWidth, minWidth, maxRight - clampedX);
-        const clampedHeight = clamp(nextHeight, minHeight, maxBottom - clampedY);
+        const movesWest = resizeSide!.includes("w");
+        const movesNorth = resizeSide!.includes("n");
+        const fixedRight = Math.min(maxRight, resizeStartX + startWidth);
+        const fixedBottom = Math.min(maxBottom, resizeStartY + startHeight);
+        const availableWidth = movesWest ? fixedRight - minX : maxRight - clampedX;
+        const availableHeight = movesNorth ? fixedBottom - minY : maxBottom - clampedY;
+        let clampedWidth = clamp(nextWidth, minWidth, availableWidth);
+        let clampedHeight = clamp(nextHeight, minHeight, availableHeight);
 
-        return {width: clampedWidth, height: clampedHeight, x: clampedX, y: clampedY};
+        // Bounds may limit either dimension; keep a feasible locked ratio after that limit.
+        if (aspectRatio !== null) {
+            const ratio = aspectRatio === "auto" ? startWidth / startHeight : aspectRatio;
+            const ratioWidth = Math.min(clampedWidth, clampedHeight * ratio);
+            const ratioHeight = ratioWidth / ratio;
+
+            if (ratioWidth >= minWidth && ratioHeight >= minHeight) {
+                clampedWidth = ratioWidth;
+                clampedHeight = ratioHeight;
+            }
+        }
+
+        // Derive moving origins from the final size so west/north keep their opposite edges fixed.
+        return {
+            width: clampedWidth,
+            height: clampedHeight,
+            x: movesWest ? clamp(fixedRight - clampedWidth, minX, maxRight - minWidth) : clampedX,
+            y: movesNorth ? clamp(fixedBottom - clampedHeight, minY, maxBottom - minHeight) : clampedY
+        };
     }
 
     function setSize(nextWidth: number, nextHeight: number): void {
@@ -651,10 +674,14 @@ export function createDraggable(element: HTMLElement, config: DraggableConfig = 
             throw new TypeError("setSize: 'width' and 'height' must both be finite numbers.");
         }
 
-        width = clamp(nextWidth, minWidth, maxWidth);
-        height = clamp(nextHeight, minHeight, maxHeight);
+        const clampedWidth = clamp(nextWidth, minWidth, maxWidth);
+        const clampedHeight = clamp(nextHeight, minHeight, maxHeight);
+        const changed = roundTo(width, 2) !== roundTo(clampedWidth, 2) || roundTo(height, 2) !== roundTo(clampedHeight, 2);
 
-        notify();
+        width = clampedWidth;
+        height = clampedHeight;
+
+        if (changed) notify();
     }
 
     // endregion
@@ -664,6 +691,7 @@ export function createDraggable(element: HTMLElement, config: DraggableConfig = 
         if (destroyed) return;
 
         destroyed = true; // make future work and future destroy calls harmless
+        cancelGesture();
 
         cleanups.forEach(function (cleanup) {
             cleanup();
@@ -671,7 +699,7 @@ export function createDraggable(element: HTMLElement, config: DraggableConfig = 
 
         cleanups.length = 0; // release references to the cleanup functions and their event targets
 
-        listeners.clear();
+        notifier.destroy();
     }
 
     // endregion

@@ -1,4 +1,4 @@
-import {callConsumer, createErrorReporter} from 'strata-packages/ui-interactions/internal/core';
+import {callConsumer, createNotifier, createErrorReporter} from 'strata-packages/ui-interactions/internal/core';
 
 export type SelectionMode = "single" | "multi"
 
@@ -210,6 +210,7 @@ export function createSelection<TKey = string | number>(config: SelectionConfig<
 
     // region ===== Init ===============================================================================================
     let destroyed = false; // late listeners must not still fire callbacks after teardown
+    let initialized = false;
 
     function init() {
 
@@ -221,14 +222,14 @@ export function createSelection<TKey = string | number>(config: SelectionConfig<
         // Respect focus that was already inside an item before the engine was created.
         handleFocusIn({target: container?.ownerDocument?.activeElement});
 
-        // Emit the initial (empty) selection
+        // Include native focus in the single initial delivery.
+        initialized = true;
         notify();
     }
 
     // endregion
 
     // region ===== Event Listeners ====================================================================================
-    const listeners = new Set<(state: SelectionState<TKey>) => void>(); // change subscribers — each gets the full state on every change
     const cleanups: (() => void)[] = []; // teardown functions, collected so everything can be undone at once
 
     function registerEventListener<K extends keyof HTMLElementEventMap>(target: EventTarget, type: K, handler: (event: HTMLElementEventMap[K]) => void, options?: AddEventListenerOptions) {
@@ -296,39 +297,45 @@ export function createSelection<TKey = string | number>(config: SelectionConfig<
     // endregion
 
     // region ===== State ==============================================================================================
-    let lastStateSignature = ""; // last emitted state fingerprint, used to avoid duplicate echoes
-    let notificationVersion = 0; // newer notifications supersede an in-progress delivery
+    const notifier = createNotifier(getState);
+    const subscriptions = new WeakMap<(state: SelectionState<TKey>) => void, (state: SelectionState<TKey>) => void>();
+    let changePending = true; // initial state, then explicit mutations waiting to be published
+    let mutationVersion = 0; // a provider must not commit a draft over a newer mutation
+
+    function markChanged() {
+        mutationVersion++;
+        changePending = true;
+    }
 
     // Subscribe to selection changes. The listener gets state on every change (not immediately — read getState() for the first paint). Returns an unsubscribe function.
     function subscribe(listener: (state: SelectionState<TKey>) => void): () => void {
+        if (typeof listener !== "function") {
+            throw new TypeError("createNotifier: 'listener' must be a function.");
+        }
         if (destroyed) return function unsubscribe() {};
 
-        listeners.add(listener);
+        let wrapped = subscriptions.get(listener);
+        if (!wrapped) {
+            wrapped = function (state) {
+                listener({
+                    ...state,
+                    selected: [...state.selected],
+                    marquee: state.marquee ? {...state.marquee} : null
+                });
+            };
+            subscriptions.set(listener, wrapped);
+        }
 
-        return function unsubscribe() {
-            listeners.delete(listener);
-        };
+        return notifier.subscribe(wrapped);
     }
 
-    // Emit the current state to every subscriber, deduped against the last snapshot so no-op changes cost nothing.
+    // Capture release and error callbacks can reenter before an outer mutation is published.
+    // Consume that pending change once; the shared notifier owns delivery and reentrancy.
     function notify() {
-        if (destroyed) return;
-        const state = getState();
-        const stateSignature = JSON.stringify(state);
-        if (stateSignature === lastStateSignature) return;
+        if (destroyed || !initialized || !changePending) return;
 
-        lastStateSignature = stateSignature;
-        const version = ++notificationVersion;
-
-        for (const listener of listeners) {
-            if (destroyed || version !== notificationVersion) return;
-
-            callConsumer(listener, {
-                ...state,
-                selected: [...state.selected],
-                marquee: state.marquee ? {...state.marquee} : null
-            });
-        }
+        changePending = false;
+        notifier.notify();
     }
 
     function getState(): SelectionState<TKey> {
@@ -434,11 +441,21 @@ export function createSelection<TKey = string | number>(config: SelectionConfig<
         });
     }
 
+    function hasSameSelection(nextSelected: Set<TKey>) {
+        if (selected.size !== nextSelected.size) return false;
+
+        for (const id of nextSelected) {
+            if (!selected.has(id)) return false;
+        }
+        return true;
+    }
+
     // Resolve providers against a draft so a failure cannot leave a partial update.
     function applySelectionUpdate(operation: string, update: (draft: {selected: Set<TKey>; anchor: number | null; focused: number | null; marquee: SelectionRect | null}) => boolean | void) {
         if (destroyed) return false;
 
         const snapshot = marqueeSnapshot!;
+        const version = mutationVersion;
         const next = {
             selected: new Set(selected),
             anchor: anchor,
@@ -453,15 +470,25 @@ export function createSelection<TKey = string | number>(config: SelectionConfig<
             return false;
         }
 
-        if (destroyed) return false;
+        if (destroyed || mutationVersion !== version) return false;
         if (operation === "marquee" && (!marqueeing || marqueeSnapshot !== snapshot)) return false;
 
-        selected.clear();
-        next.selected.forEach(function (id) {selected.add(id);});
-        anchor = next.anchor;
-        focused = next.focused;
-        marqueeRect = next.marquee;
-        marqueeMoved = marqueeRect !== null;
+        const membershipChanged = !hasSameSelection(next.selected);
+        const rectChanged = marqueeRect === null || next.marquee === null
+            ? marqueeRect !== next.marquee
+            : marqueeRect.x !== next.marquee.x || marqueeRect.y !== next.marquee.y || marqueeRect.width !== next.marquee.width || marqueeRect.height !== next.marquee.height;
+
+        if (membershipChanged || anchor !== next.anchor || focused !== next.focused || rectChanged) {
+            if (membershipChanged) {
+                selected.clear();
+                next.selected.forEach(function (id) {selected.add(id);});
+            }
+            anchor = next.anchor;
+            focused = next.focused;
+            marqueeRect = next.marquee;
+            marqueeMoved = marqueeRect !== null;
+            markChanged();
+        }
         notify();
         return !destroyed;
     }
@@ -554,10 +581,11 @@ export function createSelection<TKey = string | number>(config: SelectionConfig<
     }
 
     function clear(): void {
-        if (destroyed) return;
+        if (destroyed || (selected.size === 0 && anchor === null)) return;
 
         selected.clear();
         anchor = null;
+        markChanged();
         notify();
     }
 
@@ -569,6 +597,7 @@ export function createSelection<TKey = string | number>(config: SelectionConfig<
         if (destroyed || (index !== null && !isValidIndex(index)) || focused === index) return;
 
         focused = index;
+        markChanged();
         notify();
     }
 
@@ -698,7 +727,7 @@ export function createSelection<TKey = string | number>(config: SelectionConfig<
     let marqueeStartX = 0;
     let marqueeStartY = 0;
     let marqueeBase: Set<TKey> | null = null; // ids selected before an additive drag; null means no starting modifier
-    let marqueeSnapshot: {selected: Set<TKey>; anchor: number | null} | null = null; // selection and anchor to restore if the gesture is canceled
+    let marqueeSnapshot: {selected: Set<TKey>; anchor: number | null; version: number; pending: boolean} | null = null; // selection, anchor, and pending changes before the gesture
 
     // Pointer position in the container's CONTENT space, so off-screen items are covered by the box.
     function calculateContentPoint(event: {clientX: number; clientY: number}) {
@@ -714,6 +743,7 @@ export function createSelection<TKey = string | number>(config: SelectionConfig<
         if (destroyed || !marquee || currentMode === "single" || event.button !== 0) return;
         if (marqueeing || event.defaultPrevented) return;
 
+        let snapshot = marqueeSnapshot;
         try {
             const target = event.target as HTMLElement | null;
             if (!target || typeof target.closest !== "function") return;
@@ -730,9 +760,11 @@ export function createSelection<TKey = string | number>(config: SelectionConfig<
             const start = calculateContentPoint(event);
             if (destroyed) return;
 
-            marqueeSnapshot = {
+            snapshot = marqueeSnapshot = {
                 selected: new Set(selected),
-                anchor: anchor
+                anchor: anchor,
+                version: mutationVersion,
+                pending: changePending
             };
             marqueeing = true;
             marqueeMoved = false;
@@ -742,10 +774,11 @@ export function createSelection<TKey = string | number>(config: SelectionConfig<
             marqueeBase = event.metaKey || event.ctrlKey || event.shiftKey
                 ? new Set(selected)
                 : null;
+            markChanged();
             container!.setPointerCapture(event.pointerId);
             notify();
         } catch (error) {
-            handleSelectionError("marquee", error);
+            handleSelectionError("marquee", error, snapshot);
         }
     }
 
@@ -797,6 +830,8 @@ export function createSelection<TKey = string | number>(config: SelectionConfig<
 
         const pointerId = marqueePointerId!;
         const snapshot = marqueeSnapshot!;
+        const unpublished = changePending && mutationVersion === snapshot.version + 1 &&
+            (restoreSelection || (anchor === snapshot.anchor && hasSameSelection(snapshot.selected)));
         // Preserve focus changes made through navigation or native DOM focus during the gesture.
         if (restoreSelection) {
             selected.clear();
@@ -813,14 +848,20 @@ export function createSelection<TKey = string | number>(config: SelectionConfig<
         marqueeStartY = 0;
         marqueeBase = null;
         marqueeSnapshot = null;
+        markChanged();
+        // Capture callbacks can cancel a start before it was delivered. Preserve that net no-op,
+        // before releasing capture or reporting errors can reenter and publish newer changes.
+        if (unpublished) changePending = snapshot.pending;
+        const version = mutationVersion;
 
         try {
             if (container!.hasPointerCapture(pointerId)) container!.releasePointerCapture(pointerId);
         } catch (error) {
-            if (!restoreSelection) {
+            if (!restoreSelection && mutationVersion === version && (anchor !== snapshot.anchor || !hasSameSelection(snapshot.selected))) {
                 selected.clear();
                 snapshot.selected.forEach(function (id: TKey) {selected.add(id);});
                 anchor = snapshot.anchor;
+                markChanged();
             }
             handleSelectionError("pointer-capture", error);
         }
@@ -841,7 +882,7 @@ export function createSelection<TKey = string | number>(config: SelectionConfig<
         });
 
         cleanups.length = 0; // release references to the cleanup functions and their event targets
-        listeners.clear();
+        notifier.destroy();
     }
 
     // endregion

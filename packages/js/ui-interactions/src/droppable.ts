@@ -1,4 +1,4 @@
-import {callConsumer, createErrorReporter} from 'strata-packages/ui-interactions/internal/core';
+import {callConsumer, createNotifier, createErrorReporter} from 'strata-packages/ui-interactions/internal/core';
 
 export interface DroppablePoint {
     x: number
@@ -110,7 +110,6 @@ export function createDroppable<TPayload = unknown, TTarget = unknown>(config: D
     // endregion
 
     // region ===== Event Listeners ====================================================================================
-    const listeners = new Set<(state: DroppableState<TPayload, TTarget>) => void>(); // change subscribers — each gets the full state on every change
     const cleanups: (() => void)[] = []; // teardown functions, collected so everything can be undone at once
 
     function registerEventListener<K extends keyof HTMLElementEventMap>(target: EventTarget, type: K, handler: (event: HTMLElementEventMap[K]) => void, options?: AddEventListenerOptions) {
@@ -145,39 +144,39 @@ export function createDroppable<TPayload = unknown, TTarget = unknown>(config: D
     let origin: {x: number; y: number} | null = null; // {x, y} where the drag started, in client coords
     let activeTarget: TTarget | null = null; // the zone data currently under the pointer, or null
     let canDropHere = false; // whether activeTarget accepts the payload (the canDrop result)
-    let lastStateSignature = ""; // last emitted state fingerprint, used to avoid duplicate echoes
 
-    // Subscribe to changes. The listener gets state on every change (not immediately — read getState() for the first paint). Returns an unsubscribe function.
-    function subscribe(listener: (state: DroppableState<TPayload, TTarget>) => void): () => void {
+    const notifier = createNotifier(getState);
+    const subscriptions = new WeakMap<(state: DroppableState<TPayload, TTarget>) => void, (state: DroppableState<TPayload, TTarget>) => void>();
+    const notify = notifier.notify;
+
+    function subscribe(listener: (state: DroppableState<TPayload, TTarget>) => void) {
+        if (typeof listener !== "function") {
+            throw new TypeError("createNotifier: 'listener' must be a function.");
+        }
         if (destroyed) return function unsubscribe() {};
 
-        listeners.add(listener);
-
-        return function unsubscribe() {
-            listeners.delete(listener);
-        };
-    }
-
-    // Emit the current state to every subscriber, deduped against the last snapshot so no-op changes cost nothing.
-    function notify() {
-        if (destroyed) return;
-        const state = getState();
-        const stateSignature = JSON.stringify(state);
-        if (stateSignature === lastStateSignature) return;
-
-        lastStateSignature = stateSignature;
-
-        for (const listener of listeners) {
-            callConsumer(listener, state);
+        let wrapped = subscriptions.get(listener);
+        if (!wrapped) {
+            wrapped = function (state) {
+                listener({
+                    ...state,
+                    point: state.point ? {...state.point} : null,
+                    origin: state.origin ? {...state.origin} : null
+                });
+            };
+            subscriptions.set(listener, wrapped);
         }
+
+        // Stable wrappers retain the notifier's duplicate subscription and unsubscribe behavior.
+        return notifier.subscribe(wrapped);
     }
 
     function getState(): DroppableState<TPayload, TTarget> {
         return {
             dragging: dragging,
             payload: payload,
-            point: point,
-            origin: origin,
+            point: point ? {...point} : null,
+            origin: origin ? {...origin} : null,
             activeTarget: activeTarget,
             canDropHere: canDropHere
         };
@@ -250,6 +249,8 @@ export function createDroppable<TPayload = unknown, TTarget = unknown>(config: D
     function handlePointerMove(event: PointerEvent) {
         if (destroyed || event.pointerId !== activePointerId) return;
 
+        let changed = false;
+
         // Below the threshold it's still just a press — leave a plain click alone.
         if (!dragging) {
             const movedX = event.clientX - pressStartX;
@@ -257,16 +258,31 @@ export function createDroppable<TPayload = unknown, TTarget = unknown>(config: D
             if (movedX * movedX + movedY * movedY < dragThreshold * dragThreshold) return;
 
             startDrag();
+            changed = true;
         }
 
-        point = {x: event.clientX, y: event.clientY};
+        if (!point || point.x !== event.clientX || point.y !== event.clientY) {
+            point = {x: event.clientX, y: event.clientY};
+            changed = true;
+        }
 
         // Recompute the zone under the pointer and whether it accepts the payload.
         const entry = findTargetAtPoint(event.clientX, event.clientY);
-        activeTarget = entry ? entry.data : null;
-        canDropHere = entry !== null && Boolean(canDrop(payload!, entry.data));
+        const nextTarget = entry ? entry.data : null;
 
-        notify();
+        if (!Object.is(activeTarget, nextTarget)) {
+            activeTarget = nextTarget;
+            changed = true;
+        }
+
+        const nextCanDropHere = entry !== null && Boolean(canDrop(payload!, entry.data));
+
+        if (canDropHere !== nextCanDropHere) {
+            canDropHere = nextCanDropHere;
+            changed = true;
+        }
+
+        if (changed) notify();
     }
 
     function handlePointerUp(event: PointerEvent) {
@@ -275,12 +291,13 @@ export function createDroppable<TPayload = unknown, TTarget = unknown>(config: D
         const droppedPayload = payload;
         const droppedTarget = activeTarget;
         const accepted = dragging && droppedTarget !== null && canDropHere;
+        const changed = dragging;
 
         resetDrag();
-        notify();
+        if (changed) notify();
 
         // Fire the action callback in isolation, after state has already settled back to idle.
-        if (accepted && onDrop) {
+        if (!destroyed && accepted && onDrop) {
             callConsumer(function () {onDrop(droppedPayload!, droppedTarget!);}, undefined);
         }
     }
@@ -288,8 +305,9 @@ export function createDroppable<TPayload = unknown, TTarget = unknown>(config: D
     function handlePointerCancel(event: PointerEvent) {
         if (destroyed || event.pointerId !== activePointerId) return;
 
+        const changed = dragging;
         resetDrag();
-        notify();
+        if (changed) notify();
     }
 
     // Cross the threshold: promote the press into a live drag and capture the pointer so moves keep coming.
@@ -328,13 +346,14 @@ export function createDroppable<TPayload = unknown, TTarget = unknown>(config: D
         if (destroyed) return;
 
         destroyed = true; // make future work and future destroy calls harmless
+        resetDrag();
 
         cleanups.forEach(function (cleanup) {
             cleanup();
         });
 
         cleanups.length = 0; // release references to the cleanup functions and their event targets
-        listeners.clear();
+        notifier.destroy();
     }
 
     // endregion

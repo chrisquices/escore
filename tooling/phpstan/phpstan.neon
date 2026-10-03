@@ -10,6 +10,7 @@ rules:
     - Strata\PHPStan\GeneralRules
     - Strata\PHPStan\ModelRules
     - Strata\PHPStan\RouteRules
+    - Strata\PHPStan\RequestRules
 
 services:
     -

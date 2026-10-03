@@ -3,8 +3,10 @@
 use PhpCsFixer\Config;
 use PhpCsFixer\Finder;
 use Strata\PHPcsFixer\BlankLineAboveCommentsFixer;
+use Strata\PHPcsFixer\MultilineQueryChainsFixer;
 
 require_once __DIR__.'/fixers/BlankLineAboveCommentsFixer.php';
+require_once __DIR__.'/fixers/MultilineQueryChainsFixer.php';
 
 $projectDirectory = getcwd();
 
@@ -13,8 +15,11 @@ if ($projectDirectory === false) {
 }
 
 return (new Config)
-    ->registerCustomFixers([new BlankLineAboveCommentsFixer])
-    ->setRules(['Strata/blank_line_above_comments' => true])
+    ->registerCustomFixers([new BlankLineAboveCommentsFixer, new MultilineQueryChainsFixer])
+    ->setRules([
+        'Strata/blank_line_above_comments' => true,
+        'Strata/multiline_query_chains' => true,
+    ])
     ->setUsingCache(false)
     ->setFinder(Finder::create()
         ->in($projectDirectory)

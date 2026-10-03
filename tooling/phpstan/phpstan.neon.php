@@ -6,6 +6,7 @@ require_once __DIR__.'/rules/EloquentRules.php';
 require_once __DIR__.'/rules/GeneralRules.php';
 require_once __DIR__.'/rules/ModelRules.php';
 require_once __DIR__.'/rules/RouteRules.php';
+require_once __DIR__.'/rules/RequestRules.php';
 
 // Included PHP configuration files must return an array.
 return [];

@@ -4,7 +4,6 @@ use PhpCsFixer\Tokenizer\Tokens;
 use Strata\PHPcsFixer\BlankLineAboveCommentsFixer;
 
 // Set STRATA_TEST_PROJECT to a project with friendsofphp/php-cs-fixer installed
-
 // to run every case through the custom fixer.
 $project = getenv('STRATA_TEST_PROJECT');
 
@@ -28,7 +27,7 @@ foreach (['// Next action', '# Next action', '/* Next action */', "/**\n * Next 
 foreach (["\n", "\r\n", "\r"] as $newline) {
     $cases[] = [
         "<?php{$newline}// First{$newline}# Second{$newline}/* Third */{$newline}",
-        "<?php{$newline}{$newline}// First{$newline}{$newline}# Second{$newline}{$newline}/* Third */{$newline}",
+        "<?php{$newline}{$newline}// First{$newline}# Second{$newline}/* Third */{$newline}",
     ];
 }
 
@@ -79,7 +78,7 @@ $cases[] = [
 ];
 $cases[] = [
     "<?php\n\$items = [\n    // Item\n    1,\n];\n",
-    "<?php\n\$items = [\n\n    // Item\n    1,\n];\n",
+    "<?php\n\$items = [\n    // Item\n    1,\n];\n",
 ];
 $cases[] = ["<?php\n// Last", "<?php\n\n// Last"];
 $cases[] = ["<?php\n/* Last */", "<?php\n\n/* Last */"];
@@ -88,7 +87,141 @@ $cases[] = ["<?php\n\$label = '語';\n// Next\n", "<?php\n\$label = '語';\n\n//
 $cases[] = ["#!/usr/bin/env php\n<?php\n// First\n", "#!/usr/bin/env php\n<?php\n\n// First\n"];
 $cases[] = [
     "<?php\n/** First */\n/** Second */\nfunction run() {}\n",
-    "<?php\n\n/** First */\n\n/** Second */\nfunction run() {}\n",
+    "<?php\n\n/** First */\n/** Second */\nfunction run() {}\n",
+];
+
+foreach (["/* First\n * continued\n */", "/** First\n * continued\n */", '// First', '# First'] as $first) {
+    $cases[] = [
+        "<?php\n\$value = 1;\n{$first}\n// Second\n/* Third */\n\$value = 2;\n",
+        "<?php\n\$value = 1;\n\n{$first}\n// Second\n/* Third */\n\$value = 2;\n",
+    ];
+}
+
+$cases[] = [
+    <<<'PHP'
+<?php
+return [
+    'postmark' => [
+        'transport' => 'postmark',
+        // 'message_stream_id' => env('POSTMARK_MESSAGE_STREAM_ID'),
+        // 'client' => [
+        //     'timeout' => 5,
+        // ],
+    ],
+];
+PHP,
+    <<<'PHP'
+<?php
+return [
+    'postmark' => [
+        'transport' => 'postmark',
+        // 'message_stream_id' => env('POSTMARK_MESSAGE_STREAM_ID'),
+        // 'client' => [
+        //     'timeout' => 5,
+        // ],
+    ],
+];
+PHP,
+];
+$cases[] = [
+    "<?php\n\$query = Node::query()\n    // ->where('type', 'folder')\n    // ->where('active', true)\n    ->get();\n",
+    "<?php\n\$query = Node::query()\n\n    // ->where('type', 'folder')\n    // ->where('active', true)\n    ->get();\n",
+];
+$cases[] = [
+    "<?php\n\$first = 1;\n// First group\n// Continued\n\$second = 2;\n// Second group\n// Continued\n",
+    "<?php\n\$first = 1;\n\n// First group\n// Continued\n\$second = 2;\n\n// Second group\n// Continued\n",
+];
+$cases[] = [
+    "<?php\n\$value = 1; // Inline\n// Standalone group\n// Continued\n",
+    "<?php\n\$value = 1; // Inline\n\n// Standalone group\n// Continued\n",
+];
+
+foreach ([
+    "<?php\n\$value = 1;\n\n// First\n// Second\n",
+    "<?php\n\$value = 1;\n\n// First\n\n// Second\n",
+    "<?php\n\$value = 1;\n\n// First\n// Second\n\n# Third\n# Fourth\n",
+] as $source) {
+    $cases[] = [$source, $source];
+}
+
+foreach ([['[', ']'], ['array(', ')']] as [$open, $close]) {
+    foreach (['// Item', '# Item', '/* Item */', "/**\n     * Item\n     */"] as $comment) {
+        $source = "<?php\n\$items = {$open}\n    {$comment}\n    1,\n    {$comment}\n    2,\n    {$comment}\n{$close};\n";
+        $cases[] = [$source, $source];
+    }
+}
+
+foreach ([
+    "<?php\nreturn [\n    'nested' => array(\n        // Nested\n        [\n            // Deeply nested\n            'value',\n        ],\n    ),\n];\n",
+    "<?php\n\$items = [\n    // Item\n    env(\n        // Argument inside an array value\n        'ITEM',\n    ),\n];\n",
+    "<?php\n\$items = array /* array syntax */ (\n    // Item\n    'value',\n);\n",
+    "<?php\n\$items = [\n    // Commented closing brackets: ] ) }\n    'brackets' => '[]()',\n    // Item\n    1,\n];\n",
+    "<?php\n\$items = [\n\n    // Keep existing spacing\n    1,\n];\n",
+] as $source) {
+    $cases[] = [$source, $source];
+}
+
+foreach (["\n", "\r\n", "\r"] as $newline) {
+    $cases[] = [
+        "<?php{$newline}\$items = [{$newline}    // Array comment{$newline}    1,{$newline}];{$newline}// Outside{$newline}\$value = 2;{$newline}",
+        "<?php{$newline}\$items = [{$newline}    // Array comment{$newline}    1,{$newline}];{$newline}{$newline}// Outside{$newline}\$value = 2;{$newline}",
+    ];
+}
+
+foreach ([
+    "\$value = \$items[\n    // Array access is not an array literal\n    'key'\n];",
+    "[\n    // Destructuring is not an array literal\n    \$value\n] = \$items;",
+    "#[Example(\n    // Attribute syntax is not an array literal\n    'value'\n)]\nclass Demo {}",
+] as $source) {
+    $cases[] = ["<?php\n{$source}\n", "<?php\n".str_replace("\n    //", "\n\n    //", $source)."\n"];
+}
+
+$cases[] = [
+    <<<'PHP'
+<?php
+return [
+    // Array comment
+    'callback' => function () {
+        // Function comment
+        $nested = [
+            // Nested array comment
+            1,
+        ];
+        // Another function comment
+        return $nested;
+    },
+    // Array comment after function
+    'service' => new class {
+        // Class comment
+        public function run() {}
+    },
+    // Array comment after class
+];
+PHP,
+    <<<'PHP'
+<?php
+return [
+    // Array comment
+    'callback' => function () {
+
+        // Function comment
+        $nested = [
+            // Nested array comment
+            1,
+        ];
+
+        // Another function comment
+        return $nested;
+    },
+    // Array comment after function
+    'service' => new class {
+
+        // Class comment
+        public function run() {}
+    },
+    // Array comment after class
+];
+PHP,
 ];
 
 function assertSame(mixed $expected, mixed $actual, string $message): void
