@@ -65,7 +65,9 @@ This document defines the controlling protocol for every agent action and respon
 
 ### Code Quality
 
-- After each completed set of code changes, run the affected project’s configured quality commands from its root before the final response. Use `composer quality:fix` when defined; for JavaScript/TypeScript projects, use the existing package-manager scripts for the affected code.
+- After each completed set of code changes, run the affected manifest's `quality:check` from its directory before the final response: `composer quality:check` for Composer-managed code and `npm run quality:check` (or the project's package-manager equivalent) for JavaScript/TypeScript. Run both when both scopes are affected. If an aggregate is not configured, run the existing applicable individual checks.
+- Keep Composer quality scripts limited to Composer scripts and tools, and package quality scripts limited to package scripts and tools. Neither aggregate may invoke the other ecosystem's commands.
+- When automatic fixes are requested, run the affected manifest's `quality:fix`, then verify with its `quality:check` unless the fix aggregate already runs it.
 - Do not fix reported violations unless the user asked you to fix violations/findings.
 - If no applicable script exists or a command cannot run, report that explicitly. Do not add Composer or another toolchain just to satisfy this rule.
 

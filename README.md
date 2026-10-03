@@ -130,12 +130,11 @@ Install dependencies and run the package checks from `packages/js`. Use Node.js 
 cd packages/js
 npm ci --ignore-scripts
 
-npm run typecheck:ui
-npm run typecheck:ui-interactions
-npm run typecheck:inertia-plus
-
-npm run test:ui-interactions
-npm run test:inertia-plus
+npm run quality:check
 ```
+
+`quality:check` runs all package type checks and test suites, including the extension reloader. `npm run quality:fix` currently runs the same checks because this package has no configured automatic fixers. Individual `typecheck:*` and `test:*` scripts remain available for focused checks.
+
+In consuming applications, `package.json` quality scripts run only package checks and fixes. Laravel applications also define `composer.json` quality scripts for Composer checks and fixes. Run both pairs as needed; neither delegates to the other. See the [setup guide](skills/using-strata/references/setting-up-strata.md#strata-tooling) for the script definitions.
 
 The packages export source directly, so application changes are built in the consuming app. Editor plugin development has its own [build instructions](ide-integration/jetbrains/README.md).

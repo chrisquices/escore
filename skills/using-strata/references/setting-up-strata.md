@@ -134,12 +134,17 @@ composer require --dev deptrac/deptrac phpstan/phpstan larastan/larastan laravel
 "lint:check": "eslint --config ../strata/tooling/eslint/eslint.config.js .",
 "lint:fix": "eslint --config ../strata/tooling/eslint/eslint.config.js . --fix",
 
-"types:check": "vue-tsc --noEmit"
+"types:check": "vue-tsc --noEmit",
+
+"quality:check": "npm run lint:check && npm run types:check",
+"quality:fix": "npm run lint:fix && npm run quality:check"
 ```
 
 Use `vue-tsc` for Vue projects; otherwise preserve the project’s existing type-check command, such as `tsc --noEmit` for TypeScript. Adapt lint coverage and generated-output ignores to the project’s source layout. The shared ESLint config includes Laravel-oriented ignores; these are not a required directory structure for other projects.
 
-For projects without Composer, use the package-manager scripts directly. If aggregate quality scripts are needed, define them in `package.json` using the applicable existing checks and fixes.
+Define `quality:check` and `quality:fix` in `package.json` for every JavaScript/TypeScript project, including Laravel applications. `quality:check` aggregates all configured package checks: linting, type checking, tests, and any other verification scripts. Add the project's existing test command and other checks to the example above when present. Do not include development servers or watchers.
+
+`quality:fix` runs all configured package automatic fixers, then `quality:check` to report remaining issues. Type errors and failed tests generally require manual changes. If no automatic fixer is configured, use `"quality:fix": "npm run quality:check"` and document that it only verifies. Keep both aggregates within `package.json`; neither may invoke Composer scripts.
 
 ### 3. Laravel only: add to `composer.json` under the `scripts` section:
 
@@ -164,51 +169,38 @@ For projects without Composer, use the package-manager scripts directly. If aggr
     "@lint:check",
     "@types:check",
     "@refactor:check",
-    "@architecture:check",
-    "npm run lint:check",
-    "npm run types:check"
+    "@architecture:check"
 ],
 "quality:fix": [
     "@refactor",
     "@lint",
-    "npm run lint:fix"
+    "@quality:check"
 ]
 ```
 
+Include existing Composer test scripts and any additional PHP checks in `quality:check` as applicable. Composer's quality scripts must invoke only Composer-managed scripts and tools; they must never invoke npm or other package-manager scripts. `quality:fix` applies the Composer automatic fixes, then runs the Composer checks.
+
 ### 4. Usage
 
-Each individual command runs its specific tool. 
+Each individual command runs its specific tool. Each quality command runs the complete configured set for its own manifest. The examples stop at the first failed command and return a nonzero exit status.
 
-For Laravel projects configured above, `composer quality:check` runs all checks.
+- `npm run quality:check`: all checks defined in `package.json`.
+- `npm run quality:fix`: package automatic fixes, followed by package checks.
+- `composer quality:check`: all checks defined in `composer.json`.
+- `composer quality:fix`: Composer automatic fixes, followed by Composer checks.
 
-For those projects, `composer quality:fix` runs all supported automatic fixes.
+Laravel applications with both manifests define both pairs. Run both commands to check or fix the whole application; neither delegates to the other. Projects without Composer use only the package commands.
 
-Run an individual command for a specific tool, or a quality command for the complete set.
-
-Run only commands configured for the project. To check violations:
+To check the whole Laravel application, run each command from its root:
 
 ```sh
-npm run lint:check
-npm run types:check
-
-composer lint:check
-composer types:check
-composer refactor:check
-composer architecture:check
-
 composer quality:check
-
-
+npm run quality:check
 ```
 
-To fix violations:
+To apply its configured automatic fixes and verify the results:
 
 ```sh
-npm run lint:fix
-
-composer lint
-composer refactor
-
 composer quality:fix
-
+npm run quality:fix
 ```
